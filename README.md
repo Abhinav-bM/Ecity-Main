@@ -58,7 +58,8 @@ permission model actually doing something.
 | `npm run typecheck` | `tsc --noEmit`, strict |
 | `npm run lint` | ESLint 9 flat config |
 | `npm test` | Vitest — unit always, integration when a database is reachable |
-| `npm run test:e2e` | Playwright — needs the app running and seeded |
+| `npm run test:e2e` | Playwright — 100 tests across 4 viewports; needs the app running and seeded |
+| `npm run test:e2e -- --project=mobile` | Just the phone viewport |
 | `npm run db:generate` | Generate a migration from schema changes |
 | `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Idempotent seed |
@@ -82,6 +83,27 @@ src/
 drizzle/            SQL migrations
 tests/              unit · integration · e2e
 ```
+
+## Responsive design
+
+The counter runs on a phone, the shop floor on a tablet, the back office on a
+desktop. Every screen has to work at all three.
+
+- shadcn/ui components are added with the CLI (`npx shadcn@latest add …`) and
+  live in `src/components/ui/`. Extend them in place — that is what shadcn is
+  for — rather than wrapping or forking them.
+- Below `md` the sidebar is replaced by a Sheet drawer. There is no screen
+  size with no navigation.
+- Data tables become one card per row below `md`. A six-column table is not
+  readable on a 320px phone, and horizontal scrolling is not a fix.
+- The page body must never scroll sideways. Wide content scrolls inside its
+  own container.
+- Touch targets are at least 44px tall under `(pointer: coarse)`.
+
+**Playwright runs every suite at four viewports** — 320px, Pixel 7, iPad and
+1440px desktop (`playwright.config.ts`). `tests/e2e/responsive.spec.ts` asserts
+no horizontal overflow, reachable navigation and adequate touch targets at each
+one. A layout that only works on desktop fails the build.
 
 ## Rules that apply to every change
 
@@ -116,6 +138,11 @@ raises on any UPDATE or DELETE (`drizzle/0001_audit_append_only.sql`).
 
 **Passwords use scrypt** from `node:crypto`. No native dependency, so the
 Alpine image stays simple.
+
+**Theme tokens follow shadcn's naming** (`--primary`, `--muted`, `--sidebar-*`)
+in `src/app/globals.css`, so any component copied from the registry works
+untouched. Light and dark are both defined. The brand navy from the docs is
+`--primary`.
 
 **Role, branch or status changes revoke that user's sessions** so the change
 takes effect immediately rather than at their next sign-in.

@@ -34,3 +34,24 @@ jobs:
       - run: npm run db:migrate
       - run: npm test
       - run: npm run build
+
+      # The app is used on phones, tablets and desktops. Playwright runs every
+      # suite at all four viewports; a desktop-only layout fails here.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run db:seed
+        env:
+          SEED_PASSWORD: ci-test-password-123
+      - run: npm start &
+      - run: npx wait-on http://localhost:3000/api/health --timeout 60000
+      - run: npm run test:e2e
+        env:
+          SEED_PASSWORD: ci-test-password-123
+          E2E_BASE_URL: http://localhost:3000
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
