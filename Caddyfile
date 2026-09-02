@@ -1,0 +1,5 @@
+# Replace with your real domain. Caddy obtains and renews TLS automatically.
+app.yourshop.in {
+	encode gzip
+	reverse_proxy app:3000
+}

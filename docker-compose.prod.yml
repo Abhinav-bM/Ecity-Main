@@ -1,0 +1,52 @@
+# Production stack for the single Hetzner server (docs/04-Deployment-Guide.md).
+# App, database, worker and TLS proxy as four containers on one machine.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ecity
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ecity
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ecity']
+      interval: 10s
+      retries: 5
+    # Never published to the internet - reachable only on the Docker network.
+
+  app:
+    image: ghcr.io/YOURNAME/ecity:latest
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db: { condition: service_healthy }
+    expose: ['3000']
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      retries: 3
+
+  worker:
+    image: ghcr.io/YOURNAME/ecity:latest
+    command: ['node', 'worker.js']
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

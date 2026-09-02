@@ -1,0 +1,20 @@
+# Local development: Postgres only. The app runs on the host with `npm run dev`.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ecity
+      POSTGRES_PASSWORD: ecity
+      POSTGRES_DB: ecity
+    ports:
+      - '5432:5432'
+    volumes:
+      - ecity_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ecity']
+      interval: 10s
+      retries: 5
+
+volumes:
+  ecity_db_data:
