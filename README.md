@@ -84,6 +84,46 @@ drizzle/            SQL migrations
 tests/              unit · integration · e2e
 ```
 
+## Theming
+
+The colour scheme is entirely CSS custom properties in `src/app/globals.css`,
+split in two:
+
+1. **Neutral base** — surfaces, text, borders, states. Shared by every theme.
+2. **Brand layer** — `--primary`, `--ring`, sidebar accents, chart palette.
+   This is the only part a client re-skin touches.
+
+**Default is `onyx` — black primary.** Also shipped: `navy`, `emerald`, `amber`.
+
+Switch with one environment variable, no code change and no rebuild of any
+component:
+
+```bash
+APP_THEME=navy          # onyx (default) | navy | emerald | amber
+APP_COLOR_SCHEME=system # light | dark | system
+```
+
+The layout stamps it as `<html data-theme="…">`, so every shadcn component
+picks it up automatically. A bad value falls back to `onyx` rather than
+throwing — a typo in a client's env must not take the shop offline.
+
+**Adding a client theme:**
+
+1. Copy a `[data-theme='…']` block in `globals.css`, change the values
+2. Add the matching `.dark[data-theme='…']` block
+3. Register it in `src/lib/theme.ts` with a label and a `browserChrome` hex
+4. Set `APP_THEME=<name>` in that client's `.env`
+
+Colours are in **oklch**, which keeps perceived lightness consistent when you
+change hue — a green at the same lightness as the black reads as equally
+strong, which is not true in hex.
+
+Two rules that keep this working: **never hardcode a colour** in a component
+(no `#hex`, no `bg-blue-600` — always `bg-primary`, `text-muted-foreground`),
+and keep `browserChrome` in step with `--primary`, since
+`<meta name="theme-color">` cannot read a CSS variable. `tests/e2e/theme.spec.ts`
+enforces both.
+
 ## Responsive design
 
 The counter runs on a phone, the shop floor on a tablet, the back office on a

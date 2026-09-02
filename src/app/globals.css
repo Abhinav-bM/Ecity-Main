@@ -4,99 +4,206 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * ECITY theme. shadcn/ui token names, so every component copied from the
- * registry works untouched. Brand colour is the navy used across the docs.
- */
+/* ==========================================================================
+   THEMING
+   --------------------------------------------------------------------------
+   Two layers, deliberately separated:
+
+     1. NEUTRAL BASE  - surfaces, text, borders, states. Rarely changes.
+     2. BRAND LAYER   - primary, ring, sidebar accent, charts. Per client.
+
+   To re-skin for a client you override the BRAND LAYER only, in one block.
+   Add a new block, set APP_THEME to its name, redeploy. No component changes.
+   See src/lib/theme.ts for the registry and README "Theming".
+   ========================================================================== */
+
+/* ---------------------------------------------------- 1. neutral base ---- */
 :root {
   --radius: 0.625rem;
 
   --background: oklch(1 0 0);
-  --foreground: oklch(0.21 0.03 250);
-
+  --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.03 250);
+  --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.03 250);
+  --popover-foreground: oklch(0.145 0 0);
 
-  /* #1B4965 */
-  --primary: oklch(0.38 0.06 234);
-  --primary-foreground: oklch(0.98 0.005 240);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
 
-  --secondary: oklch(0.96 0.01 235);
-  --secondary-foreground: oklch(0.38 0.06 234);
-  --muted: oklch(0.97 0.005 250);
-  --muted-foreground: oklch(0.55 0.02 254);
-  --accent: oklch(0.96 0.01 235);
-  --accent-foreground: oklch(0.38 0.06 234);
-
-  --destructive: oklch(0.52 0.19 27);
-  --destructive-foreground: oklch(0.98 0.01 20);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
   --success: oklch(0.58 0.13 156);
-  --success-foreground: oklch(0.98 0.01 156);
-  --warning: oklch(0.72 0.15 78);
-  --warning-foreground: oklch(0.28 0.07 60);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.75 0.15 78);
+  --warning-foreground: oklch(0.26 0.06 60);
 
-  --border: oklch(0.92 0.008 255);
-  --input: oklch(0.92 0.008 255);
-  --ring: oklch(0.55 0.08 227);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
 
-  --chart-1: oklch(0.38 0.06 234);
-  --chart-2: oklch(0.6 0.09 227);
-  --chart-3: oklch(0.72 0.11 190);
-  --chart-4: oklch(0.72 0.15 78);
-  --chart-5: oklch(0.58 0.13 156);
-
-  --sidebar: oklch(0.98 0.004 250);
-  --sidebar-foreground: oklch(0.21 0.03 250);
-  --sidebar-primary: oklch(0.38 0.06 234);
-  --sidebar-primary-foreground: oklch(0.98 0.005 240);
-  --sidebar-accent: oklch(0.96 0.01 235);
-  --sidebar-accent-foreground: oklch(0.38 0.06 234);
-  --sidebar-border: oklch(0.92 0.008 255);
-  --sidebar-ring: oklch(0.55 0.08 227);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-border: oklch(0.922 0 0);
 }
 
 .dark {
-  --background: oklch(0.17 0.02 250);
-  --foreground: oklch(0.97 0.005 250);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
 
-  --card: oklch(0.22 0.025 250);
-  --card-foreground: oklch(0.97 0.005 250);
-  --popover: oklch(0.22 0.025 250);
-  --popover-foreground: oklch(0.97 0.005 250);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
 
-  --primary: oklch(0.72 0.09 224);
-  --primary-foreground: oklch(0.18 0.03 250);
-
-  --secondary: oklch(0.28 0.03 248);
-  --secondary-foreground: oklch(0.97 0.005 250);
-  --muted: oklch(0.28 0.03 248);
-  --muted-foreground: oklch(0.7 0.02 254);
-  --accent: oklch(0.3 0.035 245);
-  --accent-foreground: oklch(0.97 0.005 250);
-
-  --destructive: oklch(0.66 0.18 25);
-  --destructive-foreground: oklch(0.98 0.01 20);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
   --success: oklch(0.68 0.14 156);
-  --success-foreground: oklch(0.18 0.03 250);
-  --warning: oklch(0.78 0.14 78);
+  --success-foreground: oklch(0.145 0 0);
+  --warning: oklch(0.8 0.14 78);
   --warning-foreground: oklch(0.2 0.04 60);
 
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.6 0.08 227);
 
-  --sidebar: oklch(0.22 0.025 250);
-  --sidebar-foreground: oklch(0.97 0.005 250);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 12%);
+}
+
+/* ----------------------------------------------------- 2. brand layer ----
+   DEFAULT: "onyx" - black primary. Applied when no data-theme is set, so the
+   app is never unstyled if APP_THEME is missing or wrong.
+   -------------------------------------------------------------------------- */
+:root,
+[data-theme='onyx'] {
+  --primary: oklch(0.205 0 0); /* near-black */
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.556 0 0);
+
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  --chart-1: oklch(0.205 0 0);
+  --chart-2: oklch(0.45 0 0);
+  --chart-3: oklch(0.62 0 0);
+  --chart-4: oklch(0.75 0.15 78);
+  --chart-5: oklch(0.58 0.13 156);
+}
+
+.dark,
+.dark[data-theme='onyx'] {
+  /* On a dark ground a black button is invisible, so primary inverts. */
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.708 0 0);
+
+  --sidebar-primary: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  --chart-1: oklch(0.985 0 0);
+  --chart-2: oklch(0.75 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.8 0.14 78);
+  --chart-5: oklch(0.68 0.14 156);
+}
+
+/* ---- Client themes. Copy a block, change the values, done. --------------- */
+
+[data-theme='navy'] {
+  --primary: oklch(0.38 0.06 234);
+  --primary-foreground: oklch(0.985 0.005 240);
+  --ring: oklch(0.55 0.08 227);
+  --sidebar-primary: oklch(0.38 0.06 234);
+  --sidebar-primary-foreground: oklch(0.985 0.005 240);
+  --sidebar-accent: oklch(0.96 0.01 235);
+  --sidebar-accent-foreground: oklch(0.38 0.06 234);
+  --sidebar-ring: oklch(0.55 0.08 227);
+  --chart-1: oklch(0.38 0.06 234);
+  --chart-2: oklch(0.6 0.09 227);
+  --chart-3: oklch(0.72 0.11 190);
+  --chart-4: oklch(0.75 0.15 78);
+  --chart-5: oklch(0.58 0.13 156);
+}
+.dark[data-theme='navy'] {
+  --primary: oklch(0.72 0.09 224);
+  --primary-foreground: oklch(0.18 0.03 250);
+  --ring: oklch(0.6 0.08 227);
   --sidebar-primary: oklch(0.72 0.09 224);
   --sidebar-primary-foreground: oklch(0.18 0.03 250);
   --sidebar-accent: oklch(0.3 0.035 245);
-  --sidebar-accent-foreground: oklch(0.97 0.005 250);
-  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-ring: oklch(0.6 0.08 227);
 }
 
+[data-theme='emerald'] {
+  --primary: oklch(0.5 0.13 158);
+  --primary-foreground: oklch(0.985 0.01 156);
+  --ring: oklch(0.62 0.12 158);
+  --sidebar-primary: oklch(0.5 0.13 158);
+  --sidebar-primary-foreground: oklch(0.985 0.01 156);
+  --sidebar-accent: oklch(0.96 0.02 158);
+  --sidebar-accent-foreground: oklch(0.5 0.13 158);
+  --sidebar-ring: oklch(0.62 0.12 158);
+  --chart-1: oklch(0.5 0.13 158);
+  --chart-2: oklch(0.65 0.12 165);
+  --chart-3: oklch(0.75 0.1 180);
+  --chart-4: oklch(0.75 0.15 78);
+  --chart-5: oklch(0.45 0.08 200);
+}
+.dark[data-theme='emerald'] {
+  --primary: oklch(0.72 0.14 158);
+  --primary-foreground: oklch(0.16 0.03 158);
+  --ring: oklch(0.65 0.12 158);
+  --sidebar-primary: oklch(0.72 0.14 158);
+  --sidebar-primary-foreground: oklch(0.16 0.03 158);
+  --sidebar-accent: oklch(0.28 0.03 158);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.65 0.12 158);
+}
+
+[data-theme='amber'] {
+  --primary: oklch(0.62 0.15 62);
+  --primary-foreground: oklch(0.16 0.03 60);
+  --ring: oklch(0.7 0.14 62);
+  --sidebar-primary: oklch(0.62 0.15 62);
+  --sidebar-primary-foreground: oklch(0.16 0.03 60);
+  --sidebar-accent: oklch(0.96 0.02 70);
+  --sidebar-accent-foreground: oklch(0.4 0.1 60);
+  --sidebar-ring: oklch(0.7 0.14 62);
+  --chart-1: oklch(0.62 0.15 62);
+  --chart-2: oklch(0.72 0.13 78);
+  --chart-3: oklch(0.55 0.12 40);
+  --chart-4: oklch(0.58 0.13 156);
+  --chart-5: oklch(0.45 0 0);
+}
+.dark[data-theme='amber'] {
+  --primary: oklch(0.78 0.15 70);
+  --primary-foreground: oklch(0.18 0.04 60);
+  --ring: oklch(0.72 0.14 66);
+  --sidebar-primary: oklch(0.78 0.15 70);
+  --sidebar-primary-foreground: oklch(0.18 0.04 60);
+  --sidebar-accent: oklch(0.3 0.04 60);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.72 0.14 66);
+}
+
+/* --------------------------------------------- Tailwind utility mapping -- */
 @theme inline {
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 
