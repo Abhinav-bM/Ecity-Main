@@ -26,7 +26,8 @@ Constraints that shaped every choice below:
 | UI components | **shadcn/ui** + **Radix UI** | As requested. Components are copied into your repo, so you own and can adapt them — right for a dense back-office app with tables, dialogs, comboboxes and command palettes |
 | Styling | **Tailwind CSS v4** | Required by shadcn/ui; keeps a 40-screen app visually consistent without a growing stylesheet |
 | Forms & validation | **React Hook Form** + **Zod** | One Zod schema validates the browser form and the server handler, and infers the TypeScript type. Removes a whole class of bugs in a form-heavy product |
-| Server data / cache | **TanStack Query** | Caching, background refetch, optimistic updates and retry — matters on the billing screen and on a shaky shop connection |
+| **Server** state | **TanStack Query** | Anything Postgres owns: caching, background refetch, optimistic updates, retry — matters on the billing screen and on a shaky shop connection. Introduced in M4; before that, Server Components read the service layer directly and nothing is fetched |
+| **Client** state | **Zustand** (from M4) | The bill being built at the counter — cart lines, discounts, attached customer, split payments, trade-in. Four or five sibling components read and write it, which is past what props or context handle well. ~1 KB, no provider, a store is just a hook. *Not* Redux: its strengths (time-travel devtools, middleware, team conventions) do not pay for their boilerplate here |
 | Tables | **TanStack Table** (headless, styled with shadcn) | Inventory, sales and report grids need sorting, filtering, pagination and column visibility. Do not hand-roll this |
 | Charts | **Recharts** | React-native API, adequate for the dashboards and analytics in PRD §6.15 |
 | Database | **PostgreSQL 16+** | Transactions, foreign keys, check constraints, partial and composite indexes, window functions for analytics, full-text search for global search, `numeric`/`bigint` for money. Everything this product needs is in the box |
@@ -53,6 +54,8 @@ Constraints that shaped every choice below:
 | Microservices | There is no scaling or team problem here that they solve, and several correctness problems they create |
 | Floating-point money (`float`, `double`, JS `number` for amounts) | Rounding errors in a system whose whole purpose is reconciling cash. Store integer paise in `bigint` |
 | A BaaS for auth (Clerk, Auth0) at $25+/mo | Cost with no benefit: your roles and branch scoping are custom regardless |
+| Redux / Redux Toolkit | Four times the code for the same cart. Its real advantages are for large teams and time-travel debugging, neither of which applies. Zustand covers the one screen that needs shared client state |
+| A global client store for server data | Inventory and sales live in Postgres. Mirroring them into a store means writing cache invalidation by hand, badly. Server Components and TanStack Query already solve it |
 | Prisma Accelerate / paid data proxies | Not needed at this connection count |
 
 ---
@@ -60,7 +63,7 @@ Constraints that shaped every choice below:
 
 ```
                        Browser (desktop / tablet at the counter)
-                       React 19 + shadcn/ui + TanStack Query
+         React 19 + shadcn/ui + TanStack Query (server state) + Zustand (cart)
                                      |  HTTPS
               +----------------------+-----------------------+
               |            Next.js 15 application            |
@@ -210,6 +213,18 @@ returning id;   -- zero rows returned  =>  abort the sale with a clear message
 **Printing.** Two print stylesheets — A4 invoice and 80 mm thermal — driven by CSS `@page` and `@media print`. Downloadable PDFs use `@react-pdf/renderer` on the server. Avoid headless Chrome; it is the single most expensive thing you could add to your hosting bill.
 
 **Uploads.** The browser requests a short-lived signed upload URL and posts directly to object storage; the server stores only the key. Downloads are served through short-lived signed URLs, never a public bucket.
+
+**Where state lives.** Three tiers, and putting something in the wrong one is the most common way a React codebase rots:
+
+| Tier | Tool | Examples |
+|---|---|---|
+| Server state — Postgres owns it | Server Components reading services directly; **TanStack Query** for client-side reads | Inventory, sales, customers, dues, the audit log |
+| Client state — shared across components, exists only in the browser | **Zustand** | The in-progress bill: cart lines, discounts, split payments, attached trade-in |
+| Local state — one component owns it | `useState` | A dialog's open/closed, a form error, a draft filter |
+
+Never copy server data into a client store. It goes stale immediately and you end up hand-writing cache invalidation that TanStack Query already does. M0–M3 need no store at all: every piece of client state is local to one component.
+
+The billing store also carries the bill's **idempotency key** and is persisted to `localStorage`, which is what satisfies PRD §9.3 — a dropped connection or an accidental refresh must not lose a half-built bill, and re-submitting must not create a second one.
 
 **Integrating the other billing system.** The shop keeps a second system for NEW items and exports Excel from it daily (PRD §6.22). The column layout is unknown at design time, so isolate it: `external-import/types.ts` defines a canonical row shape that the rest of the pipeline is written against, `adapters/*.adapter.ts` is the only code that knows the real column names, and `mapping/legacy.mapping.json` holds the column-name mapping so a changed header is a config edit rather than a release. Staging and preview before commit, idempotency on `(source, external invoice no, external line id)` plus a file hash, and apply through the *same* service functions as manual entry — never straight into tables. The one rule that makes this safe rather than merely tidy: a device whose `sales_channel` is `EXTERNAL` cannot be sold on the ECITY billing screen at all, so the two systems can never invoice the same IMEI.
 
@@ -362,7 +377,8 @@ The concurrency test and the authorisation matrix are the two suites that repay 
 
 1. `npx create-next-app@latest --typescript --tailwind --app`
 2. `npx shadcn@latest init`, then add: `button card input table dialog dropdown-menu form select command sheet tabs toast badge popover calendar`
-3. `npm i drizzle-orm postgres drizzle-kit zod react-hook-form @hookform/resolvers @tanstack/react-query @tanstack/react-table recharts pg-boss date-fns`
+3. `npm i drizzle-orm postgres drizzle-kit zod react-hook-form @hookform/resolvers @tanstack/react-table recharts pg-boss date-fns`
+   (add `@tanstack/react-query` and `zustand` at M4, when the billing screen first needs them — not before)
 4. `npm i -D vitest @playwright/test @types/pg eslint prettier`
 5. Docker Compose with Postgres 16 for local development
 6. GitHub repository, GitHub Actions for typecheck + lint + test + build, deploy on `main`

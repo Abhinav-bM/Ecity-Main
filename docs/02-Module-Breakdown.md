@@ -59,7 +59,8 @@ M6, M7 and M8 are independent of each other once M5 is done — if a second deve
 3. **Stock, money and device-status changes are written in the same database transaction as their document.**
 4. **Nothing is hard-deleted.** Documents move to Cancelled / Voided / Reversed states.
 5. **Every device-touching action appends a `device_event` row.** M9 is only possible because M2–M8 did this faithfully.
-6. Every module ends with: migrations committed, seed/demo data updated, tests green, and a five-minute demo of the "Done when" list.
+6. **State goes in the right tier.** Server data (inventory, sales, customers) is read by Server Components or TanStack Query — never copied into a client store. Shared browser-only state uses Zustand, and the only thing that qualifies before M10 is the bill being built (M4). Everything else is `useState`. M0–M3 need no store at all.
+7. Every module ends with: migrations committed, seed/demo data updated, tests green, and a five-minute demo of the "Done when" list.
 
 ---
 ## M0 — Foundations
@@ -185,6 +186,13 @@ Device creation and update take **`imeis: string[]`**, never a pair of named fie
 
 **Screens.** The billing screen — a single keyboard-driven page: search by name/SKU/barcode/IMEI, cart with line discounts and tax, customer attach/create inline, split payment across methods, save & print. Sale list with filters. Sale detail. Printable invoice in A4 and 80 mm thermal layouts, plus PDF download.
 
+**Client state — the first module that needs a store.** The bill being built is real client state: cart lines, per-line and bill-level discounts, the attached customer, split payments across methods, and later the trade-in from M6. Four or five sibling components read and write it — the search box, the cart, the totals panel, the payment panel — which is past what props or context handle cleanly.
+
+- Use **Zustand** (`npm i zustand`), one store scoped to the billing screen. Not Redux: same result, a quarter of the code.
+- **Persist the store to `localStorage`**, including the bill's idempotency key. This is what satisfies PRD §9.3 — a dropped connection or an accidental refresh must not lose a half-built bill, and re-submitting must not create a second one.
+- Clear the store only on a confirmed save, never optimistically.
+- **TanStack Query** joins here too, for client-side reads (product and IMEI search as the user types). Keep the division strict: Query owns anything Postgres owns; Zustand owns only what exists in the browser. Never copy sale or stock data into the store.
+
 **Server work.**
 - Availability check and device lock at save: the exact device must be `In Stock` at the selling branch, and a conditional update prevents two tills selling the same IMEI.
 - **Channel check:** a device with `sales_channel = 'EXTERNAL'` is refused at search time and at save time, with the message *"This device is billed through the other system."* This is what makes M12 safe — it removes the possibility of the same phone being invoiced in both systems.
@@ -200,6 +208,7 @@ Device creation and update take **`imeis: string[]`**, never a pair of named fie
 - Selling an IMEI that another user has just sold fails clearly rather than double-selling; the device's status is `Sold` exactly once.
 - A NEW device cannot be added to a bill at all, and the refusal explains why.
 - Both invoice formats print correctly, and the branch invoice series has no gaps or duplicates after 200 concurrent test sales.
+- A half-built bill survives a browser refresh and a dropped connection, and submitting it twice creates exactly one sale.
 
 **Depends on.** M3. **Effort.** 3.0 weeks. *Blocked on PRD OQ-4 and OQ-7.*
 
@@ -235,7 +244,7 @@ Device creation and update take **`imeis: string[]`**, never a pair of named fie
 
 **Data model.** `sales_return`, `return_item`, `refund`, `trade_in`, device inspection fields.
 
-**Screens.** Return by invoice / customer / IMEI; full, partial and exchange return flows; inspection queue for returned devices with the classify action (Available / Used / Damaged / Repair Required); trade-in capture inside the billing screen, with valuation and difference payable.
+**Screens.** Return by invoice / customer / IMEI; full, partial and exchange return flows; inspection queue for returned devices with the classify action (Available / Used / Damaged / Repair Required); trade-in capture inside the billing screen, with valuation and difference payable — extends M4's Zustand cart store rather than introducing a second one.
 
 **Server work.**
 - Returned mobiles go to `Returned / Inspection`, never straight back to sellable (this is the rule most likely to be got wrong).
@@ -447,7 +456,7 @@ When the real file arrives, the work is: read the columns, fill in `legacy.mappi
 
 **Data model.** `import_batch` (file, hash, uploaded_by, period, status, counts), `import_row` (batch, row number, raw payload, canonical payload, match result, applied ref, error), `external_reference` (our entity ↔ their invoice/line id, unique), and on existing tables: `source` (`ECITY` | `LEGACY`) plus `sales_channel` and `SOLD_PENDING_IMPORT` on `device_unit`.
 
-**Screens.** Upload page with drag-and-drop and batch history; **preview before commit** showing what will be created, matched, skipped and rejected, with per-row reasons; exception queue for unmatched rows with resolve actions (link to an existing device, create it, ignore with a reason); daily reconciliation report; a "today's feed not yet uploaded" banner on the dashboard.
+**Screens.** Upload page with drag-and-drop and batch history. The wizard's step state is server-backed (`import_batch` / `import_row`), so it needs no client store — a browser crash mid-review must not lose a staged batch; **preview before commit** showing what will be created, matched, skipped and rejected, with per-row reasons; exception queue for unmatched rows with resolve actions (link to an existing device, create it, ignore with a reason); daily reconciliation report; a "today's feed not yet uploaded" banner on the dashboard.
 
 **Server work.**
 
