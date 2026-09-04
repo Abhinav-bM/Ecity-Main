@@ -1,8 +1,9 @@
 /**
- * ECITY database schema - Module M0 (Foundations).
+ * ECITY database schema - Modules M0 (Foundations) and M1 (Master Data).
  *
- * Scope: business, branches (minimal - M1 owns full branch management),
- * users, roles, permissions, sessions and the audit log.
+ * M0: business, users, roles, permissions, sessions, audit log.
+ * M1: tax rates, payment methods, expense categories, customers, suppliers,
+ *     attachments, and full branch management.
  *
  * Conventions that apply to every table added from here on:
  *  - Money is ALWAYS bigint paise. Never numeric, never float. (docs/03 §4.1)
@@ -14,6 +15,7 @@ import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -27,6 +29,16 @@ import {
 /* ------------------------------------------------------------------ enums */
 
 export const branchStatusEnum = pgEnum('branch_status', ['ACTIVE', 'INACTIVE'])
+
+export const paymentMethodTypeEnum = pgEnum('payment_method_type', [
+  'CASH',
+  'UPI',
+  'CARD',
+  'BANK_TRANSFER',
+  'OTHER',
+])
+
+export const partyStatusEnum = pgEnum('party_status', ['ACTIVE', 'INACTIVE'])
 
 export const auditActionEnum = pgEnum('audit_action', [
   'CREATE',
@@ -59,6 +71,15 @@ export const business = pgTable('business', {
   /** ISO 4217. Single currency per business (PRD OQ-8 assumed answered: single). */
   currency: text('currency').notNull().default('INR'),
   timezone: text('timezone').notNull().default('Asia/Kolkata'),
+  /**
+   * PRD FR-2.3. When true, the price typed on a bill already includes tax and
+   * the tax component is derived from it; when false, tax is added on top.
+   * This changes every total in the system, so it is a business-level setting
+   * rather than a per-document choice.
+   */
+  pricesIncludeTax: boolean('prices_include_tax').notNull().default(true),
+  /** PRD FR-2.2. Branch-level prefixes override this - see branch.invoicePrefix. */
+  invoicePrefix: text('invoice_prefix').notNull().default('INV'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -84,11 +105,22 @@ export const branch = pgTable(
     managerUserId: bigint('manager_user_id', { mode: 'number' }).references(
       (): typeof appUser.id => appUser.id,
     ),
+    email: text('email'),
+    gstin: text('gstin'),
+    /** PRD FR-26.3. Null means "use the business prefix". */
+    invoicePrefix: text('invoice_prefix'),
+    openedOn: timestamp('opened_on', { withTimezone: true }),
+    notes: text('notes'),
     status: branchStatusEnum('status').notNull().default('ACTIVE'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+    updatedBy: bigint('updated_by', { mode: 'number' }),
   },
-  (t) => [uniqueIndex('branch_business_code_uq').on(t.businessId, t.code)],
+  (t) => [
+    uniqueIndex('branch_business_code_uq').on(t.businessId, t.code),
+    index('branch_status_idx').on(t.businessId, t.status),
+  ],
 )
 
 /* ------------------------------------------------------- roles/permissions */
@@ -277,6 +309,178 @@ export const auditLog = pgTable(
     index('audit_log_branch_idx').on(t.branchId),
   ],
 )
+
+
+/* =============================================================== M1 tables */
+
+/**
+ * Tax rates (PRD FR-2.3).
+ * Rate is stored in BASIS POINTS as an integer - 18% is 1800. Never a float:
+ * a tax rate multiplies money, and money is integer paise (docs/03 §4.1).
+ */
+export const taxRate = pgTable(
+  'tax_rate',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    name: text('name').notNull(),
+    /** 1800 = 18.00%. Range 0 - 10000. */
+    rateBasisPoints: integer('rate_basis_points').notNull(),
+    isDefault: boolean('is_default').notNull().default(false),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('tax_rate_business_name_uq').on(t.businessId, t.name),
+    index('tax_rate_active_idx').on(t.businessId, t.isActive),
+  ],
+)
+
+/** Payment methods (PRD FR-2.4). Cash/UPI/Card/Bank plus configurable others. */
+export const paymentMethod = pgTable(
+  'payment_method',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    type: paymentMethodTypeEnum('type').notNull(),
+    /** Cash methods post to the branch cash drawer in M7; others to accounts. */
+    affectsCashDrawer: boolean('affects_cash_drawer').notNull().default(false),
+    isActive: boolean('is_active').notNull().default(true),
+    sortOrder: smallint('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('payment_method_business_code_uq').on(t.businessId, t.code)],
+)
+
+/** Expense categories (PRD FR-10.1). M7 posts expenses against these. */
+export const expenseCategory = pgTable(
+  'expense_category',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    name: text('name').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('expense_category_business_name_uq').on(t.businessId, t.name)],
+)
+
+/**
+ * Customers (PRD FR-6.6). Business-wide, NOT per branch: FR-6.7 requires
+ * spend and history to be visible across every branch.
+ */
+export const customer = pgTable(
+  'customer',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    name: text('name').notNull(),
+    phone: text('phone'),
+    altPhone: text('alt_phone'),
+    email: text('email'),
+    addressLine1: text('address_line1'),
+    addressLine2: text('address_line2'),
+    city: text('city'),
+    state: text('state'),
+    pincode: text('pincode'),
+    gstin: text('gstin'),
+    notes: text('notes'),
+    status: partyStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+    updatedBy: bigint('updated_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('customer_name_idx').on(t.businessId, t.name),
+    index('customer_phone_idx').on(t.businessId, t.phone),
+    index('customer_email_idx').on(t.businessId, t.email),
+  ],
+)
+
+/** Suppliers (PRD FR-5.10). Also business-wide - FR-14.3 shares them across branches. */
+export const supplier = pgTable(
+  'supplier',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    name: text('name').notNull(),
+    company: text('company'),
+    phone: text('phone'),
+    altPhone: text('alt_phone'),
+    email: text('email'),
+    addressLine1: text('address_line1'),
+    addressLine2: text('address_line2'),
+    city: text('city'),
+    state: text('state'),
+    pincode: text('pincode'),
+    gstin: text('gstin'),
+    photoUrl: text('photo_url'),
+    notes: text('notes'),
+    status: partyStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+    updatedBy: bigint('updated_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('supplier_name_idx').on(t.businessId, t.name),
+    index('supplier_phone_idx').on(t.businessId, t.phone),
+    index('supplier_gstin_idx').on(t.businessId, t.gstin),
+  ],
+)
+
+/**
+ * Files attached to any record - supplier bills, expense receipts, product
+ * images (PRD FR-5.13, FR-10.2). Only the storage key is held here; the file
+ * itself lives in object storage and is served through a short-lived signed
+ * URL, never a public bucket (docs/03 §5).
+ */
+export const attachment = pgTable(
+  'attachment',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** e.g. 'supplier', 'customer', 'expense', 'purchase'. */
+    entityType: text('entity_type').notNull(),
+    entityId: bigint('entity_id', { mode: 'number' }).notNull(),
+    fileName: text('file_name').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Opaque key in the storage driver. Never a URL - drivers change. */
+    storageKey: text('storage_key').notNull(),
+    uploadedBy: bigint('uploaded_by', { mode: 'number' }).references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('attachment_entity_idx').on(t.entityType, t.entityId),
+    uniqueIndex('attachment_storage_key_uq').on(t.storageKey),
+  ],
+)
+
+export type TaxRate = typeof taxRate.$inferSelect
+export type PaymentMethod = typeof paymentMethod.$inferSelect
+export type ExpenseCategory = typeof expenseCategory.$inferSelect
+export type Customer = typeof customer.$inferSelect
+export type Supplier = typeof supplier.$inferSelect
+export type Attachment = typeof attachment.$inferSelect
 
 export type Business = typeof business.$inferSelect
 export type Branch = typeof branch.$inferSelect

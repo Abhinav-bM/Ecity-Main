@@ -3,7 +3,18 @@ import { eq, sql } from 'drizzle-orm'
 import { db } from '@/server/db'
 import { hashPassword } from '@/server/auth/password'
 import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions'
-import { appUser, branch, business, permission, role, rolePermission, userBranch } from './schema'
+import {
+  appUser,
+  branch,
+  business,
+  expenseCategory,
+  paymentMethod,
+  permission,
+  role,
+  rolePermission,
+  taxRate,
+  userBranch,
+} from './schema'
 
 /**
  * Idempotent seed. Safe to run repeatedly - it upserts.
@@ -100,7 +111,67 @@ async function main() {
     console.log(`  branch: ${code} (#${b.id})`)
   }
 
-  // 5. Users - one per role, so the authorisation matrix can be tested.
+  // 5. M1 master data defaults - GST slabs, payment methods, expense heads.
+  //    Real Indian retail values, so the pickers in M3/M4 are usable at once.
+  const rates = [
+    { name: 'GST 0%', rateBasisPoints: 0, isDefault: false },
+    { name: 'GST 5%', rateBasisPoints: 500, isDefault: false },
+    { name: 'GST 12%', rateBasisPoints: 1200, isDefault: false },
+    { name: 'GST 18%', rateBasisPoints: 1800, isDefault: true },
+    { name: 'GST 28%', rateBasisPoints: 2800, isDefault: false },
+  ]
+  for (const r of rates) {
+    await db
+      .insert(taxRate)
+      .values({ businessId: biz.id, ...r })
+      .onConflictDoUpdate({
+        target: [taxRate.businessId, taxRate.name],
+        set: { rateBasisPoints: r.rateBasisPoints },
+      })
+  }
+  console.log(`  tax rates: ${rates.length}`)
+
+  const methods = [
+    { code: 'CASH', name: 'Cash', type: 'CASH' as const, affectsCashDrawer: true, sortOrder: 1 },
+    { code: 'UPI', name: 'UPI', type: 'UPI' as const, affectsCashDrawer: false, sortOrder: 2 },
+    { code: 'CARD', name: 'Card', type: 'CARD' as const, affectsCashDrawer: false, sortOrder: 3 },
+    {
+      code: 'BANK',
+      name: 'Bank Transfer',
+      type: 'BANK_TRANSFER' as const,
+      affectsCashDrawer: false,
+      sortOrder: 4,
+    },
+  ]
+  for (const m of methods) {
+    await db
+      .insert(paymentMethod)
+      .values({ businessId: biz.id, ...m })
+      .onConflictDoUpdate({
+        target: [paymentMethod.businessId, paymentMethod.code],
+        set: { name: m.name, type: m.type, affectsCashDrawer: m.affectsCashDrawer },
+      })
+  }
+  console.log(`  payment methods: ${methods.length}`)
+
+  const categories = [
+    'Rent',
+    'Electricity',
+    'Salaries',
+    'Transport',
+    'Packaging',
+    'Repairs',
+    'Miscellaneous',
+  ]
+  for (const name of categories) {
+    await db
+      .insert(expenseCategory)
+      .values({ businessId: biz.id, name })
+      .onConflictDoNothing({ target: [expenseCategory.businessId, expenseCategory.name] })
+  }
+  console.log(`  expense categories: ${categories.length}`)
+
+  // 6. Users - one per role, so the authorisation matrix can be tested.
   const password = process.env.SEED_PASSWORD ?? 'ChangeMe!2026'
   const users = [
     { email: 'admin@ecity.local', name: 'Owner', roleCode: 'ADMIN', branches: [] as string[] },

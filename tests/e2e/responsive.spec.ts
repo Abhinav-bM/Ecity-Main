@@ -109,7 +109,12 @@ test.describe('long content', () => {
   test('a wide code block scrolls inside its own box, not the page', async ({ page }) => {
     await signIn(page, USERS.admin)
     await page.goto('/settings/audit')
-    const details = page.locator('details').first()
+    // Both layouts exist in the DOM; only one is visible at a given width.
+    // Targeting `details` unscoped picks the hidden one on desktop.
+    const container = page.getByTestId(
+      (await page.getByTestId('audit-table').isVisible()) ? 'audit-table' : 'audit-cards',
+    )
+    const details = container.locator('details').first()
     if ((await details.count()) === 0) {
       test.skip(true, 'no audit entry with a changes payload on this page')
       return

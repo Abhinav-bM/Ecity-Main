@@ -3,7 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Menu, ScrollText, ShieldCheck, Users } from 'lucide-react'
+import {
+  Building2,
+  LayoutDashboard,
+  Menu,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  Truck,
+  UserRound,
+  Users,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PermissionCode } from '@/lib/permissions'
 import { Button } from '@/components/ui/button'
@@ -24,11 +34,36 @@ type NavItem = {
   permission?: PermissionCode
 }
 
-const NAV: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/settings/users', label: 'Users', icon: Users, permission: 'user.view' },
-  { href: '/settings/roles', label: 'Roles', icon: ShieldCheck, permission: 'role.view' },
-  { href: '/settings/audit', label: 'Audit log', icon: ScrollText, permission: 'audit.view' },
+type NavGroup = { heading?: string; items: NavItem[] }
+
+const NAV: NavGroup[] = [
+  {
+    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+  },
+  {
+    heading: 'Master data',
+    items: [
+      { href: '/customers', label: 'Customers', icon: UserRound, permission: 'customer.view' },
+      { href: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'supplier.view' },
+    ],
+  },
+  {
+    heading: 'Settings',
+    items: [
+      { href: '/settings/business', label: 'Business', icon: Settings, permission: 'business.view' },
+      {
+        href: '/settings/branches',
+        label: 'Branches',
+        icon: Building2,
+        // branch.view exists so the header switcher works for everyone.
+        // Reaching the settings screen needs the management permission.
+        permission: 'branch.manage',
+      },
+      { href: '/settings/users', label: 'Users', icon: Users, permission: 'user.view' },
+      { href: '/settings/roles', label: 'Roles', icon: ShieldCheck, permission: 'role.view' },
+      { href: '/settings/audit', label: 'Audit log', icon: ScrollText, permission: 'audit.view' },
+    ],
+  },
 ]
 
 export type ShellUser = {
@@ -39,36 +74,45 @@ export type ShellUser = {
 }
 
 function NavLinks({
-  items,
+  groups,
   pathname,
   onNavigate,
 }: {
-  items: NavItem[]
+  groups: NavGroup[]
   pathname: string
   onNavigate?: () => void
 }) {
   return (
-    <nav className="space-y-1" aria-label="Main">
-      {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors md:py-2',
-              active
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-            )}
-          >
-            <item.icon className="size-4 shrink-0" />
-            {item.label}
-          </Link>
-        )
-      })}
+    <nav className="space-y-4" aria-label="Main">
+      {groups.map((group, i) => (
+        <div key={group.heading ?? i} className="space-y-1">
+          {group.heading ? (
+            <p className="px-3 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              {group.heading}
+            </p>
+          ) : null}
+          {group.items.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors md:py-2',
+                  active
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                )}
+              >
+                <item.icon className="size-4 shrink-0" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      ))}
     </nav>
   )
 }
@@ -87,11 +131,14 @@ export function AppShell({
   const pathname = usePathname()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const permitted = new Set(user.permissions)
-  const items = NAV.filter((i) => !i.permission || permitted.has(i.permission))
+  const groups = NAV.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => !i.permission || permitted.has(i.permission)),
+  })).filter((g) => g.items.length > 0)
 
   const footnote = (
     <p className="text-[11px] leading-relaxed text-muted-foreground">
-      Module M0 — Foundations.
+      Modules M0–M1 complete.
       <br />
       Inventory, billing and reporting arrive in M2 onward.
     </p>
@@ -104,8 +151,8 @@ export function AppShell({
         <div className="flex h-14 items-center border-b px-4">
           <span className="font-semibold tracking-tight text-primary">ECITY</span>
         </div>
-        <div className="flex-1 p-2">
-          <NavLinks items={items} pathname={pathname} />
+        <div className="flex-1 overflow-y-auto p-2">
+          <NavLinks groups={groups} pathname={pathname} />
         </div>
         <div className="p-3">{footnote}</div>
       </aside>
@@ -129,7 +176,7 @@ export function AppShell({
               </SheetHeader>
               <div className="p-2">
                 <NavLinks
-                  items={items}
+                  groups={groups}
                   pathname={pathname}
                   onNavigate={() => setMobileNavOpen(false)}
                 />

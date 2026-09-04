@@ -14,6 +14,8 @@ const schema = z.object({
   /** Absolute session lifetime, hours, regardless of activity. */
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(24 * 14),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  /** Where uploaded files live. 'local' writes to .storage/ - development only. */
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
 })
 
 let cached: z.infer<typeof schema> | null = null

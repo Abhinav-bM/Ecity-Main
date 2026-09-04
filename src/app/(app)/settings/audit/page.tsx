@@ -59,7 +59,7 @@ export default async function AuditPage({
       </div>
 
       {/* Phones get one card per entry; the six-column table is unreadable below md. */}
-      <div className="grid gap-3 md:hidden">
+      <div className="grid gap-3 md:hidden" data-testid="audit-cards">
         {rows.length === 0 ? (
           <Card className="p-10 text-center text-sm text-muted-foreground">
             Nothing recorded yet.
@@ -93,7 +93,7 @@ export default async function AuditPage({
         )}
       </div>
 
-      <Card className="hidden overflow-hidden md:block">
+      <Card className="hidden overflow-hidden md:block" data-testid="audit-table">
         <Table>
           <TableHeader>
             <TableRow>

@@ -221,6 +221,194 @@ Do not raise these as bugs:
 - Password reset emails print to screen instead of sending — M14
 - Notifications, reports, exports — later modules
 
+---
+
+# M1 — Master Data
+
+**Delivers.** PRD FR-2.1 – FR-2.4, FR-3.1, FR-3.2, FR-3.8, FR-5.10, FR-6.6,
+FR-10.1.
+
+The shop gets configured and the people it trades with exist. Nothing here
+moves stock or money yet — these are the pickers and directories the rest of
+the system draws on.
+
+**Customer** = someone who buys from the shop. **Supplier** = someone the shop
+buys from. Both are shared across every branch.
+
+## 1. Business settings
+
+Sign in as **admin**, go to **Settings → Business**.
+
+- [ ] Four tabs: Profile, Tax, Payments, Expenses
+- [ ] On a phone the tabs scroll sideways rather than wrapping
+
+### Profile
+
+- [ ] Edit the business name, save, reload — the change persisted
+- [ ] Enter a malformed GST number → *"Enter a valid 15-character GSTIN."*
+- [ ] Enter a valid one (`29ABCDE1234F1Z5`) → accepted, stored upper-case
+- [ ] Currency is fixed at INR and cannot be edited
+- [ ] Toggle **Prices include tax** → the explanation below it changes
+- [ ] Save, reload → the toggle held its new position
+
+### Tax
+
+- [ ] Five GST slabs are listed: 0, 5, 12, 18, 28%
+- [ ] **GST 18%** is marked Default
+- [ ] Rates display as `18.00%`
+- [ ] Add a rate named `GST 3%` at `3` → appears in the list
+- [ ] Add one with the same name → refused as a duplicate
+- [ ] Deactivate a non-default rate → shows Inactive
+- [ ] Try to deactivate the **default** rate → refused, with the reason
+
+### Payments
+
+- [ ] Cash, UPI, Card, Bank Transfer are listed with their type badge
+- [ ] Cash carries a **Cash drawer** badge; the others do not
+- [ ] Deactivate UPI → shows Inactive; reactivate it
+- [ ] Try to deactivate **Cash** → refused: at least one cash method must stay
+      active
+
+### Expenses
+
+- [ ] Seven categories: Rent, Electricity, Salaries, Transport, Packaging,
+      Repairs, Miscellaneous
+- [ ] Add one → appears immediately
+- [ ] Add the same name again → refused
+
+## 2. Branches
+
+**Settings → Branches** as admin.
+
+- [ ] MAIN and NORTH are listed with manager and user counts
+- [ ] **Add branch** — code `MGROAD`, name `MG Road` → created and listed
+- [ ] The code is forced to upper case even if typed lower
+- [ ] Add another with code `MGROAD` → *"Branch code MGROAD is already in
+      use."*
+- [ ] A code containing a space or `!` is rejected inline
+- [ ] Open the new branch, change its name, save → the list shows the new name
+- [ ] Assign a manager from the dropdown → shows in the Manager column
+- [ ] Leave the manager empty → **saves without error**
+      *(this failed silently before — see §5)*
+
+### Deactivation — the rule that matters (FR-3.8)
+
+- [ ] Deactivate `MG Road` → badge turns Inactive, **the row stays**
+- [ ] Open the header **branch switcher** → MG Road is **gone**
+- [ ] Reactivate it → it comes back in the switcher
+- [ ] Deactivate every branch but one, then try the last → refused: at least
+      one branch must stay active
+
+## 3. Customers and suppliers
+
+**Customers** in the sidebar.
+
+- [ ] The list is empty, or holds only what you have created
+- [ ] **Add customer** with a name only → saves. A walk-in has nothing else
+- [ ] Add one with phone `9876543210`
+- [ ] Add a second with the **same phone** → *"Another customer (…) already
+      uses this phone number."*
+- [ ] Give a **supplier** that same phone → **allowed**, they are different
+      directories
+- [ ] Edit a customer, keep their phone unchanged, save → no false duplicate
+- [ ] Enter `not-a-phone` → rejected inline
+- [ ] Enter `MiXeD@Example.COM` → stored lower-case (check in Studio)
+
+### Search and status
+
+- [ ] Search by part of a name → matches
+- [ ] Search by phone → matches
+- [ ] Search by email → matches
+- [ ] Search by GST number → matches
+- [ ] **Deactivate** a customer → disappears from the default list
+- [ ] Click **Show inactive** → they reappear, badged Inactive
+- [ ] Reactivate → back to normal
+
+Repeat the same pass on **Suppliers**. Suppliers additionally have a
+**Company** field; customers do not.
+
+## 4. Permissions
+
+| User | Should see in the sidebar |
+|---|---|
+| admin | Customers, Suppliers, Business, Branches, Users, Roles, Audit log |
+| manager | Customers, Suppliers, Business, Users, Audit log — **no Branches, no Roles** |
+| staff | Customers, Suppliers — **no Settings group at all** |
+
+- [ ] Each user's sidebar matches
+- [ ] As **staff**, open `/settings/business` directly → redirected
+- [ ] As **staff**, open `/settings/branches` directly → redirected
+- [ ] As **staff**, open `/customers/new` directly → redirected (they may view
+      customers, not create them)
+- [ ] As **manager**, `/settings/branches` → redirected. Managers run a
+      branch; they do not create them
+
+At the API, signed in as staff (see M0 §4 for how to get the cookie):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/api/branches?manage=1 \
+  -H "Cookie: $COOKIE"
+curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:3000/api/customers \
+  -H "Cookie: $COOKIE" -H 'content-type: application/json' -d '{"name":"Sneaky"}'
+```
+
+- [ ] The POST returns **403**
+
+## 5. Form errors are never silent
+
+A bug found during M1: a validation failure with no visible message meant the
+Save button appeared to do nothing.
+
+- [ ] Paste 300 characters into any address field → a visible error appears
+- [ ] On every form, an invalid field shows red text under **that** field
+- [ ] No form ever fails with the button simply doing nothing
+
+## 6. Audit
+
+**Settings → Audit log** as admin.
+
+- [ ] Everything above is recorded: branch created, customer created, tax rate
+      added, payment method deactivated
+- [ ] Entity types include `branch`, `customer`, `supplier`, `tax_rate`,
+      `payment_method`, `business`
+- [ ] Expanding a row shows old → new values
+
+## 7. Responsive
+
+At ~375px, ~810px and full width:
+
+- [ ] Customers, Suppliers and Branches lists become **cards** below 768px
+- [ ] Business settings tabs scroll rather than wrap
+- [ ] Forms stack to one column; buttons go full width
+- [ ] Nothing scrolls sideways
+- [ ] The sidebar's **Master data** and **Settings** groups appear in the
+      mobile drawer
+
+## What M1 deliberately does **not** include
+
+- **No customer/supplier history tab yet.** Clicking a customer opens the edit
+  form. The profile view showing their purchases, returns and credit arrives
+  with M4/M5, when there is something to show. *This is a known gap against
+  M1's stated criteria, carried into M2.*
+- No products, stock or IMEIs — that is M2
+- Attachments have a working API and storage layer, but **no upload button on
+  any screen yet**; the first screen that needs one is M3's purchase form
+- Logo upload is not wired to the business profile
+
+## Housekeeping
+
+The end-to-end tests create real branches and customers in your development
+database. After a test run you will see extra rows. To get back to a clean
+state:
+
+```bash
+dropdb ecity && createdb ecity
+psql -d ecity -c "CREATE ROLE ecity WITH LOGIN PASSWORD 'ecity' SUPERUSER;"
+npm run db:migrate && npm run db:seed
+```
+
+---
+
 ## Sign-off
 
 | | |

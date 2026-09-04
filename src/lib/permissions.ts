@@ -25,12 +25,22 @@ export const PERMISSIONS = {
     description: 'Bypasses per-branch assignment. Owner/Admin only.',
   },
 
-  // --- M1 master data (declared now so roles can be seeded once) ---
-  'business.manage': { group: 'Setup', label: 'Edit business profile and tax setup' },
+  // --- M1 master data ---
+  'business.view': { group: 'Setup', label: 'View business settings' },
+  'business.manage': {
+    group: 'Setup',
+    label: 'Edit business profile, tax and payment settings',
+    description: 'Covers the business profile, tax rates, payment methods and expense categories.',
+  },
   'customer.view': { group: 'Master data', label: 'View customers' },
   'customer.manage': { group: 'Master data', label: 'Create and edit customers' },
   'supplier.view': { group: 'Master data', label: 'View suppliers' },
-  'supplier.manage': { group: 'Master data', label: 'Create and edit suppliers' },
+  'supplier.manage': {
+    group: 'Master data',
+    label: 'Create and edit suppliers',
+    description: 'Suppliers are shared across every branch.',
+  },
+  'attachment.upload': { group: 'Master data', label: 'Upload files and photos' },
 } as const satisfies Record<string, { group: string; label: string; description?: string }>
 
 export type PermissionCode = keyof typeof PERMISSIONS
@@ -58,16 +68,18 @@ export const SYSTEM_ROLES = {
       'user.view',
       'audit.view',
       'branch.view',
+      'business.view',
       'customer.view',
       'customer.manage',
       'supplier.view',
       'supplier.manage',
+      'attachment.upload',
     ],
   },
   STAFF: {
     name: 'Staff / Salesperson',
     description: 'Counter staff. No cost prices, no settings, no deletions.',
-    permissions: ['branch.view', 'customer.view', 'customer.manage'],
+    permissions: ['branch.view', 'customer.view', 'customer.manage', 'supplier.view'],
   },
 } as const satisfies Record<
   string,
