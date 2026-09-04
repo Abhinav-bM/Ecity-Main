@@ -50,7 +50,10 @@ export function ResetPasswordForm() {
           <CardTitle>Link not valid</CardTitle>
           <CardDescription>
             This reset link is missing its token.{' '}
-            <Link href="/forgot-password" className="underline underline-offset-4">
+            <Link
+              href="/forgot-password"
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+            >
               Request a new one
             </Link>
             .

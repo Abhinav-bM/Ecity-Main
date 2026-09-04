@@ -29,8 +29,18 @@ export default defineConfig({
       use: { ...devices['Pixel 7'], viewport: { width: 320, height: 658 } },
     },
     {
+      // iPad dimensions and touch, but on Chromium. The purpose here is
+      // layout at ~810px with a coarse pointer, and running it on Chromium
+      // keeps CI to a single browser download.
+      // GAP: real iPad Safari is not covered. Worth adding a WebKit project
+      // before go-live, since the shop tablet may well be an iPad.
       name: 'tablet',
-      use: { ...devices['iPad (gen 7)'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 810, height: 1080 },
+        hasTouch: true,
+        isMobile: false,
+      },
     },
     {
       name: 'desktop',

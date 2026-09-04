@@ -86,13 +86,13 @@ export default async function UsersPage() {
         <Card className="p-10 text-center text-sm text-muted-foreground">No users yet.</Card>
       ) : (
         <>
-          <div className="grid gap-3 md:hidden">
+          <div className="grid gap-3 md:hidden" data-testid="user-cards">
             {users.map((u) => (
               <UserCard key={u.id} user={u} />
             ))}
           </div>
 
-          <Card className="hidden overflow-hidden md:block">
+          <Card className="hidden overflow-hidden md:block" data-testid="user-table">
             <Table>
               <TableHeader>
                 <TableRow>

@@ -58,7 +58,10 @@ export default function ForgotPasswordPage() {
               </p>
             </Alert>
           ) : null}
-          <Link href="/login" className="text-sm underline underline-offset-4">
+          <Link
+            href="/login"
+            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+          >
             Back to sign in
           </Link>
         </CardContent>
@@ -85,7 +88,10 @@ export default function ForgotPasswordPage() {
             {isSubmitting ? 'Sending…' : 'Send reset link'}
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            <Link href="/login" className="underline underline-offset-4">
+            <Link
+              href="/login"
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+            >
               Back to sign in
             </Link>
           </p>

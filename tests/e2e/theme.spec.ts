@@ -7,6 +7,14 @@ import { signIn, USERS } from './helpers'
  * hardcodes a colour and stops responding to the theme.
  */
 
+/** Browsers report oklch lightness as `20.5%`, not `0.205`. Normalise. */
+function lightnessOf(oklch: string): number {
+  const raw = /oklch\(\s*([\d.]+)(%?)/.exec(oklch)
+  if (!raw) return Number.NaN
+  const value = Number(raw[1])
+  return raw[2] === '%' ? value / 100 : value
+}
+
 async function tokens(page: Page) {
   return page.evaluate(() => {
     const s = getComputedStyle(document.documentElement)
@@ -24,9 +32,8 @@ test('ships with the black (onyx) theme by default', async ({ page }) => {
   await page.goto('/login')
   const t = await tokens(page)
   expect(t.theme).toBe('onyx')
-  // oklch lightness well under 0.5 = a dark primary.
-  const lightness = Number(/oklch\(([\d.]+)/.exec(t.primary)?.[1] ?? '1')
-  expect(lightness, `--primary is ${t.primary}`).toBeLessThan(0.35)
+  // Lightness well under 0.5 = a dark primary.
+  expect(lightnessOf(t.primary), `--primary is ${t.primary}`).toBeLessThan(0.35)
 })
 
 test('the primary button actually paints with the theme token', async ({ page }) => {
@@ -66,8 +73,7 @@ test('dark mode inverts the black primary so buttons stay visible', async ({ pag
   await page.goto('/login')
   await page.evaluate(() => document.documentElement.classList.add('dark'))
   const t = await tokens(page)
-  const lightness = Number(/oklch\(([\d.]+)/.exec(t.primary)?.[1] ?? '0')
-  expect(lightness, `dark --primary is ${t.primary}`).toBeGreaterThan(0.7)
+  expect(lightnessOf(t.primary), `dark --primary is ${t.primary}`).toBeGreaterThan(0.7)
 })
 
 test('the app shell uses theme tokens, not fixed colours', async ({ page }) => {

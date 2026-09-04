@@ -271,13 +271,17 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Touch targets on the counter tablet and on a phone. */
+  /* Touch targets on the counter tablet and on a phone.
+     Note: min-height does NOT apply to inline elements, so a bare <a> inside
+     a paragraph is unaffected. Standalone action links must carry
+     `inline-flex min-h-11 items-center` themselves - see the auth pages.
+     tests/e2e/responsive.spec.ts fails the build if one is missed. */
   @media (pointer: coarse) {
     button,
     [role='button'],
-    a[href],
     input,
-    select {
+    select,
+    a[href]:not(:where(p, li, td) a) {
       min-height: 2.75rem;
     }
   }

@@ -15,6 +15,8 @@ sales and reporting arrive in M2 onward — see `docs/02-Module-Breakdown.md`.
 | `docs/02-Module-Breakdown.md` | The 15-module build plan, M0 … M14 |
 | `docs/03-Engineering-Design.md` | Stack, architecture, data decisions, hosting cost |
 | `docs/04-Deployment-Guide.md` | Buying the server, deploying, backups, runbook |
+| `docs/05-Database-Guide.md` | **Start here for Postgres** — setup, migrations, everyday tasks |
+| `docs/06-Manual-Test-Checklist.md` | What to check by hand after each module. M0 done |
 
 ## Stack
 
@@ -26,17 +28,24 @@ service and no serverless platform — see `docs/03` §2.1 for why.
 
 ## Getting started
 
-You need **Node 22+** and **Docker** (for Postgres).
-Docker Desktop or OrbStack both work on macOS.
+You need **Node 22+** and **PostgreSQL 16+**.
+
+New to Postgres? Follow `docs/05-Database-Guide.md` §2 — it takes five
+minutes. The short version, using Postgres.app:
 
 ```bash
+# after installing postgresapp.com and clicking Initialize:
+createdb ecity
+psql -d ecity -c "CREATE ROLE ecity WITH LOGIN PASSWORD 'ecity' SUPERUSER;"
+
 cp .env.example .env          # then set AUTH_SECRET: openssl rand -base64 32
-docker compose up -d          # Postgres 16 on localhost:5432
 npm install
 npm run db:migrate            # create the schema
 npm run db:seed               # business, branches, roles, three users
 npm run dev                   # http://localhost:3000
 ```
+
+With Docker instead: `docker compose up -d` replaces the two `psql` lines.
 
 Seeded sign-ins (all use `SEED_PASSWORD`, default `ChangeMe!2026`):
 

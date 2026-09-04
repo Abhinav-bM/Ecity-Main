@@ -61,14 +61,16 @@ test.describe('authenticated pages', () => {
 })
 
 test.describe('phone-specific behaviour', () => {
-  test.skip(({}, testInfo) => !isMobileProject(testInfo.project.name), 'phones only')
+  test.beforeEach(({}, testInfo) => {
+    test.skip(!isMobileProject(testInfo.project.name), 'phones only')
+  })
 
   test('the users table becomes cards, not a sideways-scrolling grid', async ({ page }) => {
     await signIn(page, USERS.admin)
     await page.goto('/settings/users')
     // The md+ table is hidden; the card list carries the same data.
-    await expect(page.getByRole('table')).toBeHidden()
-    await expect(page.getByText(USERS.admin)).toBeVisible()
+    await expect(page.getByTestId('user-table')).toBeHidden()
+    await expect(page.getByTestId('user-cards').getByText(USERS.admin)).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 

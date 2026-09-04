@@ -47,8 +47,15 @@ export async function expectNoHorizontalOverflow(page: Page) {
   ).toBeLessThanOrEqual(overflow.clientWidth + 1)
 }
 
-/** Anything tappable must be big enough to hit with a thumb. */
+/**
+ * Anything tappable must be big enough to hit with a thumb - but only where
+ * a thumb is used. The 44px rule in globals.css is scoped to
+ * `@media (pointer: coarse)`, so a 32px control driven by a mouse is correct.
+ * This is a no-op on pointer-fine devices rather than a false failure.
+ */
 export async function expectTouchTargets(page: Page, minPx = 40) {
+  const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
+  if (!coarse) return
   const tooSmall = await page.evaluate((min) => {
     const bad: string[] = []
     const selector = 'button, a[href], [role="button"], input:not([type="hidden"])'

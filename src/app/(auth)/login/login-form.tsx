@@ -76,7 +76,10 @@ export function LoginForm() {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            <Link href="/forgot-password" className="underline underline-offset-4">
+            <Link
+              href="/forgot-password"
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+            >
               Forgotten your password?
             </Link>
           </p>

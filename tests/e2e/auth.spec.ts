@@ -12,7 +12,7 @@ test('rejects a wrong password without revealing whether the account exists', as
   await page.getByLabel('Email').fill(USERS.admin)
   await page.getByLabel('Password').fill('definitely-not-the-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('alert')).toContainText('Email or password is incorrect')
+  await expect(page.locator('[data-slot="alert"]')).toContainText('Email or password is incorrect')
 })
 
 test('gives the same message for an account that does not exist', async ({ page }) => {
@@ -20,7 +20,7 @@ test('gives the same message for an account that does not exist', async ({ page 
   await page.getByLabel('Email').fill('nobody@ecity.local')
   await page.getByLabel('Password').fill(SEED_PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('alert')).toContainText('Email or password is incorrect')
+  await expect(page.locator('[data-slot="alert"]')).toContainText('Email or password is incorrect')
 })
 
 test('signs in, lands on the dashboard, and signs out again', async ({ page }) => {

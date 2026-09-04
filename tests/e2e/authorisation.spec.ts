@@ -20,7 +20,10 @@ async function signIn(request: APIRequestContext, email: string) {
 }
 
 test.describe('API authorisation', () => {
-  test.skip(({}, testInfo) => testInfo.project.name !== 'desktop', 'viewport-independent')
+  // These hit JSON endpoints with no rendering, so one viewport is enough.
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'viewport-independent')
+  })
 
   test('an unauthenticated request is refused', async ({ request }) => {
     const res = await request.get('/api/users')
