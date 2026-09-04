@@ -6,10 +6,11 @@
 |---|---|
 | Product | ECITY — Mobile Shop Management Web App |
 | Document | Product Requirements Document (PRD) |
-| Version | 1.2 |
+| Version | 1.3 |
 | Date | 1 September 2026 |
 | Source | `mobile_shop_management_feature_list_v3.pdf` (Feature List, Review Version 3) |
 | Status | Draft for build |
+| Change in 1.3 | OQ-1 downgraded: ER/ACT expansions are display labels, not a schema question, so they no longer block M2. §5.1 records the decision |
 | Change in 1.2 | Added §6.22 — integration with the shop's existing NEW-items billing system via a daily Excel feed (FR-38), plus open questions OQ-10 to OQ-13 |
 | Change in 1.1 | A device unit now carries **one or more IMEIs** (§5.2, FR-4.8 – FR-4.12). The database and API support the full list from day one; the v1 UI shows a single IMEI field, governed by the `imei_slots` setting |
 | Related documents | `02-Module-Breakdown` (delivery plan), `03-Engineering-Design` (tech stack, architecture, hosting cost) |
@@ -82,9 +83,11 @@ There are exactly **five main types** for a mobile device:
 |---|---|
 | **NEW** | Brand-new sealed device |
 | **USED** | Second-hand / pre-owned device |
-| **ER** | *Definition to be confirmed — see OQ-1* |
-| **ACT** | *Definition to be confirmed — see OQ-1* |
+| **ER** | The shop's own category. Stored as the code `ER`; the display label is configuration |
+| **ACT** | The shop's own category. Stored as the code `ACT`; the display label is configuration |
 | **GLOBAL** | Global-variant device |
+
+**The five codes are stored as they are.** `ER` and `ACT` are the shop's own terms; what they stand for is a **display label held in configuration**, not a schema concern. The system stores, filters, reports and analyses them correctly without ever knowing the expansion, and a label can be added or corrected at any time without a migration. Only a *structural* difference — extra fields attached to one of these types — would affect the data model.
 
 **NEW CUT is not a sixth type.** NEW CUT is a *designation that lives inside GLOBAL*. A GLOBAL device either carries NEW CUT details or it does not, and both must remain distinguishable everywhere.
 
@@ -522,7 +525,7 @@ Sizing assumption for v1: up to 10 branches, 50 users, 30 concurrent users, ~500
 
 | # | Question | Why it matters | Needed by |
 |---|---|---|---|
-| OQ-1 | What exactly do **ER** and **ACT** mean, and what distinguishes them commercially from NEW/USED? | They are first-class stock types driving pricing, reports and analytics. Labels alone are not enough to validate the rules | Module 2 (Inventory core) |
+| OQ-1 | Do **ER** or **ACT** carry extra information, the way GLOBAL carries NEW CUT? | This is the only part that touches the schema. What the letters *stand for* is a display label (§5.1) and needs no answer to build. If a sub-designation is needed it is a nullable column plus a check constraint — cheaper to know early, but not a blocker | During M2, not before |
 | OQ-2 | Does **NEW CUT** need structured fields (e.g. cut type, cut date, notes, photo) or is a flag plus free text enough? | Determines the GLOBAL sub-schema and the analytics breakdown | Module 2 |
 | OQ-3 | How many branches, users and daily bills at launch, and over three years? | Drives hosting tier and index strategy | Module 0 (before infrastructure choice) |
 | OQ-4 | Is GST invoice formatting required to be statutory-compliant (HSN, CGST/SGST/IGST split, place of supply)? | Changes the invoice template and tax engine substantially | Module 4 (Sales) |

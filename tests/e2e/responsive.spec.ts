@@ -110,9 +110,18 @@ test.describe('long content', () => {
     await signIn(page, USERS.admin)
     await page.goto('/settings/audit')
     const details = page.locator('details').first()
-    if (await details.count()) {
-      await details.click()
-      await expectNoHorizontalOverflow(page)
+    if ((await details.count()) === 0) {
+      test.skip(true, 'no audit entry with a changes payload on this page')
+      return
     }
+    await details.click()
+    // Wait for the revealed <pre> to be laid out before measuring, otherwise
+    // the overflow check races the expansion and fails intermittently.
+    await expect(details.locator('pre')).toBeVisible()
+    await page.waitForFunction(() => {
+      const el = document.querySelector('details[open] pre')
+      return !!el && el.getBoundingClientRect().height > 0
+    })
+    await expectNoHorizontalOverflow(page)
   })
 })

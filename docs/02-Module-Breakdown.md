@@ -85,7 +85,16 @@ M6, M7 and M8 are independent of each other once M5 is done — if a second deve
 - A user can log in, reset a password and log out; sessions expire and can be revoked.
 - An Admin can create a Manager restricted to Branch A, and that Manager cannot read Branch B data — verified by calling the API directly, not just by the hidden menu.
 - Every create/update/delete writes an audit row with user, timestamp, entity and old/new values.
-- The app is deployed to staging from the main branch automatically, and the production stack serves HTTPS on the real domain.
+- ~~The app is deployed to staging from the main branch automatically, and the production stack serves HTTPS on the real domain.~~ **Deferred — see below.**
+
+> **Deferred from M0: the staging deployment.** The CI and deploy workflows are
+> written and the code is on GitHub, but no server has been provisioned. A
+> server costs about ₹550/month and buys nothing until there is something worth
+> showing the shop owner. **Provision it at the end of Alpha (after M5)**, when
+> one branch can transact end to end and the owner can try it on real hardware.
+> Until then, migrations are tested locally. This is a deliberate deferral, not
+> a skipped criterion: M0 is otherwise complete, and this line moves to M5's
+> "Done when".
 
 **Depends on.** — **Effort.** 2.0 weeks.
 
@@ -148,7 +157,13 @@ Device creation and update take **`imeis: string[]`**, never a pair of named fie
 - Accessory stock is per branch; the same product shows different quantities in two branches.
 - Every status change writes a `device_event` row; no code path changes a device without one.
 
-**Depends on.** M1. **Effort.** 2.5 weeks. *Blocked on PRD OQ-1 and OQ-2.*
+**Depends on.** M1. **Effort.** 2.5 weeks.
+
+*On PRD OQ-1 and OQ-2:* neither blocks the start of this module. The five main
+types are stored as codes; what **ER** and **ACT** stand for is a display label
+in configuration, not a schema concern. Ask during M2 whether either carries a
+sub-designation the way GLOBAL carries NEW CUT — if one does, it is a nullable
+column plus a check constraint, the same shape as `is_new_cut`.
 
 ---
 ## M3 — Purchases & Supplier Ledger
@@ -231,6 +246,7 @@ Device creation and update take **`imeis: string[]`**, never a pair of named fie
 - A payment taken at Branch B against a sale made at Branch A records both branches and appears in both branches' cash/collection figures correctly.
 - Customer outstanding recomputed from the ledger equals the displayed balance for every customer in the test data.
 - Aging buckets 0–7 / 8–30 / 31–60 / 60+ are correct against hand-checked dates.
+- **Carried from M0:** the Hetzner server is provisioned, and pushing to `main` deploys to staging automatically. Alpha is the first release someone outside the project sees, so it needs somewhere to live. See the Deployment Guide.
 
 **Depends on.** M4. **Effort.** 1.5 weeks.
 
