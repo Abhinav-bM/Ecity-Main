@@ -4,12 +4,14 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  Boxes,
   Building2,
   LayoutDashboard,
   Menu,
   ScrollText,
   Settings,
   ShieldCheck,
+  Smartphone,
   Truck,
   UserRound,
   Users,
@@ -39,6 +41,13 @@ type NavGroup = { heading?: string; items: NavItem[] }
 const NAV: NavGroup[] = [
   {
     items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+  },
+  {
+    heading: 'Inventory',
+    items: [
+      { href: '/devices', label: 'Devices', icon: Smartphone, permission: 'inventory.view' },
+      { href: '/products', label: 'Products', icon: Boxes, permission: 'product.view' },
+    ],
   },
   {
     heading: 'Master data',
@@ -138,9 +147,9 @@ export function AppShell({
 
   const footnote = (
     <p className="text-[11px] leading-relaxed text-muted-foreground">
-      Modules M0–M1 complete.
+      Modules M0–M2 complete.
       <br />
-      Inventory, billing and reporting arrive in M2 onward.
+      Purchases, billing and reporting arrive in M3 onward.
     </p>
   )
 

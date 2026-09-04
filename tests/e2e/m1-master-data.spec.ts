@@ -80,7 +80,8 @@ test.describe('as admin', () => {
     await page.getByLabel('Name', { exact: false }).first().fill('GST Test Supplier')
     await page.getByLabel('GST number').fill('NOT-A-GSTIN')
     await page.getByRole('button', { name: 'Create supplier' }).click()
-    await expect(page.getByText(/valid 15-character GSTIN/i)).toBeVisible()
+    // The message appears on the field; the form-level alert is generic.
+    await expect(page.locator('p[role="alert"]').filter({ hasText: /valid 15-character GSTIN/i })).toBeVisible()
   })
 
   test('creates a branch and blocks a duplicate code', async ({ page }) => {

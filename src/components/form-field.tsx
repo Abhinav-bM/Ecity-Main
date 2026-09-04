@@ -29,7 +29,16 @@ export function Field({
     <div className={cn('space-y-1.5', className)}>
       <Label htmlFor={id}>
         {label}
-        {required ? <span className="text-destructive"> *</span> : null}
+        {/*
+          The asterisk is decorative. Without aria-hidden it becomes part of
+          the field's accessible name ("IMEI *"), which is what a screen reader
+          announces. `required` on the input is what actually conveys it.
+        */}
+        {required ? (
+          <span className="text-destructive" aria-hidden="true">
+            {' *'}
+          </span>
+        ) : null}
       </Label>
       {children}
       {error ? (

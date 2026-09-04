@@ -201,3 +201,137 @@ export const partyQuerySchema = z.object({
 /** Percent <-> basis points. The UI talks percent; the database stores integers. */
 export const toBasisPoints = (percent: number): number => Math.trunc(percent * 100 + 0.5)
 export const toPercent = (basisPoints: number): number => basisPoints / 100
+
+/* ============================================================ M2 schemas === */
+
+/** Rupees in the UI, integer paise in the database (docs/03 §4.1). */
+export const rupeesToPaise = (rupees: number): bigint =>
+  BigInt(Math.trunc(rupees * 100 + (rupees >= 0 ? 0.5 : -0.5)))
+
+export const paiseToRupees = (paise: bigint | number | null | undefined): number =>
+  paise == null ? 0 : Number(paise) / 100
+
+const optionalMoney = z
+  .union([z.coerce.number().min(0, 'Cannot be negative.').max(100_000_000), z.literal('')])
+  .optional()
+
+export const MAIN_TYPES = ['NEW', 'USED', 'ER', 'ACT', 'GLOBAL'] as const
+
+export const categorySchema = z.object({
+  name: z.string().trim().min(2, 'Name is required.').max(60),
+  isSerialised: z.boolean().default(false),
+})
+
+export const brandSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required.').max(60),
+})
+
+export const productSchema = z.object({
+  name: z.string().trim().min(2, 'Name is required.').max(160),
+  categoryId: z.coerce.number().int().positive('Choose a category.'),
+  brandId: z.preprocess(
+    (v) => (v === '' || v === undefined || v === null ? null : v),
+    z.coerce.number().int().positive().nullable(),
+  ),
+  model: optionalText(80),
+  sku: optionalText(40),
+  barcode: optionalText(60),
+  description: optionalText(500),
+  purchasePrice: optionalMoney,
+  sellingPrice: optionalMoney,
+  taxRateId: z.preprocess(
+    (v) => (v === '' || v === undefined || v === null ? null : v),
+    z.coerce.number().int().positive().nullable(),
+  ),
+  defaultSupplierId: z.preprocess(
+    (v) => (v === '' || v === undefined || v === null ? null : v),
+    z.coerce.number().int().positive().nullable(),
+  ),
+})
+
+/**
+ * A device carries a LIST of IMEIs (PRD FR-4.8). The form may render one
+ * input today, but the payload is always an array — raising `imeiSlots` must
+ * never require a schema change.
+ */
+export const deviceSchema = z
+  .object({
+    productId: z.coerce.number().int().positive('Choose a product.'),
+    imeis: z
+      .array(z.string().trim())
+      .min(1, 'At least one IMEI is required.')
+      .transform((list) => list.map((i) => i.replace(/[\s-]/g, '')).filter(Boolean)),
+    mainType: z.enum(MAIN_TYPES, { message: 'Choose a main type.' }),
+    isNewCut: z.boolean().default(false),
+    newCutNotes: optionalText(300),
+    variant: optionalText(60),
+    ram: optionalText(20),
+    storage: optionalText(20),
+    colour: optionalText(40),
+    purchasePrice: optionalMoney,
+    sellingPrice: optionalMoney,
+    taxRateId: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null ? null : v),
+      z.coerce.number().int().positive().nullable(),
+    ),
+    supplierId: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null ? null : v),
+      z.coerce.number().int().positive().nullable(),
+    ),
+    purchaseDate: z.string().trim().optional().or(z.literal('')),
+    warrantyMonths: z
+      .union([z.coerce.number().int().min(0).max(120), z.literal('')])
+      .optional(),
+    branchId: z.coerce.number().int().positive('Choose a branch.'),
+  })
+  .refine((v) => v.imeis.length > 0, {
+    message: 'At least one IMEI is required.',
+    path: ['imeis'],
+  })
+  // PRD FR-5.2 — the rule the whole classification hangs on.
+  .refine((v) => !v.isNewCut || v.mainType === 'GLOBAL', {
+    message: 'NEW CUT applies only to GLOBAL devices.',
+    path: ['isNewCut'],
+  })
+
+export const deviceQuerySchema = z.object({
+  search: z.string().trim().max(60).optional(),
+  branchId: z.coerce.number().int().positive().optional(),
+  mainType: z.enum(MAIN_TYPES).optional(),
+  globalVariant: z.enum(['NEW_CUT', 'PLAIN']).optional(),
+  status: z
+    .enum([
+      'IN_STOCK',
+      'RESERVED',
+      'SOLD',
+      'SOLD_PENDING_IMPORT',
+      'RETURNED',
+      'DAMAGED',
+      'LOST',
+      'REPAIR',
+      'IN_TRANSIT',
+    ])
+    .optional(),
+  categoryId: z.coerce.number().int().positive().optional(),
+  brandId: z.coerce.number().int().positive().optional(),
+  supplierId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+})
+
+export const productQuerySchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  categoryId: z.coerce.number().int().positive().optional(),
+  brandId: z.coerce.number().int().positive().optional(),
+  branchId: z.coerce.number().int().positive().optional(),
+  serialised: z.coerce.boolean().optional(),
+  includeInactive: z.coerce.boolean().default(false),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+})
+
+export const minQuantitySchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  branchId: z.coerce.number().int().positive(),
+  minQuantity: z.coerce.number().int().min(0).max(100000),
+})

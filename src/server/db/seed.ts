@@ -5,8 +5,10 @@ import { hashPassword } from '@/server/auth/password'
 import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions'
 import {
   appUser,
+  brand,
   branch,
   business,
+  category,
   expenseCategory,
   paymentMethod,
   permission,
@@ -171,7 +173,40 @@ async function main() {
   }
   console.log(`  expense categories: ${categories.length}`)
 
-  // 6. Users - one per role, so the authorisation matrix can be tested.
+  // 6. M2 catalogue - the categories in PRD FR-4.1, plus common brands.
+  //    Mobiles are serialised (tracked by IMEI); accessories are counted.
+  const productCategories = [
+    { name: 'Mobiles', isSerialised: true, sortOrder: 1 },
+    { name: 'Chargers', isSerialised: false, sortOrder: 2 },
+    { name: 'Cases', isSerialised: false, sortOrder: 3 },
+    { name: 'Screen guards', isSerialised: false, sortOrder: 4 },
+    { name: 'Earphones', isSerialised: false, sortOrder: 5 },
+    { name: 'Cables', isSerialised: false, sortOrder: 6 },
+    { name: 'Power banks', isSerialised: false, sortOrder: 7 },
+    { name: 'Watches', isSerialised: false, sortOrder: 8 },
+    { name: 'Other accessories', isSerialised: false, sortOrder: 9 },
+  ]
+  for (const c of productCategories) {
+    await db
+      .insert(category)
+      .values({ businessId: biz.id, ...c })
+      .onConflictDoUpdate({
+        target: [category.businessId, category.name],
+        set: { isSerialised: c.isSerialised, sortOrder: c.sortOrder },
+      })
+  }
+  console.log(`  product categories: ${productCategories.length}`)
+
+  const brands = ['Apple', 'Samsung', 'Xiaomi', 'Realme', 'OnePlus', 'Vivo', 'Oppo', 'Nothing']
+  for (const name of brands) {
+    await db
+      .insert(brand)
+      .values({ businessId: biz.id, name })
+      .onConflictDoNothing({ target: [brand.businessId, brand.name] })
+  }
+  console.log(`  brands: ${brands.length}`)
+
+  // 7. Users - one per role, so the authorisation matrix can be tested.
   const password = process.env.SEED_PASSWORD ?? 'ChangeMe!2026'
   const users = [
     { email: 'admin@ecity.local', name: 'Owner', roleCode: 'ADMIN', branches: [] as string[] },

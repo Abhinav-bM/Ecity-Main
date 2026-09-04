@@ -16,7 +16,8 @@
     "db:migrate": "tsx src/server/db/migrate.ts",
     "db:seed": "tsx src/server/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "worker": "tsx src/server/jobs/worker.ts"
+    "worker": "tsx src/server/jobs/worker.ts",
+    "restart": "bash scripts/restart-app.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

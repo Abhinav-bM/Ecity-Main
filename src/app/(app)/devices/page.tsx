@@ -1,0 +1,55 @@
+import { redirect } from 'next/navigation'
+import { getSessionContext } from '@/server/auth/session'
+import { hasPermission } from '@/server/auth/permissions'
+import { listDevices, mainTypeSummary } from '@/server/services/device.service'
+import { listBrands, listCategories } from '@/server/services/product.service'
+import { listAccessibleBranches } from '@/server/services/branch.service'
+import { DeviceList } from './device-list'
+import type { MainType } from '@/server/db/schema'
+
+export const dynamic = 'force-dynamic'
+
+export default async function DevicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
+  const session = await getSessionContext()
+  if (!session) redirect('/login')
+  if (!hasPermission(session.user, 'inventory.view')) redirect('/dashboard')
+
+  const p = await searchParams
+  const filters = {
+    search: p.search ?? '',
+    mainType: p.mainType as MainType | undefined,
+    globalVariant: p.globalVariant as 'NEW_CUT' | 'PLAIN' | undefined,
+    status: p.status as never,
+    brandId: p.brandId ? Number(p.brandId) : undefined,
+    categoryId: p.categoryId ? Number(p.categoryId) : undefined,
+    branchId: p.branchId ? Number(p.branchId) : undefined,
+    page: Math.max(1, Number(p.page ?? '1') || 1),
+    pageSize: 25,
+  }
+
+  const [devices, summary, brands, categories, branches] = await Promise.all([
+    listDevices(session.user, filters),
+    mainTypeSummary(session.user, filters.branchId ?? session.activeBranchId),
+    listBrands(session.user),
+    listCategories(session.user),
+    listAccessibleBranches(session.user),
+  ])
+
+  return (
+    <DeviceList
+      rows={devices.rows}
+      total={devices.total}
+      summary={summary}
+      brands={brands}
+      categories={categories}
+      branches={branches}
+      filters={filters}
+      canManage={hasPermission(session.user, 'device.manage')}
+      showCost={hasPermission(session.user, 'inventory.view_cost')}
+    />
+  )
+}

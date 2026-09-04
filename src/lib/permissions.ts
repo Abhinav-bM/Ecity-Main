@@ -41,6 +41,21 @@ export const PERMISSIONS = {
     description: 'Suppliers are shared across every branch.',
   },
   'attachment.upload': { group: 'Master data', label: 'Upload files and photos' },
+
+  // --- M2 inventory ---
+  'product.view': { group: 'Inventory', label: 'View products and categories' },
+  'product.manage': { group: 'Inventory', label: 'Create and edit products' },
+  'inventory.view': { group: 'Inventory', label: 'View stock and devices' },
+  'inventory.view_cost': {
+    group: 'Inventory',
+    label: 'See purchase prices and margins',
+    description: 'Counter staff normally should not see what stock cost.',
+  },
+  'device.manage': {
+    group: 'Inventory',
+    label: 'Create and edit devices (IMEI)',
+    description: 'Registering handsets outside a purchase. Most devices arrive via M3.',
+  },
 } as const satisfies Record<string, { group: string; label: string; description?: string }>
 
 export type PermissionCode = keyof typeof PERMISSIONS
@@ -74,12 +89,25 @@ export const SYSTEM_ROLES = {
       'supplier.view',
       'supplier.manage',
       'attachment.upload',
+      'product.view',
+      'product.manage',
+      'inventory.view',
+      'inventory.view_cost',
+      'device.manage',
     ],
   },
   STAFF: {
     name: 'Staff / Salesperson',
     description: 'Counter staff. No cost prices, no settings, no deletions.',
-    permissions: ['branch.view', 'customer.view', 'customer.manage', 'supplier.view'],
+    permissions: [
+      'branch.view',
+      'customer.view',
+      'customer.manage',
+      'supplier.view',
+      'product.view',
+      // Staff can see what is in stock, but not what it cost.
+      'inventory.view',
+    ],
   },
 } as const satisfies Record<
   string,

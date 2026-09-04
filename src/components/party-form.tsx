@@ -44,6 +44,15 @@ export function PartyForm({
     defaultValues: { name: '', ...initial },
   })
 
+  /**
+   * A rejected form must say why, never just do nothing. The specific
+   * message lives on the field; this only says that something is wrong,
+   * so the two do not duplicate each other.
+   */
+  function onInvalid() {
+    setFormError('Please check the highlighted fields.')
+  }
+
   async function onSubmit(values: Values) {
     setFormError(null)
     const res = await fetch(id ? `/api/${plural}/${id}` : `/api/${plural}`, {
@@ -72,7 +81,7 @@ export function PartyForm({
         </p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4" noValidate>
         {formError ? <Alert variant="destructive">{formError}</Alert> : null}
 
         <Card>
