@@ -155,8 +155,15 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen">
-      {/* Desktop sidebar. Hidden below md, where the Sheet takes over. */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar md:flex">
+      {/*
+        Desktop sidebar. Hidden below md, where the Sheet takes over.
+
+        `sticky top-0 h-screen self-start` is what pins it. Without them the
+        aside is a stretched flex child as tall as the whole document, so it
+        scrolls away with the page and its own overflow-y never engages.
+        `self-start` stops flex stretching from overriding the height.
+      */}
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col self-start border-r bg-sidebar md:flex">
         <div className="flex h-14 items-center border-b px-4">
           <span className="font-semibold tracking-tight text-primary">ECITY</span>
         </div>

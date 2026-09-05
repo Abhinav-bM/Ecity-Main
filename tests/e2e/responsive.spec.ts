@@ -49,6 +49,35 @@ test.describe('authenticated pages', () => {
     await expect(page.getByRole('heading', { name: 'Audit log', level: 1 })).toBeVisible()
   })
 
+  test('the sidebar and header stay put when a long page scrolls', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo.project.name), 'no persistent sidebar on a phone')
+
+    // The audit log is the longest page in the app.
+    await page.goto('/settings/audit')
+    const nav = page.getByRole('navigation', { name: 'Main' })
+    const header = page.locator('header')
+    await expect(nav).toBeVisible()
+
+    const before = await nav.boundingBox()
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await page.waitForFunction(() => window.scrollY > 0 || document.body.scrollHeight <= innerHeight)
+
+    const scrolled = await page.evaluate(() => window.scrollY)
+    test.skip(scrolled === 0, 'page is not tall enough to scroll here')
+
+    const after = await nav.boundingBox()
+    // Pinned means its viewport position barely moves while the page scrolls
+    // hundreds of pixels. A couple of pixels of sub-pixel rounding is fine;
+    // scrolling away with the document is not.
+    const drift = Math.abs((after?.y ?? 0) - (before?.y ?? 0))
+    expect(
+      drift,
+      `the sidebar moved ${drift.toFixed(1)}px while the page scrolled ${scrolled}px`,
+    ).toBeLessThan(2)
+    await expect(nav.getByRole('link', { name: 'Dashboard' })).toBeInViewport()
+    await expect(header).toBeInViewport()
+  })
+
   test('branch switcher is usable and does not overflow the header', async ({ page }) => {
     await page.goto('/dashboard')
     const trigger = page.getByRole('button', { name: /Active branch/ })
