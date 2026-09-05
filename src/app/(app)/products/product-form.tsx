@@ -87,6 +87,7 @@ export function ProductForm({
         <p className="text-sm text-muted-foreground">
           A product is the catalogue entry. For mobiles it is the model; each handset is a separate
           device.
+          {id ? null : ' Save it first, then add an image.'}
         </p>
       </div>
 

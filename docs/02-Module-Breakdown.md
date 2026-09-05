@@ -132,7 +132,9 @@ M6, M7 and M8 are independent of each other once M5 is done — if a second deve
 - `device_unit`: product_id, variant, ram, storage, colour, purchase_price, selling_price, tax, warranty, supplier_id, purchase_date, **main_type** (`NEW|USED|ER|ACT|GLOBAL`), **is_new_cut** + new-cut details, current_branch_id, status, `primary_imei` (cached for display only)
 - `sales_channel` on `device_unit`: `ECITY` | `EXTERNAL` | `BOTH`, defaulted from `main_type` (NEW → `EXTERNAL`) — needed by M12 so a device billed in the other system can never be sold here. Add it now; retrofitting it after M4 means revisiting the billing screen
 - `source` on `device_unit`, `purchase` and `sale`: `ECITY` | `LEGACY` — where the record came from. One column, added now, saves a migration later
-- `device_identifier`: device_id, imei, slot, is_primary — **a device has one or more IMEIs**. Never model these as `imei_1` / `imei_2` columns on the device; the whole point of the separate table is that a third identifier costs nothing later
+- `device_identifier`: device_id, **value**, **type** (`IMEI` | `SERIAL`), slot, is_primary — **a device has one or more identifiers**. Never model these as `imei_1` / `imei_2` columns on the device; the whole point of the separate table is that a third identifier, or a laptop serial, costs nothing later
+- `category.identifierType`: `IMEI` | `SERIAL` | `NONE` — what a serialised category's units are identified by
+- `battery_health_percent` on `device_unit`: nullable 1–100, checked in the database. Blank for sealed new stock; it drives used and trade-in pricing
 - `device_event` (append-only): device_id, seq, event_type, occurred_at, branch_id, from_branch_id, to_branch_id, ref_type, ref_id, actor_id, payload
 - `stock_ledger` (append-only) for non-serialised quantity movement
 
@@ -143,7 +145,11 @@ M6, M7 and M8 are independent of each other once M5 is done — if a second deve
 - `sales_channel = 'EXTERNAL'` blocks the device from ECITY sale (enforced in M4).
 - `branch_stock.qty >= 0`.
 
-**Screens.** Product list with branch/category/brand filters; product create/edit with image; device (IMEI) list with filters for branch, main type, GLOBAL/NEW CUT, brand, model, category, supplier and status; device detail page (a static view now — M9 turns it into the full timeline); low-stock view.
+**Screens.** Product list with search and kind/inactive filters; product create/edit, with image upload on the edit page once the product exists; device list with filters for branch, main type, GLOBAL/NEW CUT, brand, category, supplier and status; device detail page (a static view now — M9 turns it into the full timeline); low-stock view.
+
+**Manual device entry.** A small create-device form is also needed, for opening stock and corrections — this module's own acceptance criteria describe form behaviour (`imei_slots` showing one field or two), which nothing else provides until M3. It is deliberately secondary: labelled *Add manually*, and it states that supplier stock belongs in a purchase. The bulk path is M3's IMEI-capture grid.
+
+**Not phones only.** The five main types and NEW CUT apply to every serialised item — laptops, MacBooks, speakers, tablets. What differs is the identifier: `category.identifierType` is `IMEI` for phones and `SERIAL` for other electronics, and it drives both the database format check and the label on the form. Accessories stay counted, with no identifier.
 
 **Server work.** Stock read/write helpers that every later module calls (`increaseStock`, `decreaseStock`, `setDeviceStatus`), each of which writes the ledger/event row automatically. Get this API right once and M3–M8 become simple.
 
@@ -152,7 +158,10 @@ Device creation and update take **`imeis: string[]`**, never a pair of named fie
 **Done when.**
 - A device can be created with each of the five main types, and a NEW CUT device can only be created under GLOBAL — rejected at the API and by the database for the other four.
 - A device created through the API with three IMEIs stores all three, marks one primary, and is found by searching any of them; the same IMEI on a second device is rejected with a message naming the first.
-- With `imei_slots = 1` the form shows exactly one IMEI field, and setting it to 2 shows two with no deployment.
+- With `imei_slots = 1` the form shows exactly one IMEI field, and setting it to 2 in **Settings → Business** shows two with no deployment.
+- A laptop or speaker registers against a serial number rather than an IMEI, carries the same five main types, and is refused a letter-bearing value where an IMEI is expected.
+- A product's stock reads as a **number** in both cases: counted products sum their branch stock, serialised ones count the units still in stock. Two identical handsets show as 2.
+- Low stock lists counted products at or below their branch minimum.
 - The device list filters correctly by every filter in FR-4.6, including *normal GLOBAL* vs *GLOBAL + NEW CUT*.
 - Accessory stock is per branch; the same product shows different quantities in two branches.
 - Every status change writes a `device_event` row; no code path changes a device without one.

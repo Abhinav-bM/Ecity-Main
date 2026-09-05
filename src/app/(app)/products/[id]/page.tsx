@@ -6,6 +6,7 @@ import { listTaxRates } from '@/server/services/business.service'
 import { getProduct, listBrands, listCategories } from '@/server/services/product.service'
 import { listParties } from '@/server/services/party.service'
 import { paiseToRupees } from '@/lib/validation'
+import { ProductImage } from '@/components/product-image'
 import { ProductForm } from '../product-form'
 
 export const dynamic = 'force-dynamic'
@@ -63,6 +64,12 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
       ) : (
         <h1 className="text-lg font-semibold tracking-tight sm:text-xl">{p.name}</h1>
       )}
+
+      <ProductImage
+        productId={id}
+        imageUrl={p.imageUrl}
+        canManage={hasPermission(session.user, 'product.manage')}
+      />
 
       <Card className="mx-auto max-w-3xl">
           <CardHeader className="pb-3">

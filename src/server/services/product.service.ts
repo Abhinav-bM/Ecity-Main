@@ -216,6 +216,25 @@ export async function updateProduct(
   })
 }
 
+/** PRD FR-4.2 — a product carries one image. */
+export async function setProductImage(
+  actor: AuthUser,
+  ctx: AuditContext,
+  id: number,
+  imageUrl: string | null,
+) {
+  const before = await getProduct(actor, id)
+  await db.update(product).set({ imageUrl, updatedAt: new Date() }).where(eq(product.id, id))
+  await writeAudit(ctx, {
+    action: 'UPDATE',
+    entityType: 'product',
+    entityId: id,
+    summary: imageUrl
+      ? `Set image for ${before.product.name}`
+      : `Removed image from ${before.product.name}`,
+  })
+}
+
 export async function setProductActive(
   actor: AuthUser,
   ctx: AuditContext,

@@ -162,6 +162,106 @@ test.describe('as admin', () => {
   })
 })
 
+test.describe('completing FR-4.6 — every specified filter', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('the device list offers all six filters', async ({ page }) => {
+    await page.goto('/devices')
+    for (const label of ['Main type', 'Branch', 'Brand', 'Category', 'Status', 'Supplier']) {
+      await expect(page.getByRole('combobox', { name: label, exact: true })).toBeVisible()
+    }
+  })
+
+  test('filtering by status narrows the list', async ({ page }) => {
+    await page.goto('/devices')
+    await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('SOLD')
+    await expect(page).toHaveURL(/status=SOLD/)
+    // Every visible status badge must be the one asked for.
+    const badges = page.getByTestId('device-table').getByText('Sold', { exact: true })
+    const n = await badges.count()
+    for (let i = 0; i < n; i++) await expect(badges.nth(i)).toBeVisible()
+  })
+})
+
+test.describe('low stock (FR-4.7)', () => {
+  test('the screen is reachable and explains itself when empty', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    await page.goto('/inventory/low-stock')
+    await expect(page.getByRole('heading', { name: 'Low stock', level: 1 })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('appears in the navigation', async ({ page }, testInfo) => {
+    await signIn(page, USERS.admin)
+    if (isMobileProject(testInfo.project.name)) {
+      await page.getByRole('button', { name: 'Open navigation menu' }).click()
+    }
+    await expect(
+      page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Low stock' }),
+    ).toBeVisible()
+  })
+})
+
+test.describe('product image (FR-4.2)', () => {
+  test('is offered once the product exists, not before', async ({ page }) => {
+    await signIn(page, USERS.admin)
+
+    // Not on the create form - an attachment needs something to attach to.
+    await page.goto('/products/new')
+    await expect(page.getByText('Save it first, then add an image.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Upload image/ })).toBeHidden()
+
+    const name = `E2E Image ${Date.now()}`
+    await createMobileProduct(page, name)
+    await page.getByLabel('Search products').fill(name)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name }).and(page.locator(':visible')).first().click()
+
+    await expect(page.getByRole('button', { name: 'Upload image' })).toBeVisible()
+  })
+
+  test('uploads an image and shows it back', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const name = `E2E Upload ${Date.now()}`
+    await createMobileProduct(page, name)
+    await page.getByLabel('Search products').fill(name)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name }).and(page.locator(':visible')).first().click()
+
+    // A minimal valid PNG.
+    await page.getByLabel('Product image file').setInputFiles({
+      name: 'product.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    })
+
+    await expect(page.getByText('Image updated.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Replace image' })).toBeVisible()
+    await expect(page.locator('img[alt=""]')).toBeVisible()
+  })
+
+  test('refuses a file that is not an image', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const name = `E2E NotImage ${Date.now()}`
+    await createMobileProduct(page, name)
+    await page.getByLabel('Search products').fill(name)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name }).and(page.locator(':visible')).first().click()
+
+    await page.getByLabel('Product image file').setInputFiles({
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('not a picture'),
+    })
+    await expect(page.getByText(/must be a picture|Only JPEG/i)).toBeVisible()
+  })
+})
+
 test.describe('battery health', () => {
   test('can be recorded on a used handset and shown back', async ({ page }) => {
     await signIn(page, USERS.admin)

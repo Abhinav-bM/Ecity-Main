@@ -15,7 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { DeviceStatusBadge, MainTypeBadge } from '@/components/main-type-badge'
+import {
+  DEVICE_STATUS_LABEL,
+  DeviceStatusBadge,
+  MainTypeBadge,
+} from '@/components/main-type-badge'
 import { formatMoney } from '@/lib/money'
 import { MAIN_TYPES } from '@/lib/validation'
 import type { MainType } from '@/server/db/schema'
@@ -45,6 +49,7 @@ export function DeviceList({
   brands,
   categories,
   branches,
+  suppliers,
   filters,
   canManage,
   showCost,
@@ -55,6 +60,7 @@ export function DeviceList({
   brands: { id: number; name: string }[]
   categories: { id: number; name: string }[]
   branches: { id: number; code: string; name: string }[]
+  suppliers: { id: number; name: string }[]
   filters: Record<string, unknown>
   canManage: boolean
   showCost: boolean
@@ -196,6 +202,34 @@ export function DeviceList({
           {brands.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className={selectClass}
+          aria-label="Status"
+          value={String(filters.status ?? '')}
+          onChange={(e) => apply({ status: e.target.value })}
+        >
+          <option value="">Any status</option>
+          {Object.entries(DEVICE_STATUS_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className={selectClass}
+          aria-label="Supplier"
+          value={String(filters.supplierId ?? '')}
+          onChange={(e) => apply({ supplierId: e.target.value })}
+        >
+          <option value="">Any supplier</option>
+          {suppliers.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
             </option>
           ))}
         </select>

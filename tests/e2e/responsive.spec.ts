@@ -45,7 +45,12 @@ test.describe('authenticated pages', () => {
     await expect(nav).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Users' })).toBeVisible()
 
-    await nav.getByRole('link', { name: 'Audit log' }).click()
+    // The drawer slides in; wait for it to settle before clicking, and scroll
+    // the target into view since the list can outgrow a small phone.
+    const auditLink = nav.getByRole('link', { name: 'Audit log' })
+    await auditLink.scrollIntoViewIfNeeded()
+    await expect(auditLink).toBeInViewport()
+    await auditLink.click()
     await expect(page.getByRole('heading', { name: 'Audit log', level: 1 })).toBeVisible()
   })
 

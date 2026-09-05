@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  AlertTriangle,
   Boxes,
   Building2,
   LayoutDashboard,
@@ -47,6 +48,12 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/devices', label: 'Devices', icon: Smartphone, permission: 'inventory.view' },
       { href: '/products', label: 'Products', icon: Boxes, permission: 'product.view' },
+      {
+        href: '/inventory/low-stock',
+        label: 'Low stock',
+        icon: AlertTriangle,
+        permission: 'inventory.view',
+      },
     ],
   },
   {
@@ -186,18 +193,23 @@ export function AppShell({
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[17rem] bg-sidebar p-0">
-              <SheetHeader className="border-b px-4 py-3.5 text-left">
+            {/*
+              A column with a scrolling middle. As modules add nav items the
+              list outgrows a small phone; without this the drawer's contents
+              are pushed around and can end up unreachable at 320px.
+            */}
+            <SheetContent side="left" className="flex w-[17rem] flex-col bg-sidebar p-0">
+              <SheetHeader className="shrink-0 border-b px-4 py-3.5 text-left">
                 <SheetTitle className="text-primary">ECITY</SheetTitle>
               </SheetHeader>
-              <div className="p-2">
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 <NavLinks
                   groups={groups}
                   pathname={pathname}
                   onNavigate={() => setMobileNavOpen(false)}
                 />
               </div>
-              <div className="mt-auto p-3">{footnote}</div>
+              <div className="shrink-0 border-t p-3">{footnote}</div>
             </SheetContent>
           </Sheet>
 

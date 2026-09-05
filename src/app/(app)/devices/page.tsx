@@ -4,6 +4,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { listDevices, mainTypeSummary } from '@/server/services/device.service'
 import { listBrands, listCategories } from '@/server/services/product.service'
 import { listAccessibleBranches } from '@/server/services/branch.service'
+import { listParties } from '@/server/services/party.service'
 import { DeviceList } from './device-list'
 import type { MainType } from '@/server/db/schema'
 
@@ -24,6 +25,7 @@ export default async function DevicesPage({
     mainType: p.mainType as MainType | undefined,
     globalVariant: p.globalVariant as 'NEW_CUT' | 'PLAIN' | undefined,
     status: p.status as never,
+    supplierId: p.supplierId ? Number(p.supplierId) : undefined,
     brandId: p.brandId ? Number(p.brandId) : undefined,
     categoryId: p.categoryId ? Number(p.categoryId) : undefined,
     branchId: p.branchId ? Number(p.branchId) : undefined,
@@ -31,12 +33,13 @@ export default async function DevicesPage({
     pageSize: 25,
   }
 
-  const [devices, summary, brands, categories, branches] = await Promise.all([
+  const [devices, summary, brands, categories, branches, suppliers] = await Promise.all([
     listDevices(session.user, filters),
     mainTypeSummary(session.user, filters.branchId ?? session.activeBranchId),
     listBrands(session.user),
     listCategories(session.user),
     listAccessibleBranches(session.user),
+    listParties(session.user, 'supplier', { page: 1, pageSize: 500 }),
   ])
 
   return (
@@ -47,6 +50,7 @@ export default async function DevicesPage({
       brands={brands}
       categories={categories}
       branches={branches}
+      suppliers={suppliers.rows.map((r) => ({ id: r.id, name: r.name }))}
       filters={filters}
       canManage={hasPermission(session.user, 'device.manage')}
       showCost={hasPermission(session.user, 'inventory.view_cost')}
