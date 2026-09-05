@@ -22,12 +22,13 @@ import type { MainType } from '@/server/db/schema'
 
 type Row = {
   id: number
-  primaryImei: string | null
+  primaryIdentifier: string | null
   productName: string
   brandName: string | null
   variant: string | null
   storage: string | null
   colour: string | null
+  batteryHealthPercent: number | null
   mainType: MainType
   isNewCut: boolean
   status: string
@@ -112,12 +113,14 @@ export function DeviceList({
         <div className="min-w-0">
           <h1 className="text-lg font-semibold tracking-tight sm:text-xl">Devices</h1>
           <p className="text-sm text-muted-foreground">
-            {total.toLocaleString('en-IN')} matching. Every handset is tracked individually by IMEI.
+            {total.toLocaleString('en-IN')} matching. Phones by IMEI, laptops and other electronics by serial number.
           </p>
         </div>
         {canManage ? (
-          <Button asChild size="sm" className="shrink-0">
-            <Link href="/devices/new">Register device</Link>
+          // Deliberately secondary. Stock normally arrives through a purchase;
+          // this is the manual path for opening stock and corrections.
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link href="/devices/new">Add manually</Link>
           </Button>
         ) : null}
       </div>
@@ -145,12 +148,11 @@ export function DeviceList({
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="IMEI or product"
+            placeholder="IMEI, serial or product"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             aria-label="Search devices"
-            inputMode="numeric"
-          />
+            />
         </div>
         <Button type="submit" variant="secondary">
           Search
@@ -228,7 +230,7 @@ export function DeviceList({
                       href={`/devices/${r.id}`}
                       className="block truncate font-mono text-sm font-medium underline-offset-4 hover:underline"
                     >
-                      {r.primaryImei ?? `#${r.id}`}
+                      {r.primaryIdentifier ?? `#${r.id}`}
                     </Link>
                     <p className="truncate text-sm text-muted-foreground">
                       {r.brandName ? `${r.brandName} ` : ''}
@@ -254,7 +256,7 @@ export function DeviceList({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>IMEI</TableHead>
+                  <TableHead>Identifier</TableHead>
                   <TableHead>Product</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="hidden lg:table-cell">Branch</TableHead>
@@ -268,14 +270,22 @@ export function DeviceList({
                   <TableRow key={r.id}>
                     <TableCell className="font-mono text-xs">
                       <Link href={`/devices/${r.id}`} className="underline-offset-4 hover:underline">
-                        {r.primaryImei ?? `#${r.id}`}
+                        {r.primaryIdentifier ?? `#${r.id}`}
                       </Link>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{r.productName}</span>
-                      {r.storage || r.colour ? (
+                      {r.storage || r.colour || r.batteryHealthPercent != null ? (
                         <span className="block text-xs text-muted-foreground">
-                          {[r.storage, r.colour].filter(Boolean).join(' · ')}
+                          {[
+                            r.storage,
+                            r.colour,
+                            r.batteryHealthPercent != null
+                              ? `battery ${r.batteryHealthPercent}%`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </span>
                       ) : null}
                     </TableCell>

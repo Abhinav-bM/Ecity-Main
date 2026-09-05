@@ -63,6 +63,14 @@ export const deviceStatusEnum = pgEnum('device_status', [
   'IN_TRANSIT',
 ])
 
+/**
+ * How a serialised item is identified. Phones carry an IMEI; laptops,
+ * MacBooks and other electronics carry a manufacturer serial number. The
+ * classification (NEW/USED/ER/ACT/GLOBAL) is the same either way - only the
+ * identifier differs.
+ */
+export const identifierTypeEnum = pgEnum('identifier_type', ['IMEI', 'SERIAL', 'NONE'])
+
 /** Which system bills this device (PRD FR-38.1). NEW defaults to EXTERNAL. */
 export const salesChannelEnum = pgEnum('sales_channel', ['ECITY', 'EXTERNAL', 'BOTH'])
 
@@ -552,10 +560,16 @@ export const category = pgTable(
       .references(() => business.id),
     name: text('name').notNull(),
     /**
-     * Serialised categories hold mobiles: every unit is tracked individually
-     * by IMEI. Non-serialised categories hold accessories, tracked by count.
+     * Serialised categories track every unit individually - phones, laptops,
+     * and any other item worth following by its own identifier.
+     * Non-serialised categories are counted per branch.
      */
     isSerialised: boolean('is_serialised').notNull().default(false),
+    /**
+     * What that identifier looks like. Drives both the database format check
+     * and the label the form shows ("IMEI" vs "Serial number").
+     */
+    identifierType: identifierTypeEnum('identifier_type').notNull().default('NONE'),
     sortOrder: smallint('sort_order').notNull().default(0),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -703,13 +717,23 @@ export const deviceUnit = pgTable(
       .notNull()
       .references(() => product.id),
 
-    /** Cached from device_identifier for display and sorting only. */
-    primaryImei: text('primary_imei'),
+    /**
+     * Cached from device_identifier for display and sorting only - never the
+     * source of truth. Holds an IMEI for a phone, a serial for a laptop.
+     */
+    primaryIdentifier: text('primary_identifier'),
 
     variant: text('variant'),
     ram: text('ram'),
     storage: text('storage'),
     colour: text('colour'),
+    /**
+     * Battery health as a whole percentage, 1-100. Nullable: a sealed NEW
+     * device has no meaningful reading, and a laptop or speaker may have none
+     * either. It matters most for USED and trade-in stock, where it drives
+     * the price.
+     */
+    batteryHealthPercent: smallint('battery_health_percent'),
 
     /** PRD §5.1. is_new_cut is valid ONLY when mainType is GLOBAL. */
     mainType: mainTypeEnum('main_type').notNull(),
@@ -741,15 +765,19 @@ export const deviceUnit = pgTable(
   (t) => [
     index('device_unit_branch_status_idx').on(t.currentBranchId, t.status, t.mainType),
     index('device_unit_product_idx').on(t.productId),
-    index('device_unit_primary_imei_idx').on(t.primaryImei),
+    index('device_unit_primary_identifier_idx').on(t.primaryIdentifier),
     index('device_unit_supplier_idx').on(t.supplierId),
     index('device_unit_type_idx').on(t.businessId, t.mainType, t.isNewCut),
   ],
 )
 
 /**
- * A device's IMEIs (PRD FR-4.8 - FR-4.12). One row per identifier, so a third
- * one costs nothing. Unique across the whole business.
+ * A device's identifiers (PRD FR-4.8 - FR-4.12). One row each, so a second or
+ * third costs nothing. Unique across the whole business.
+ *
+ * A phone carries one IMEI per SIM slot; a laptop or speaker carries a single
+ * manufacturer serial. The column is `value`, not `imei`, because a column
+ * named `imei` holding "C02XY1234ABC" would mislead everyone who reads it.
  */
 export const deviceIdentifier = pgTable(
   'device_identifier',
@@ -758,14 +786,15 @@ export const deviceIdentifier = pgTable(
     deviceId: bigint('device_id', { mode: 'number' })
       .notNull()
       .references(() => deviceUnit.id, { onDelete: 'restrict' }),
-    imei: text('imei').notNull(),
-    /** 1 = first SIM slot. */
+    value: text('value').notNull(),
+    type: identifierTypeEnum('type').notNull().default('IMEI'),
+    /** 1 = first SIM slot, or simply the first identifier. */
     slot: smallint('slot').notNull().default(1),
     isPrimary: boolean('is_primary').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('device_identifier_imei_uq').on(t.imei),
+    uniqueIndex('device_identifier_value_uq').on(t.value),
     uniqueIndex('device_identifier_device_slot_uq').on(t.deviceId, t.slot),
     index('device_identifier_device_idx').on(t.deviceId),
   ],

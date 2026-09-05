@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { eq, sql } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
 import { db } from '@/server/db'
 import { hashPassword } from '@/server/auth/password'
 import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions'
@@ -51,7 +51,10 @@ async function main() {
   )
 
   // 2. Business
-  const existingBusiness = await db.select().from(business).limit(1)
+  // Deterministic: always the first business ever created. Without an
+  // ORDER BY, a leftover test business could be picked instead and the whole
+  // seed would land in the wrong tenant.
+  const existingBusiness = await db.select().from(business).orderBy(asc(business.id)).limit(1)
   const biz =
     existingBusiness[0] ??
     (
@@ -175,16 +178,26 @@ async function main() {
 
   // 6. M2 catalogue - the categories in PRD FR-4.1, plus common brands.
   //    Mobiles are serialised (tracked by IMEI); accessories are counted.
+  // Serialised categories are tracked one unit at a time. Phones carry an
+  // IMEI; laptops and other electronics carry a manufacturer serial. The
+  // classification (NEW/USED/ER/ACT/GLOBAL) is the same for all of them.
+  const IMEI = 'IMEI' as const
+  const SERIAL = 'SERIAL' as const
+  const NONE = 'NONE' as const
   const productCategories = [
-    { name: 'Mobiles', isSerialised: true, sortOrder: 1 },
-    { name: 'Chargers', isSerialised: false, sortOrder: 2 },
-    { name: 'Cases', isSerialised: false, sortOrder: 3 },
-    { name: 'Screen guards', isSerialised: false, sortOrder: 4 },
-    { name: 'Earphones', isSerialised: false, sortOrder: 5 },
-    { name: 'Cables', isSerialised: false, sortOrder: 6 },
-    { name: 'Power banks', isSerialised: false, sortOrder: 7 },
-    { name: 'Watches', isSerialised: false, sortOrder: 8 },
-    { name: 'Other accessories', isSerialised: false, sortOrder: 9 },
+    { name: 'Mobiles', isSerialised: true, identifierType: IMEI, sortOrder: 1 },
+    { name: 'Tablets', isSerialised: true, identifierType: IMEI, sortOrder: 2 },
+    { name: 'Laptops', isSerialised: true, identifierType: SERIAL, sortOrder: 3 },
+    { name: 'MacBooks', isSerialised: true, identifierType: SERIAL, sortOrder: 4 },
+    { name: 'Smart watches', isSerialised: true, identifierType: SERIAL, sortOrder: 5 },
+    { name: 'Speakers', isSerialised: true, identifierType: SERIAL, sortOrder: 6 },
+    { name: 'Chargers', isSerialised: false, identifierType: NONE, sortOrder: 20 },
+    { name: 'Cases', isSerialised: false, identifierType: NONE, sortOrder: 21 },
+    { name: 'Screen guards', isSerialised: false, identifierType: NONE, sortOrder: 22 },
+    { name: 'Earphones', isSerialised: false, identifierType: NONE, sortOrder: 23 },
+    { name: 'Cables', isSerialised: false, identifierType: NONE, sortOrder: 24 },
+    { name: 'Power banks', isSerialised: false, identifierType: NONE, sortOrder: 25 },
+    { name: 'Other accessories', isSerialised: false, identifierType: NONE, sortOrder: 26 },
   ]
   for (const c of productCategories) {
     await db
@@ -192,12 +205,32 @@ async function main() {
       .values({ businessId: biz.id, ...c })
       .onConflictDoUpdate({
         target: [category.businessId, category.name],
-        set: { isSerialised: c.isSerialised, sortOrder: c.sortOrder },
+        set: {
+          isSerialised: c.isSerialised,
+          identifierType: c.identifierType,
+          sortOrder: c.sortOrder,
+        },
       })
   }
   console.log(`  product categories: ${productCategories.length}`)
 
-  const brands = ['Apple', 'Samsung', 'Xiaomi', 'Realme', 'OnePlus', 'Vivo', 'Oppo', 'Nothing']
+  const brands = [
+    'Apple',
+    'Samsung',
+    'Xiaomi',
+    'Realme',
+    'OnePlus',
+    'Vivo',
+    'Oppo',
+    'Nothing',
+    'Dell',
+    'HP',
+    'Lenovo',
+    'Asus',
+    'Bose',
+    'JBL',
+    'boAt',
+  ]
   for (const name of brands) {
     await db
       .insert(brand)

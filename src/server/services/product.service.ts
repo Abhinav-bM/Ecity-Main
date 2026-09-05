@@ -1,6 +1,14 @@
 import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/server/db'
-import { brand, branch, branchStock, category, product, taxRate } from '@/server/db/schema'
+import {
+  brand,
+  branch,
+  branchStock,
+  category,
+  deviceUnit,
+  product,
+  taxRate,
+} from '@/server/db/schema'
 import { diff, writeAudit, type AuditContext } from '@/server/db/audit'
 import { AppError, conflict, notFound } from '@/server/http'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
@@ -26,7 +34,12 @@ export async function listBrands(actor: AuthUser) {
 export async function createCategory(
   actor: AuthUser,
   ctx: AuditContext,
-  input: { name: string; isSerialised: boolean },
+  input: {
+    name: string
+    isSerialised: boolean
+    /** IMEI for phones, SERIAL for laptops and other electronics. */
+    identifierType?: 'IMEI' | 'SERIAL' | 'NONE'
+  },
 ) {
   const clash = await db
     .select({ id: category.id })
@@ -38,14 +51,21 @@ export async function createCategory(
   const created = (
     await db
       .insert(category)
-      .values({ businessId: actor.businessId, name: input.name, isSerialised: input.isSerialised })
+      .values({
+        businessId: actor.businessId,
+        name: input.name,
+        isSerialised: input.isSerialised,
+        // A counted category has no identifier; a serialised one defaults to
+        // IMEI unless it is told otherwise.
+        identifierType: input.isSerialised ? (input.identifierType ?? 'IMEI') : 'NONE',
+      })
       .returning()
   )[0]!
   await writeAudit(ctx, {
     action: 'CREATE',
     entityType: 'category',
     entityId: created.id,
-    summary: `Created category ${created.name}${created.isSerialised ? ' (IMEI-tracked)' : ''}`,
+    summary: `Created category ${created.name}${created.isSerialised ? ` (${created.identifierType}-tracked)` : ''}`,
   })
   return { id: created.id }
 }
@@ -230,18 +250,34 @@ export async function getProduct(actor: AuthUser, id: number) {
   const row = rows[0]
   if (!row) throw notFound('Product')
 
-  const stock = await db
-    .select({
-      branchId: branchStock.branchId,
-      branchName: branch.name,
-      branchCode: branch.code,
-      quantity: branchStock.quantity,
-      minQuantity: branchStock.minQuantity,
-    })
-    .from(branchStock)
-    .innerJoin(branch, eq(branch.id, branchStock.branchId))
-    .where(eq(branchStock.productId, id))
-    .orderBy(asc(branch.name))
+  // Serialised products hold no branch_stock rows - their per-branch count is
+  // how many units are still IN_STOCK there.
+  const stock = row.product.isSerialised
+    ? await db
+        .select({
+          branchId: branch.id,
+          branchName: branch.name,
+          branchCode: branch.code,
+          quantity: count(),
+          minQuantity: sql<number>`0`,
+        })
+        .from(deviceUnit)
+        .innerJoin(branch, eq(branch.id, deviceUnit.currentBranchId))
+        .where(and(eq(deviceUnit.productId, id), eq(deviceUnit.status, 'IN_STOCK')))
+        .groupBy(branch.id, branch.name, branch.code)
+        .orderBy(asc(branch.name))
+    : await db
+        .select({
+          branchId: branchStock.branchId,
+          branchName: branch.name,
+          branchCode: branch.code,
+          quantity: branchStock.quantity,
+          minQuantity: branchStock.minQuantity,
+        })
+        .from(branchStock)
+        .innerJoin(branch, eq(branch.id, branchStock.branchId))
+        .where(eq(branchStock.productId, id))
+        .orderBy(asc(branch.name))
 
   const showCost = hasPermission(actor, 'inventory.view_cost')
   return {
@@ -285,16 +321,43 @@ export async function listProducts(actor: AuthUser, filters: ProductFilters) {
   const offset = (filters.page - 1) * filters.pageSize
   const showCost = hasPermission(actor, 'inventory.view_cost')
 
-  // Stock is summed only over branches this user may see. A LEFT JOIN plus
-  // GROUP BY keeps products with no stock rows in the list, and avoids
-  // interpolating an id array into raw SQL.
+  /**
+   * Stock comes from two different places depending on the product:
+   *   - counted products  -> the sum of their branch_stock rows
+   *   - serialised ones   -> the number of device units still IN_STOCK
+   *
+   * A mobile never has a branch_stock row, so reading only that table would
+   * report every phone in the shop as having no stock.
+   *
+   * Both are scalar subqueries rather than joins, so the two sources cannot
+   * multiply each other into a wrong total.
+   */
   const scope = branchScope(actor, filters.branchId ?? null)
-  const stockJoin =
+  const deviceBranchCond =
     scope === null
-      ? eq(branchStock.productId, product.id)
+      ? sql`true`
       : scope.length > 0
-        ? and(eq(branchStock.productId, product.id), inArray(branchStock.branchId, scope))
+        ? inArray(deviceUnit.currentBranchId, scope)
         : sql`false`
+  const stockBranchCond =
+    scope === null
+      ? sql`true`
+      : scope.length > 0
+        ? inArray(branchStock.branchId, scope)
+        : sql`false`
+
+  const quantity = sql<number>`(
+    case when ${product.isSerialised} then (
+      select count(*)::int from ${deviceUnit}
+      where ${deviceUnit.productId} = ${product.id}
+        and ${deviceUnit.status} = 'IN_STOCK'
+        and ${deviceBranchCond}
+    ) else (
+      select coalesce(sum(${branchStock.quantity}), 0)::int from ${branchStock}
+      where ${branchStock.productId} = ${product.id}
+        and ${stockBranchCond}
+    ) end
+  )`
 
   const rows = await db
     .select({
@@ -305,28 +368,16 @@ export async function listProducts(actor: AuthUser, filters: ProductFilters) {
       categoryName: category.name,
       brandName: brand.name,
       isSerialised: product.isSerialised,
+      identifierType: category.identifierType,
       isActive: product.isActive,
       sellingPricePaise: product.defaultSellingPricePaise,
       purchasePricePaise: showCost ? product.defaultPurchasePricePaise : sql<null>`null`,
-      quantity: sql<number>`coalesce(sum(${branchStock.quantity}), 0)::int`,
+      quantity,
     })
     .from(product)
     .innerJoin(category, eq(category.id, product.categoryId))
     .leftJoin(brand, eq(brand.id, product.brandId))
-    .leftJoin(branchStock, stockJoin)
     .where(where)
-    .groupBy(
-      product.id,
-      product.name,
-      product.sku,
-      product.model,
-      category.name,
-      brand.name,
-      product.isSerialised,
-      product.isActive,
-      product.defaultSellingPricePaise,
-      product.defaultPurchasePricePaise,
-    )
     .orderBy(asc(product.name))
     .limit(filters.pageSize)
     .offset(offset)

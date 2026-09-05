@@ -31,7 +31,9 @@ export function DeviceForm({
   defaultBranchId,
 }: {
   imeiSlots: number
-  products: { id: number; name: string }[]
+  /** Each product carries its category's identifier type, so the form can
+   *  label the field "IMEI" for a phone and "Serial number" for a laptop. */
+  products: { id: number; name: string; identifierType: 'IMEI' | 'SERIAL' }[]
   suppliers: { id: number; name: string }[]
   branches: { id: number; code: string; name: string }[]
   taxRates: { id: number; name: string }[]
@@ -42,19 +44,21 @@ export function DeviceForm({
   const [mainType, setMainType] = useState<(typeof MAIN_TYPES)[number]>('NEW')
   const [isNewCut, setIsNewCut] = useState(false)
   // One input per configured slot. The payload is a list regardless.
-  const [imeis, setImeis] = useState<string[]>(Array.from({ length: imeiSlots }, () => ''))
+  const [identifiers, setIdentifiers] = useState<string[]>(
+    Array.from({ length: imeiSlots }, () => ''),
+  )
 
   /**
    * The IMEI inputs are local state (their number is driven by `imeiSlots`),
    * but the resolver validates the form's own values. Without this the
    * resolver would always see an empty list and silently block submission.
    */
-  function updateImei(index: number, value: string) {
-    const next = [...imeis]
+  function updateIdentifier(index: number, value: string) {
+    const next = [...identifiers]
     next[index] = value
-    setImeis(next)
+    setIdentifiers(next)
     setValue(
-      'imeis',
+      'identifiers',
       next.map((v) => v.trim()).filter(Boolean),
       { shouldValidate: false },
     )
@@ -64,11 +68,12 @@ export function DeviceForm({
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<Values>({
     resolver: zodResolver(deviceSchema),
     defaultValues: {
-      imeis: [],
+      identifiers: [],
       mainType: 'NEW',
       isNewCut: false,
       branchId: defaultBranchId ?? undefined,
@@ -83,16 +88,22 @@ export function DeviceForm({
     setFormError('Please check the highlighted fields.')
   }
 
+  // A phone is identified by IMEI, a laptop or speaker by a serial number.
+  // The classification below is identical for both.
+  const chosenProduct = products.find((p) => p.id === Number(watch('productId')))
+  const identifierLabel = chosenProduct?.identifierType === 'SERIAL' ? 'Serial number' : 'IMEI'
+  const isSerial = chosenProduct?.identifierType === 'SERIAL'
+
   async function onSubmit(values: Values) {
     setFormError(null)
     const payload = {
       ...values,
       mainType,
       isNewCut,
-      imeis: imeis.map((i) => i.trim()).filter(Boolean),
+      identifiers: identifiers.map((i) => i.trim()).filter(Boolean),
     }
-    if (payload.imeis.length === 0) {
-      setFormError('Enter at least one IMEI.')
+    if (payload.identifiers.length === 0) {
+      setFormError(`Enter at least one ${identifierLabel.toLowerCase()}.`)
       return
     }
 
@@ -111,12 +122,41 @@ export function DeviceForm({
     router.refresh()
   }
 
+  // Nothing can be registered against a catalogue that has no serialised
+  // products, so say so rather than showing an empty dropdown.
+  if (products.length === 0) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
+          Add a device manually
+        </h1>
+        <Card>
+          <CardContent className="space-y-3 py-10 text-center">
+            <p className="text-sm font-medium">No products to register a device against yet.</p>
+            <p className="text-sm text-muted-foreground">
+              A device is one physical unit of a product — an iPhone 16 128GB, a MacBook Air.
+              Create the product first, then register its units here.
+            </p>
+            <Button asChild size="sm">
+              <Link href="/products/new">Add a product</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">Register device</h1>
+        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
+          Add a device manually
+        </h1>
         <p className="text-sm text-muted-foreground">
-          For opening stock and corrections. Most devices arrive through a purchase.
+          This is the manual path, for opening stock and corrections. Stock arriving from a
+          supplier should be entered as a <strong>purchase</strong> instead — that records the
+          supplier, cost and date once for the whole delivery, and captures every identifier in
+          one grid.
         </p>
       </div>
 
@@ -127,28 +167,36 @@ export function DeviceForm({
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Identity</CardTitle>
             <CardDescription>
-              {imeiSlots === 1
-                ? 'A device may hold more than one IMEI. Additional slots are enabled in business settings.'
-                : `Up to ${imeiSlots} IMEIs, one per SIM slot.`}
+              {isSerial
+                ? 'Laptops, speakers and other electronics are identified by their manufacturer serial number.'
+                : imeiSlots === 1
+                  ? 'A phone may hold more than one IMEI. Additional slots are enabled in business settings.'
+                  : `Up to ${imeiSlots} IMEIs, one per SIM slot.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            {imeis.map((value, i) => (
+            {identifiers.map((value, i) => (
               <Field
                 key={i}
-                id={`imei-${i}`}
-                label={imeiSlots === 1 ? 'IMEI' : `IMEI ${i + 1}`}
+                id={`identifier-${i}`}
+                label={imeiSlots === 1 || isSerial ? identifierLabel : `${identifierLabel} ${i + 1}`}
                 required={i === 0}
-                error={i === 0 ? errors.imeis?.message : undefined}
-                hint={i === 0 ? '14 to 17 digits — scan or type' : undefined}
+                error={i === 0 ? errors.identifiers?.message : undefined}
+                hint={
+                  i === 0
+                    ? isSerial
+                      ? 'The manufacturer serial — scan or type'
+                      : '14 to 17 digits — scan or type'
+                    : undefined
+                }
               >
                 <Input
-                  id={`imei-${i}`}
-                  inputMode="numeric"
+                  id={`identifier-${i}`}
+                  inputMode={isSerial ? 'text' : 'numeric'}
                   autoFocus={i === 0}
                   className="font-mono"
                   value={value}
-                  onChange={(e) => updateImei(i, e.target.value)}
+                  onChange={(e) => updateIdentifier(i, e.target.value)}
                 />
               </Field>
             ))}
@@ -246,6 +294,19 @@ export function DeviceForm({
             <Field id="storage" label="Storage" error={errors.storage?.message}>
               <Input id="storage" placeholder="128 GB" {...register('storage')} />
             </Field>
+            <Field
+              id="batteryHealth"
+              label="Battery health (%)"
+              error={errors.batteryHealth?.message}
+              hint="Leave blank for sealed new stock"
+            >
+              <Input
+                id="batteryHealth"
+                inputMode="numeric"
+                placeholder="87"
+                {...register('batteryHealth')}
+              />
+            </Field>
             <Field id="purchasePrice" label="Purchase price (₹)" error={errors.purchasePrice?.message}>
               <Input id="purchasePrice" inputMode="decimal" {...register('purchasePrice')} />
             </Field>
@@ -290,7 +351,7 @@ export function DeviceForm({
             <Link href="/devices">Cancel</Link>
           </Button>
           <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-            {isSubmitting ? 'Saving…' : 'Register device'}
+            {isSubmitting ? 'Saving…' : 'Add device'}
           </Button>
         </div>
       </form>

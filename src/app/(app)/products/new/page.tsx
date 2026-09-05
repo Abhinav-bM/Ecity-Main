@@ -22,7 +22,12 @@ export default async function NewProductPage() {
 
   return (
     <ProductForm
-      categories={categories.map((c) => ({ id: c.id, name: c.name, isSerialised: c.isSerialised }))}
+      categories={categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        isSerialised: c.isSerialised,
+        identifierType: c.identifierType,
+      }))}
       brands={brands.map((b) => ({ id: b.id, name: b.name }))}
       taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}
       suppliers={suppliers.rows.map((s) => ({ id: s.id, name: s.name }))}

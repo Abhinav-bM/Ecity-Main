@@ -27,7 +27,11 @@ export default async function NewDevicePage() {
       // FR-4.11: the setting controls how many IMEI inputs appear, and
       // nothing else. The request body is always a list.
       imeiSlots={business.imeiSlots}
-      products={products.rows.map((p) => ({ id: p.id, name: p.name }))}
+      products={products.rows.map((p) => ({
+        id: p.id,
+        name: p.name,
+        identifierType: p.identifierType === 'SERIAL' ? ('SERIAL' as const) : ('IMEI' as const),
+      }))}
       suppliers={suppliers.rows.map((s) => ({ id: s.id, name: s.name }))}
       branches={branches}
       taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}

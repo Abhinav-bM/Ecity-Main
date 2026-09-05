@@ -99,6 +99,7 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
       timezone: business.timezone,
       pricesIncludeTax: business.pricesIncludeTax,
       invoicePrefix: business.invoicePrefix,
+      imeiSlots: business.imeiSlots,
     },
   })
 
@@ -174,6 +175,32 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
           </Field>
           <Field id="timezone" label="Timezone" error={errors.timezone?.message}>
             <Input id="timezone" disabled={!canManage} {...register('timezone')} />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Device identifiers</CardTitle>
+          <CardDescription>
+            How many IMEI fields the device and purchase forms show. A dual-SIM phone has two.
+            This changes the forms only — stored devices, search, imports and reports always
+            handle every identifier a device has, whatever this is set to.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="max-w-xs">
+          <Field
+            id="imeiSlots"
+            label="IMEI fields per device"
+            error={errors.imeiSlots?.message}
+            hint="1 to 4. Takes effect immediately — no deployment needed."
+          >
+            <Input
+              id="imeiSlots"
+              inputMode="numeric"
+              disabled={!canManage}
+              {...register('imeiSlots')}
+            />
           </Field>
         </CardContent>
       </Card>

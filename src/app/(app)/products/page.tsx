@@ -85,7 +85,10 @@ export default async function ProductsPage({
                 </div>
                 <div className="mt-2 flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">
-                    {r.isSerialised ? 'Tracked by IMEI' : `${r.quantity} in stock`}
+                    {r.quantity} in stock
+                    {r.isSerialised
+                      ? ` · ${r.identifierType === 'SERIAL' ? 'serial' : 'IMEI'}-tracked`
+                      : ''}
                   </span>
                   <span className="tabular">{formatMoney(r.sellingPricePaise)}</span>
                 </div>
@@ -125,11 +128,17 @@ export default async function ProductsPage({
                     <TableCell>{r.categoryName}</TableCell>
                     <TableCell className="hidden xl:table-cell">{r.brandName ?? '—'}</TableCell>
                     <TableCell className="tabular text-right">
+                      {/* Counted products sum their branch stock; serialised
+                          ones count the units still in stock. Both are a
+                          number the shopkeeper can act on. */}
+                      <span className={r.quantity === 0 ? 'text-muted-foreground' : undefined}>
+                        {r.quantity}
+                      </span>
                       {r.isSerialised ? (
-                        <span className="text-xs text-muted-foreground">by IMEI</span>
-                      ) : (
-                        r.quantity
-                      )}
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          {r.identifierType === 'SERIAL' ? 'serials' : 'IMEIs'}
+                        </span>
+                      ) : null}
                     </TableCell>
                     {showCost ? (
                       <TableCell className="tabular text-right text-muted-foreground">

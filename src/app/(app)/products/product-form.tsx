@@ -31,7 +31,7 @@ export function ProductForm({
 }: {
   id?: number
   initial?: Partial<Values>
-  categories: { id: number; name: string; isSerialised: boolean }[]
+  categories: { id: number; name: string; isSerialised: boolean; identifierType: string }[]
   brands: { id: number; name: string }[]
   taxRates: { id: number; name: string }[]
   suppliers: { id: number; name: string }[]
@@ -100,8 +100,11 @@ export function ProductForm({
               <CardDescription className="flex items-center gap-2">
                 {chosen.isSerialised ? (
                   <>
-                    <Badge variant="outline">IMEI-tracked</Badge>
-                    Each unit is registered individually as a device.
+                    <Badge variant="outline">
+                      {chosen.identifierType === 'SERIAL' ? 'Serial-tracked' : 'IMEI-tracked'}
+                    </Badge>
+                    Each unit is registered individually, by{' '}
+                    {chosen.identifierType === 'SERIAL' ? 'serial number' : 'IMEI'}.
                   </>
                 ) : (
                   <>
@@ -122,7 +125,7 @@ export function ProductForm({
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
-                    {c.isSerialised ? ' (IMEI)' : ''}
+                    {c.isSerialised ? ` (${c.identifierType})` : ''}
                   </option>
                 ))}
               </select>

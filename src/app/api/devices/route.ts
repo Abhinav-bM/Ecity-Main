@@ -22,7 +22,7 @@ export const POST = route(
     const audit = await auditContextFromRequest(user, user.businessId, body.branchId)
     return createDevice(user, audit, {
       productId: body.productId,
-      imeis: body.imeis,
+      identifiers: body.identifiers,
       mainType: body.mainType,
       isNewCut: body.isNewCut,
       newCutNotes: body.newCutNotes || undefined,
@@ -30,6 +30,10 @@ export const POST = route(
       ram: body.ram || undefined,
       storage: body.storage || undefined,
       colour: body.colour || undefined,
+      batteryHealthPercent:
+        body.batteryHealth === '' || body.batteryHealth === undefined
+          ? null
+          : body.batteryHealth,
       purchasePricePaise:
         body.purchasePrice === '' || body.purchasePrice === undefined
           ? null

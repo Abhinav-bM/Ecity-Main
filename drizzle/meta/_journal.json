@@ -36,6 +36,20 @@
       "when": 1788551809297,
       "tag": "0004_m2_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788595510278,
+      "tag": "0005_m2_generic_identifiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788632185443,
+      "tag": "0006_m2_battery_health",
+      "breakpoints": true
     }
   ]
 }

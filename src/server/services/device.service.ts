@@ -3,6 +3,7 @@ import { db, type DbOrTx } from '@/server/db'
 import {
   brand,
   branch,
+  category,
   deviceEvent,
   deviceIdentifier,
   deviceUnit,
@@ -25,7 +26,7 @@ import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permiss
 
 export type DeviceInput = {
   productId: number
-  imeis: string[]
+  identifiers: string[]
   mainType: MainType
   isNewCut?: boolean
   newCutNotes?: string
@@ -33,6 +34,7 @@ export type DeviceInput = {
   ram?: string
   storage?: string
   colour?: string
+  batteryHealthPercent?: number | null
   purchasePricePaise?: bigint | null
   sellingPricePaise?: bigint | null
   taxRateId?: number | null
@@ -63,19 +65,47 @@ export function assertClassificationValid(input: {
   }
 }
 
-export function normaliseImeis(imeis: string[]): string[] {
-  const cleaned = imeis.map((i) => i.replace(/[\s-]/g, '').trim()).filter(Boolean)
-  if (cleaned.length === 0) throw new AppError('At least one IMEI is required.', 422, 'NO_IMEI')
+export type IdentifierType = 'IMEI' | 'SERIAL'
 
-  for (const imei of cleaned) {
-    if (!/^[0-9]{14,17}$/.test(imei)) {
-      throw new AppError(`"${imei}" is not a valid IMEI — expected 14 to 17 digits.`, 422, 'BAD_IMEI')
+/** What to call it on screen and in error messages. */
+export const IDENTIFIER_LABEL: Record<IdentifierType, string> = {
+  IMEI: 'IMEI',
+  SERIAL: 'serial number',
+}
+
+/**
+ * Clean and validate a device's identifiers.
+ *
+ * A phone carries IMEIs (14-17 digits); a laptop, MacBook or speaker carries a
+ * manufacturer serial (letters and digits). The classification is identical
+ * for both - only the identifier differs.
+ */
+export function normaliseIdentifiers(
+  values: string[],
+  type: IdentifierType = 'IMEI',
+): string[] {
+  const label = IDENTIFIER_LABEL[type]
+  // Serials can legitimately contain hyphens, so only strip whitespace there.
+  const cleaned = values
+    .map((v) => (type === 'IMEI' ? v.replace(/[\s-]/g, '') : v.replace(/\s/g, '')).trim())
+    .filter(Boolean)
+
+  if (cleaned.length === 0) {
+    throw new AppError(`At least one ${label} is required.`, 422, 'NO_IDENTIFIER')
+  }
+
+  const pattern = type === 'IMEI' ? /^[0-9]{14,17}$/ : /^[A-Za-z0-9][A-Za-z0-9/-]{3,49}$/
+  const expectation =
+    type === 'IMEI' ? 'expected 14 to 17 digits' : 'expected 4 to 50 letters, digits or hyphens'
+
+  for (const value of cleaned) {
+    if (!pattern.test(value)) {
+      throw new AppError(`"${value}" is not a valid ${label} — ${expectation}.`, 422, 'BAD_IDENTIFIER')
     }
   }
 
-  const unique = new Set(cleaned)
-  if (unique.size !== cleaned.length) {
-    throw new AppError('The same IMEI was entered twice for this device.', 422, 'DUPLICATE_IMEI')
+  if (new Set(cleaned).size !== cleaned.length) {
+    throw new AppError(`The same ${label} was entered twice for this device.`, 422, 'DUPLICATE_IDENTIFIER')
   }
   return cleaned
 }
@@ -85,26 +115,57 @@ export function normaliseImeis(imeis: string[]): string[] {
  * primaries (PRD FR-4.9). The message names the conflicting device so staff
  * can go and look at it.
  */
-async function assertImeisFree(imeis: string[], excludeDeviceId?: number, tx: DbOrTx = db) {
+async function assertIdentifiersFree(
+  values: string[],
+  type: IdentifierType,
+  excludeDeviceId?: number,
+  tx: DbOrTx = db,
+) {
   const clashes = await tx
     .select({
-      imei: deviceIdentifier.imei,
+      value: deviceIdentifier.value,
       deviceId: deviceIdentifier.deviceId,
-      primaryImei: deviceUnit.primaryImei,
+      primaryIdentifier: deviceUnit.primaryIdentifier,
       productName: product.name,
     })
     .from(deviceIdentifier)
     .innerJoin(deviceUnit, eq(deviceUnit.id, deviceIdentifier.deviceId))
     .innerJoin(product, eq(product.id, deviceUnit.productId))
-    .where(inArray(deviceIdentifier.imei, imeis))
+    .where(inArray(deviceIdentifier.value, values))
 
   for (const clash of clashes) {
     if (clash.deviceId === excludeDeviceId) continue
     throw conflict(
-      `IMEI ${clash.imei} already belongs to ${clash.productName} (${clash.primaryImei ?? `device #${clash.deviceId}`}).`,
-      { imei: clash.imei, deviceId: clash.deviceId },
+      `${IDENTIFIER_LABEL[type]} ${clash.value} already belongs to ${clash.productName} (${clash.primaryIdentifier ?? `device #${clash.deviceId}`}).`,
+      { value: clash.value, deviceId: clash.deviceId },
     )
   }
+}
+
+/**
+ * How this product's units are identified, taken from its category. A phone
+ * category is IMEI; a laptop or speaker category is SERIAL.
+ */
+export async function identifierTypeForProduct(
+  productId: number,
+  tx: DbOrTx = db,
+): Promise<IdentifierType> {
+  const rows = await tx
+    .select({ identifierType: category.identifierType })
+    .from(product)
+    .innerJoin(category, eq(category.id, product.categoryId))
+    .where(eq(product.id, productId))
+    .limit(1)
+  const found = rows[0]?.identifierType
+  if (!found || found === 'NONE') {
+    // A category that is not serialised has no identifiers to give.
+    throw new AppError(
+      'This product is counted by quantity, not tracked individually.',
+      422,
+      'NOT_SERIALISED',
+    )
+  }
+  return found
 }
 
 export async function createDevice(
@@ -112,12 +173,13 @@ export async function createDevice(
   ctx: AuditContext,
   input: DeviceInput,
   tx?: DbOrTx,
-): Promise<{ id: number; primaryImei: string }> {
+): Promise<{ id: number; primaryIdentifier: string }> {
   assertClassificationValid(input)
-  const imeis = normaliseImeis(input.imeis)
 
   const run = async (t: DbOrTx) => {
-    await assertImeisFree(imeis, undefined, t)
+    const identifierType = await identifierTypeForProduct(input.productId, t)
+    const identifiers = normaliseIdentifiers(input.identifiers, identifierType)
+    await assertIdentifiersFree(identifiers, identifierType, undefined, t)
 
     const warrantyExpiresAt =
       input.warrantyMonths && input.purchaseDate
@@ -134,11 +196,12 @@ export async function createDevice(
         .values({
           businessId: actor.businessId,
           productId: input.productId,
-          primaryImei: imeis[0]!,
+          primaryIdentifier: identifiers[0]!,
           variant: input.variant?.trim() || null,
           ram: input.ram?.trim() || null,
           storage: input.storage?.trim() || null,
           colour: input.colour?.trim() || null,
+          batteryHealthPercent: input.batteryHealthPercent ?? null,
           mainType: input.mainType,
           isNewCut: input.isNewCut ?? false,
           newCutNotes: input.newCutNotes?.trim() || null,
@@ -162,9 +225,10 @@ export async function createDevice(
 
     // Every identifier is a row. Slot 1 is primary by convention.
     await t.insert(deviceIdentifier).values(
-      imeis.map((imei, i) => ({
+      identifiers.map((value, i) => ({
         deviceId: created.id,
-        imei,
+        value,
+        type: identifierType,
         slot: i + 1,
         isPrimary: i === 0,
       })),
@@ -179,7 +243,8 @@ export async function createDevice(
         payload: {
           mainType: input.mainType,
           isNewCut: input.isNewCut ?? false,
-          imeis,
+          identifiers,
+          identifierType,
           source: input.source ?? 'ECITY',
         },
       },
@@ -192,12 +257,12 @@ export async function createDevice(
         action: 'CREATE',
         entityType: 'device_unit',
         entityId: created.id,
-        summary: `Registered ${input.mainType} device ${imeis[0]}`,
+        summary: `Registered ${input.mainType} device ${identifiers[0]}`,
       },
       t,
     )
 
-    return { id: created.id, primaryImei: imeis[0]! }
+    return { id: created.id, primaryIdentifier: identifiers[0]! }
   }
 
   return tx ? run(tx) : db.transaction(run)
@@ -247,12 +312,13 @@ export async function listDevices(actor: AuthUser, filters: DeviceFilters) {
     const term = `%${filters.search.trim().replace(/[\s-]/g, '')}%`
     conditions.push(
       or(
-        ilike(deviceUnit.primaryImei, term),
+        ilike(deviceUnit.primaryIdentifier, term),
         ilike(product.name, `%${filters.search.trim()}%`),
+        // Match ANY identifier, not only the primary one (FR-4.12).
         sql`exists (
           select 1 from ${deviceIdentifier}
           where ${deviceIdentifier.deviceId} = ${deviceUnit.id}
-            and ${deviceIdentifier.imei} ilike ${term}
+            and ${deviceIdentifier.value} ilike ${term}
         )`,
       )!,
     )
@@ -266,12 +332,13 @@ export async function listDevices(actor: AuthUser, filters: DeviceFilters) {
     db
       .select({
         id: deviceUnit.id,
-        primaryImei: deviceUnit.primaryImei,
+        primaryIdentifier: deviceUnit.primaryIdentifier,
         productName: product.name,
         brandName: brand.name,
         variant: deviceUnit.variant,
         storage: deviceUnit.storage,
         colour: deviceUnit.colour,
+        batteryHealthPercent: deviceUnit.batteryHealthPercent,
         mainType: deviceUnit.mainType,
         isNewCut: deviceUnit.isNewCut,
         status: deviceUnit.status,
@@ -303,14 +370,23 @@ export async function listDevices(actor: AuthUser, filters: DeviceFilters) {
   return { rows, total: totals[0]?.n ?? 0, page: filters.page, pageSize: filters.pageSize }
 }
 
-/** Resolve a device by ANY of its identifiers (PRD FR-30.5). */
-export async function findDeviceByImei(actor: AuthUser, imei: string) {
-  const clean = imei.replace(/[\s-]/g, '').trim()
+/** Resolve a device by ANY of its identifiers - IMEI or serial (PRD FR-30.5). */
+export async function findDeviceByIdentifier(actor: AuthUser, value: string) {
+  const clean = value.trim()
   const rows = await db
     .select({ deviceId: deviceIdentifier.deviceId })
     .from(deviceIdentifier)
     .innerJoin(deviceUnit, eq(deviceUnit.id, deviceIdentifier.deviceId))
-    .where(and(eq(deviceIdentifier.imei, clean), eq(deviceUnit.businessId, actor.businessId)))
+    .where(
+      and(
+        or(
+          eq(deviceIdentifier.value, clean),
+          // A scanned IMEI may arrive with separators.
+          eq(deviceIdentifier.value, clean.replace(/[\s-]/g, '')),
+        )!,
+        eq(deviceUnit.businessId, actor.businessId),
+      ),
+    )
     .limit(1)
   return rows[0]?.deviceId ?? null
 }

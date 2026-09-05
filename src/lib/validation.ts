@@ -108,6 +108,12 @@ export const businessProfileSchema = z.object({
   timezone: z.string().trim().min(3).default('Asia/Kolkata'),
   pricesIncludeTax: z.boolean().default(true),
   invoicePrefix: z.string().trim().min(1).max(10).default('INV'),
+  /**
+   * PRD FR-4.11. How many IMEI inputs the device and purchase forms show.
+   * It governs the UI only — the API, importer and reports always handle a
+   * device's full identifier list whatever this is set to.
+   */
+  imeiSlots: z.coerce.number().int().min(1, 'At least one.').max(4, 'At most four.').default(1),
 })
 
 export const taxRateSchema = z.object({
@@ -220,6 +226,8 @@ export const MAIN_TYPES = ['NEW', 'USED', 'ER', 'ACT', 'GLOBAL'] as const
 export const categorySchema = z.object({
   name: z.string().trim().min(2, 'Name is required.').max(60),
   isSerialised: z.boolean().default(false),
+  /** IMEI for phones, SERIAL for laptops and other electronics. */
+  identifierType: z.enum(['IMEI', 'SERIAL', 'NONE']).default('NONE'),
 })
 
 export const brandSchema = z.object({
@@ -250,17 +258,18 @@ export const productSchema = z.object({
 })
 
 /**
- * A device carries a LIST of IMEIs (PRD FR-4.8). The form may render one
- * input today, but the payload is always an array — raising `imeiSlots` must
- * never require a schema change.
+ * A device carries a LIST of identifiers (PRD FR-4.8) — IMEIs for a phone, a
+ * serial number for a laptop or speaker. The form may render one input today,
+ * but the payload is always an array, so raising `imeiSlots` never requires a
+ * schema change. Format is validated server-side against the category's type.
  */
 export const deviceSchema = z
   .object({
     productId: z.coerce.number().int().positive('Choose a product.'),
-    imeis: z
+    identifiers: z
       .array(z.string().trim())
-      .min(1, 'At least one IMEI is required.')
-      .transform((list) => list.map((i) => i.replace(/[\s-]/g, '')).filter(Boolean)),
+      .min(1, 'At least one identifier is required.')
+      .transform((list) => list.map((i) => i.trim()).filter(Boolean)),
     mainType: z.enum(MAIN_TYPES, { message: 'Choose a main type.' }),
     isNewCut: z.boolean().default(false),
     newCutNotes: optionalText(300),
@@ -268,6 +277,10 @@ export const deviceSchema = z
     ram: optionalText(20),
     storage: optionalText(20),
     colour: optionalText(40),
+    /** Whole percent, 1-100. Blank for sealed NEW stock. */
+    batteryHealth: z
+      .union([z.coerce.number().int().min(1, 'Between 1 and 100.').max(100, 'Between 1 and 100.'), z.literal('')])
+      .optional(),
     purchasePrice: optionalMoney,
     sellingPrice: optionalMoney,
     taxRateId: z.preprocess(
@@ -284,9 +297,9 @@ export const deviceSchema = z
       .optional(),
     branchId: z.coerce.number().int().positive('Choose a branch.'),
   })
-  .refine((v) => v.imeis.length > 0, {
-    message: 'At least one IMEI is required.',
-    path: ['imeis'],
+  .refine((v) => v.identifiers.length > 0, {
+    message: 'At least one identifier is required.',
+    path: ['identifiers'],
   })
   // PRD FR-5.2 — the rule the whole classification hangs on.
   .refine((v) => !v.isNewCut || v.mainType === 'GLOBAL', {

@@ -6,13 +6,18 @@ import { expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './he
 /** 14–17 digits, unique per run. */
 const imei = (suffix: number) => String(35_000_000_000_000 + (Date.now() % 1_000_000) * 10 + suffix)
 
-async function createMobileProduct(page: Page, name: string) {
+async function createProductIn(page: Page, name: string, categoryLabel: string) {
   await page.goto('/products/new')
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
-  await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: 'Mobiles (IMEI)' })
+  await page
+    .getByRole('combobox', { name: 'Category', exact: true })
+    .selectOption({ label: categoryLabel })
   await page.getByRole('button', { name: 'Create product' }).click()
   await expect(page).toHaveURL(/\/products$/)
 }
+
+const createMobileProduct = (page: Page, name: string) =>
+  createProductIn(page, name, 'Mobiles (IMEI)')
 
 test.describe('as admin', () => {
   test.beforeEach(async ({ page }) => {
@@ -56,7 +61,7 @@ test.describe('as admin', () => {
     await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(one)
     await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
     await page.getByRole('button', { name: 'USED', exact: true }).click()
-    await page.getByRole('button', { name: 'Register device' }).click()
+    await page.getByRole('button', { name: 'Add device' }).click()
 
     await expect(page).toHaveURL(/\/devices$/)
     await page.getByLabel('Search devices').fill(one)
@@ -91,7 +96,7 @@ test.describe('as admin', () => {
     await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
     await page.getByRole('button', { name: 'GLOBAL', exact: true }).click()
     await page.getByRole('checkbox', { name: 'NEW CUT' }).click()
-    await page.getByRole('button', { name: 'Register device' }).click()
+    await page.getByRole('button', { name: 'Add device' }).click()
     await expect(page).toHaveURL(/\/devices$/)
 
     await page.getByLabel('Search devices').fill(one)
@@ -111,7 +116,7 @@ test.describe('as admin', () => {
       await page.goto('/devices/new')
       await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(dup)
       await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
-      await page.getByRole('button', { name: 'Register device' }).click()
+      await page.getByRole('button', { name: 'Add device' }).click()
 
       if (attempt === 2) {
         await expect(page.locator('[data-slot="alert"]')).toContainText(/already belongs to/i)
@@ -128,7 +133,7 @@ test.describe('as admin', () => {
     await page.goto('/devices/new')
     await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill('12345')
     await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
-    await page.getByRole('button', { name: 'Register device' }).click()
+    await page.getByRole('button', { name: 'Add device' }).click()
     await expect(page.locator('[data-slot="alert"]')).toContainText(/not a valid IMEI/i)
   })
 
@@ -140,7 +145,7 @@ test.describe('as admin', () => {
     await page.goto('/devices/new')
     await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(one)
     await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
-    await page.getByRole('button', { name: 'Register device' }).click()
+    await page.getByRole('button', { name: 'Add device' }).click()
     await expect(page).toHaveURL(/\/devices$/)
 
     await page.getByLabel('Search devices').fill(one)
@@ -154,6 +159,144 @@ test.describe('as admin', () => {
     await expect(page.getByText('Identifiers', { exact: true })).toBeVisible()
     await expect(page.getByText('Primary', { exact: true })).toBeVisible()
     await expectNoHorizontalOverflow(page)
+  })
+})
+
+test.describe('battery health', () => {
+  test('can be recorded on a used handset and shown back', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const name = `E2E Battery ${Date.now()}`
+    await createMobileProduct(page, name)
+    const one = imei(7)
+
+    await page.goto('/devices/new')
+    await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(one)
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await page.getByRole('button', { name: 'USED', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Battery health (%)', exact: true }).fill('87')
+    await page.getByRole('button', { name: 'Add device' }).click()
+    await expect(page).toHaveURL(/\/devices$/)
+
+    await page.getByLabel('Search devices').fill(one)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByText(one).and(page.locator(':visible')).first().click()
+    await expect(page.getByText('87%')).toBeVisible()
+  })
+
+  test('is optional, so sealed new stock saves without it', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const name = `E2E NoBattery ${Date.now()}`
+    await createMobileProduct(page, name)
+    const one = imei(8)
+
+    await page.goto('/devices/new')
+    await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(one)
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await page.getByRole('button', { name: 'Add device' }).click()
+    await expect(page).toHaveURL(/\/devices$/)
+  })
+
+  test('rejects an impossible percentage', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const name = `E2E BadBattery ${Date.now()}`
+    await createMobileProduct(page, name)
+
+    await page.goto('/devices/new')
+    await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(imei(9))
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await page.getByRole('textbox', { name: 'Battery health (%)', exact: true }).fill('150')
+    await page.getByRole('button', { name: 'Add device' }).click()
+    await expect(page.getByText('Between 1 and 100.')).toBeVisible()
+  })
+})
+
+test.describe('imei_slots — a setting, not a release', () => {
+  async function setSlots(page: Page, value: string) {
+    await page.goto('/settings/business')
+    await page.getByRole('textbox', { name: 'IMEI fields per device' }).fill(value)
+    await page.getByRole('button', { name: 'Save profile' }).click()
+    await expect(page.getByText('Business profile saved.')).toBeVisible()
+  }
+
+  test('raising it adds IMEI fields with no deployment', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const name = `E2E DualSim ${Date.now()}`
+    await createMobileProduct(page, name)
+
+    // Do not assume the starting value - a previous run may have changed it.
+    await setSlots(page, '1')
+
+    await page.goto('/devices/new')
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await expect(page.getByRole('textbox', { name: 'IMEI', exact: true })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'IMEI 2', exact: true })).toBeHidden()
+
+    await setSlots(page, '2')
+
+    // Two fields now, no rebuild involved.
+    await page.goto('/devices/new')
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await expect(page.getByRole('textbox', { name: 'IMEI 1', exact: true })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'IMEI 2', exact: true })).toBeVisible()
+
+    // Leave the default in place for every other test.
+    await setSlots(page, '1')
+  })
+})
+
+test.describe('the manual path is secondary', () => {
+  test('the devices page offers it as a secondary action, not the main one', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    await page.goto('/devices')
+    // Labelled "Add manually" — stock normally arrives through a purchase.
+    await expect(page.getByRole('link', { name: 'Add manually' })).toBeVisible()
+    await page.getByRole('link', { name: 'Add manually' }).click()
+    await expect(page.getByText(/should be entered as a purchase/i)).toBeVisible()
+  })
+})
+
+test.describe('non-phone electronics', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('a laptop asks for a serial number, not an IMEI', async ({ page }) => {
+    const name = `E2E MacBook ${Date.now()}`
+    await createProductIn(page, name, 'MacBooks (SERIAL)')
+
+    await page.goto('/devices/new')
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await expect(page.getByRole('textbox', { name: 'Serial number', exact: true })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'IMEI', exact: true })).toBeHidden()
+  })
+
+  test('a laptop takes the same classification as a phone', async ({ page }) => {
+    const name = `E2E Laptop ${Date.now()}`
+    await createProductIn(page, name, 'Laptops (SERIAL)')
+    const serial = `C02E2E${String(Date.now()).slice(-6)}`
+
+    await page.goto('/devices/new')
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await page.getByRole('textbox', { name: 'Serial number', exact: true }).fill(serial)
+    // ER applies to laptops too - the types are not mobile-only.
+    await page.getByRole('button', { name: 'ER', exact: true }).click()
+    await page.getByRole('button', { name: 'Add device' }).click()
+    await expect(page).toHaveURL(/\/devices$/)
+
+    await page.getByLabel('Search devices').fill(serial)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await expect(page.getByText(serial).and(page.locator(':visible')).first()).toBeVisible()
+  })
+
+  test('a phone still refuses a letter-bearing identifier', async ({ page }) => {
+    const name = `E2E StrictPhone ${Date.now()}`
+    await createMobileProduct(page, name)
+
+    await page.goto('/devices/new')
+    await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption({ label: name })
+    await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill('C02XY1234ABC')
+    await page.getByRole('button', { name: 'Add device' }).click()
+    await expect(page.locator('[data-slot="alert"]')).toContainText(/not a valid IMEI/i)
   })
 })
 

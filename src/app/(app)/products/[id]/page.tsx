@@ -37,6 +37,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             id: c.id,
             name: c.name,
             isSerialised: c.isSerialised,
+            identifierType: c.identifierType,
           }))}
           brands={brands.map((b) => ({ id: b.id, name: b.name }))}
           taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}
@@ -63,11 +64,15 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
         <h1 className="text-lg font-semibold tracking-tight sm:text-xl">{p.name}</h1>
       )}
 
-      {!p.isSerialised ? (
-        <Card className="mx-auto max-w-3xl">
+      <Card className="mx-auto max-w-3xl">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Stock by branch</CardTitle>
-            <CardDescription>Stock always belongs to a branch, never the business.</CardDescription>
+            <CardDescription>
+              Stock always belongs to a branch, never the business.
+              {p.isSerialised
+                ? ' For an IMEI- or serial-tracked product this is the number of units still in stock.'
+                : ''}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {detail.stock.length === 0 ? (
@@ -86,9 +91,8 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
-      ) : null}
+        </CardContent>
+      </Card>
     </div>
   )
 }

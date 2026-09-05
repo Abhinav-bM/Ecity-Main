@@ -47,7 +47,7 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
           ← Devices
         </Link>
         <h1 className="mt-1 font-mono text-lg font-semibold tracking-tight sm:text-xl">
-          {device.primaryImei ?? `Device #${device.id}`}
+          {device.primaryIdentifier ?? `Device #${device.id}`}
         </h1>
         <p className="text-sm text-muted-foreground">
           {brandName ? `${brandName} ` : ''}
@@ -69,7 +69,7 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Identifiers</CardTitle>
             <CardDescription>
-              A device may carry more than one IMEI. Any of them finds it.
+              A phone carries an IMEI per SIM slot; a laptop or speaker carries a serial number. Any of them finds the device.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -77,7 +77,7 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
               {identifiers.map((i) => (
                 <li key={i.id} className="flex items-center gap-2 font-mono text-sm">
                   <span className="text-xs text-muted-foreground">Slot {i.slot}</span>
-                  {i.imei}
+                  {i.value}
                   {i.isPrimary ? (
                     <Badge variant="secondary" className="ml-auto">
                       Primary
@@ -103,6 +103,20 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
               <dd>{[device.ram, device.storage].filter(Boolean).join(' / ') || '—'}</dd>
               <dt className="text-muted-foreground">Colour</dt>
               <dd>{device.colour ?? '—'}</dd>
+              <dt className="text-muted-foreground">Battery health</dt>
+              <dd>
+                {device.batteryHealthPercent != null ? (
+                  <span
+                    className={
+                      device.batteryHealthPercent < 80 ? 'font-medium text-warning-foreground' : ''
+                    }
+                  >
+                    {device.batteryHealthPercent}%
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </dd>
               {device.isNewCut && device.newCutNotes ? (
                 <>
                   <dt className="text-muted-foreground">NEW CUT</dt>

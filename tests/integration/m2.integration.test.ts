@@ -5,11 +5,11 @@ import * as schema from '@/server/db/schema'
 import {
   assertClassificationValid,
   createDevice,
-  findDeviceByImei,
+  findDeviceByIdentifier,
   getDevice,
   listDevices,
   mainTypeSummary,
-  normaliseImeis,
+  normaliseIdentifiers,
 } from '@/server/services/device.service'
 import { createCategory, createProduct, listLowStock, setMinQuantity } from '@/server/services/product.service'
 import {
@@ -114,7 +114,7 @@ suite('M2 inventory core (database-backed)', () => {
       for (const [i, mainType] of (['NEW', 'USED', 'ER', 'ACT', 'GLOBAL'] as const).entries()) {
         const r = await createDevice(actor, ctx, {
           productId: mobileProductId,
-          imeis: [imei(i)],
+          identifiers: [imei(i)],
           mainType,
           branchId: branchA,
         })
@@ -125,7 +125,7 @@ suite('M2 inventory core (database-backed)', () => {
     it('allows NEW CUT on GLOBAL', async () => {
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [imei(10)],
+        identifiers: [imei(10)],
         mainType: 'GLOBAL',
         isNewCut: true,
         newCutNotes: 'cut in transit',
@@ -168,26 +168,26 @@ suite('M2 inventory core (database-backed)', () => {
       const imeis = [imei(20), imei(21), imei(22)]
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis,
+        identifiers: imeis,
         mainType: 'USED',
         branchId: branchA,
       })
       const d = await getDevice(actor, r.id)
       expect(d.identifiers).toHaveLength(3)
       expect(d.identifiers.filter((i) => i.isPrimary)).toHaveLength(1)
-      expect(d.device.primaryImei).toBe(imeis[0])
+      expect(d.device.primaryIdentifier).toBe(imeis[0])
     })
 
     it('finds the device by ANY of its identifiers', async () => {
       const imeis = [imei(30), imei(31), imei(32)]
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis,
+        identifiers: imeis,
         mainType: 'USED',
         branchId: branchA,
       })
       for (const one of imeis) {
-        expect(await findDeviceByImei(actor, one), one).toBe(r.id)
+        expect(await findDeviceByIdentifier(actor, one), one).toBe(r.id)
       }
     })
 
@@ -195,14 +195,14 @@ suite('M2 inventory core (database-backed)', () => {
       const dup = imei(40)
       await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [dup],
+        identifiers: [dup],
         mainType: 'NEW',
         branchId: branchA,
       })
       await expect(
         createDevice(actor, ctx, {
           productId: mobileProductId,
-          imeis: [dup],
+          identifiers: [dup],
           mainType: 'USED',
           branchId: branchA,
         }),
@@ -213,14 +213,14 @@ suite('M2 inventory core (database-backed)', () => {
       const secondary = imei(50)
       await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [imei(51), secondary],
+        identifiers: [imei(51), secondary],
         mainType: 'USED',
         branchId: branchA,
       })
       await expect(
         createDevice(actor, ctx, {
           productId: mobileProductId,
-          imeis: [secondary],
+          identifiers: [secondary],
           mainType: 'NEW',
           branchId: branchA,
         }),
@@ -228,11 +228,11 @@ suite('M2 inventory core (database-backed)', () => {
     })
 
     it('validates IMEI shape and strips separators', () => {
-      expect(normaliseImeis(['3541-2312 3456789'])).toEqual(['354123123456789'])
-      expect(() => normaliseImeis(['ABC123'])).toThrow(/not a valid IMEI/)
-      expect(() => normaliseImeis(['123'])).toThrow(/not a valid IMEI/)
-      expect(() => normaliseImeis([])).toThrow(/At least one IMEI/)
-      expect(() => normaliseImeis(['35412312345678', '35412312345678'])).toThrow(/twice/)
+      expect(normaliseIdentifiers(['3541-2312 3456789'])).toEqual(['354123123456789'])
+      expect(() => normaliseIdentifiers(['ABC123'])).toThrow(/not a valid IMEI/)
+      expect(() => normaliseIdentifiers(['123'])).toThrow(/not a valid IMEI/)
+      expect(() => normaliseIdentifiers([])).toThrow(/At least one IMEI/)
+      expect(() => normaliseIdentifiers(['35412312345678', '35412312345678'])).toThrow(/twice/)
     })
   })
 
@@ -240,7 +240,7 @@ suite('M2 inventory core (database-backed)', () => {
     it('writes a PURCHASED event on creation', async () => {
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [imei(60)],
+        identifiers: [imei(60)],
         mainType: 'NEW',
         branchId: branchA,
       })
@@ -253,7 +253,7 @@ suite('M2 inventory core (database-backed)', () => {
     it('appends events in order and refuses to rewrite them', async () => {
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [imei(70)],
+        identifiers: [imei(70)],
         mainType: 'USED',
         branchId: branchA,
       })
@@ -281,7 +281,7 @@ suite('M2 inventory core (database-backed)', () => {
     it('refuses an illegal status transition', async () => {
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [imei(80)],
+        identifiers: [imei(80)],
         mainType: 'USED',
         branchId: branchA,
       })
@@ -302,7 +302,7 @@ suite('M2 inventory core (database-backed)', () => {
     it('prevents two tills selling the same device', async () => {
       const r = await createDevice(actor, ctx, {
         productId: mobileProductId,
-        imeis: [imei(90)],
+        identifiers: [imei(90)],
         mainType: 'USED',
         branchId: branchA,
       })
@@ -419,10 +419,266 @@ suite('M2 inventory core (database-backed)', () => {
     })
   })
 
+  describe('non-phone electronics — laptops, speakers (serial numbers)', () => {
+    let laptopProductId: number
+    let speakerProductId: number
+
+    beforeAll(async () => {
+      const laptops = await createCategory(actor, ctx, {
+        name: 'Laptops',
+        isSerialised: true,
+        identifierType: 'SERIAL',
+      })
+      const speakers = await createCategory(actor, ctx, {
+        name: 'Speakers',
+        isSerialised: true,
+        identifierType: 'SERIAL',
+      })
+      laptopProductId = (
+        await createProduct(actor, ctx, { name: 'MacBook Air M3 256GB', categoryId: laptops.id })
+      ).id
+      speakerProductId = (
+        await createProduct(actor, ctx, { name: 'Bose SoundLink', categoryId: speakers.id })
+      ).id
+    })
+
+    it('accepts a MacBook serial number', async () => {
+      const r = await createDevice(actor, ctx, {
+        productId: laptopProductId,
+        identifiers: [`C02${stamp % 100000}ABC`],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      const d = await getDevice(actor, r.id)
+      expect(d.identifiers[0]!.type).toBe('SERIAL')
+      expect(d.device.primaryIdentifier).toMatch(/^C02/)
+    })
+
+    it('applies the same classification to laptops as to phones', async () => {
+      // The five main types are not mobile-only.
+      for (const [i, mainType] of (['USED', 'ER', 'ACT', 'GLOBAL'] as const).entries()) {
+        const r = await createDevice(actor, ctx, {
+          productId: laptopProductId,
+          identifiers: [`LAP-${stamp % 100000}-${i}`],
+          mainType,
+          branchId: branchA,
+        })
+        const d = await getDevice(actor, r.id)
+        expect(d.device.mainType, mainType).toBe(mainType)
+      }
+    })
+
+    it('still allows NEW CUT only under GLOBAL, laptop or not', async () => {
+      await expect(
+        createDevice(actor, ctx, {
+          productId: laptopProductId,
+          identifiers: [`LAPNC-${stamp % 100000}`],
+          mainType: 'USED',
+          isNewCut: true,
+          branchId: branchA,
+        }),
+      ).rejects.toThrow(/only to GLOBAL/i)
+    })
+
+    it('rejects an IMEI-shaped value where a serial is expected, and vice versa', async () => {
+      // A serial category will not take something that is clearly not a serial.
+      await expect(
+        createDevice(actor, ctx, {
+          productId: speakerProductId,
+          identifiers: ['ab'],
+          mainType: 'NEW',
+          branchId: branchA,
+        }),
+      ).rejects.toThrow(/not a valid serial number/i)
+
+      // A phone category will not take letters.
+      await expect(
+        createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: ['C02XY1234ABC'],
+          mainType: 'NEW',
+          branchId: branchA,
+        }),
+      ).rejects.toThrow(/not a valid IMEI/i)
+    })
+
+    it('finds a laptop by its serial, the same way a phone is found by IMEI', async () => {
+      const serial = `SPK-${stamp % 100000}-X`
+      const r = await createDevice(actor, ctx, {
+        productId: speakerProductId,
+        identifiers: [serial],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      expect(await findDeviceByIdentifier(actor, serial)).toBe(r.id)
+    })
+
+    it('gives a laptop the same append-only history as a phone', async () => {
+      const r = await createDevice(actor, ctx, {
+        productId: laptopProductId,
+        identifiers: [`HIST-${stamp % 100000}`],
+        mainType: 'USED',
+        branchId: branchA,
+      })
+      await setDeviceStatus(
+        { businessId },
+        { deviceId: r.id, expectedStatus: 'IN_STOCK', nextStatus: 'SOLD', eventType: 'SOLD' },
+      )
+      const d = await getDevice(actor, r.id)
+      expect(d.events.map((e) => e.eventType)).toEqual(['PURCHASED', 'SOLD'])
+    })
+
+    it('refuses a duplicate serial across the whole business', async () => {
+      const serial = `DUP-${stamp % 100000}-Z`
+      await createDevice(actor, ctx, {
+        productId: laptopProductId,
+        identifiers: [serial],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      await expect(
+        createDevice(actor, ctx, {
+          productId: speakerProductId,
+          identifiers: [serial],
+          mainType: 'NEW',
+          branchId: branchA,
+        }),
+      ).rejects.toThrow(/already belongs/i)
+    })
+  })
+
+  describe('battery health', () => {
+    it('records a reading on a used handset', async () => {
+      const r = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(300)],
+        mainType: 'USED',
+        batteryHealthPercent: 87,
+        branchId: branchA,
+      })
+      const d = await getDevice(actor, r.id)
+      expect(d.device.batteryHealthPercent).toBe(87)
+    })
+
+    it('is optional — sealed new stock has no meaningful reading', async () => {
+      const r = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(301)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      const d = await getDevice(actor, r.id)
+      expect(d.device.batteryHealthPercent).toBeNull()
+    })
+
+    it('is available on laptops too, not just phones', async () => {
+      const cat = await createCategory(actor, ctx, {
+        name: 'Battery laptops',
+        isSerialised: true,
+        identifierType: 'SERIAL',
+      })
+      const { id: productId } = await createProduct(actor, ctx, {
+        name: 'ThinkPad X1',
+        categoryId: cat.id,
+      })
+      const r = await createDevice(actor, ctx, {
+        productId,
+        identifiers: [`BAT-${stamp % 100000}`],
+        mainType: 'USED',
+        batteryHealthPercent: 72,
+        branchId: branchA,
+      })
+      expect((await getDevice(actor, r.id)).device.batteryHealthPercent).toBe(72)
+    })
+
+    it('refuses an impossible percentage at the DATABASE', async () => {
+      // Bypassing the service, as an import or a script would.
+      for (const bad of [0, 101, -5]) {
+        await expect(
+          db.insert(schema.deviceUnit).values({
+            businessId,
+            productId: mobileProductId,
+            mainType: 'USED',
+            batteryHealthPercent: bad,
+          }),
+          `battery ${bad}%`,
+        ).rejects.toThrow(/battery_health_percent_range/i)
+      }
+    })
+  })
+
+  describe('stock counting — the shopkeeper question', () => {
+    it('two identical handsets show as a stock of 2, not "tracked by IMEI"', async () => {
+      const { listProducts, getProduct } = await import('@/server/services/product.service')
+      const cat = await createCategory(actor, ctx, {
+        name: 'Phones for counting',
+        isSerialised: true,
+        identifierType: 'IMEI',
+      })
+      const { id: productId } = await createProduct(actor, ctx, {
+        name: 'iPhone 15 128GB',
+        categoryId: cat.id,
+      })
+
+      // Two NEW units of the same variant, same branch.
+      for (const n of [1, 2]) {
+        await createDevice(actor, ctx, {
+          productId,
+          identifiers: [imei(200 + n)],
+          mainType: 'NEW',
+          colour: 'Black',
+          branchId: branchA,
+        })
+      }
+
+      const { rows } = await listProducts(actor, { search: 'iPhone 15 128GB', page: 1, pageSize: 10 })
+      const row = rows.find((r) => r.id === productId)
+      expect(row?.quantity, 'two handsets in stock should read as 2').toBe(2)
+
+      // And a third at another branch is counted separately.
+      await createDevice(actor, ctx, {
+        productId,
+        identifiers: [imei(203)],
+        mainType: 'NEW',
+        branchId: branchB,
+      })
+      const detail = await getProduct(actor, productId)
+      const byBranch = Object.fromEntries(detail.stock.map((s) => [s.branchId, s.quantity]))
+      expect(byBranch[branchA]).toBe(2)
+      expect(byBranch[branchB]).toBe(1)
+
+      // Selling one drops the count with no separate quantity to maintain.
+      const sold = await listDevices(actor, { productId, branchId: branchA, page: 1, pageSize: 5 })
+      await setDeviceStatus(
+        { businessId },
+        {
+          deviceId: sold.rows[0]!.id,
+          expectedStatus: 'IN_STOCK',
+          nextStatus: 'SOLD',
+          eventType: 'SOLD',
+        },
+      )
+      const after = await listProducts(actor, {
+        search: 'iPhone 15 128GB',
+        page: 1,
+        pageSize: 10,
+      })
+      expect(after.rows.find((r) => r.id === productId)?.quantity).toBe(2)
+    })
+
+    it('a counted accessory still reports its branch_stock total', async () => {
+      const { listProducts } = await import('@/server/services/product.service')
+      const { rows } = await listProducts(actor, { page: 1, pageSize: 100 })
+      const cable = rows.find((r) => r.id === accessoryProductId)
+      expect(cable?.isSerialised).toBe(false)
+      expect(cable?.quantity).toBeGreaterThan(0)
+    })
+  })
+
   it('records device events without a status change too', async () => {
     const r = await createDevice(actor, ctx, {
       productId: mobileProductId,
-      imeis: [imei(95)],
+      identifiers: [imei(95)],
       mainType: 'ACT',
       branchId: branchA,
     })
