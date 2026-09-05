@@ -105,17 +105,39 @@ export async function moveStock(
   return { quantityAfter: row.quantity }
 }
 
+/**
+ * Both take a POSITIVE quantity and apply the direction themselves. Passing a
+ * negative number is a mistake - it almost certainly means the caller wanted
+ * the other function - so it is refused rather than silently absolved by
+ * Math.abs, which once turned a reversal into a restock.
+ */
+function assertPositive(quantity: number, fn: string) {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new AppError(
+      `${fn} takes a positive quantity; use the other one to move stock the other way.`,
+      500,
+      'BAD_STOCK_CALL',
+    )
+  }
+}
+
 export const increaseStock = (
   ctx: StockContext,
   input: { productId: number; branchId: number; quantity: number; movement: MovementType },
   tx: DbOrTx = db,
-) => moveStock(ctx, { ...input, delta: Math.abs(input.quantity) }, tx)
+) => {
+  assertPositive(input.quantity, 'increaseStock')
+  return moveStock(ctx, { ...input, delta: input.quantity }, tx)
+}
 
 export const decreaseStock = (
   ctx: StockContext,
   input: { productId: number; branchId: number; quantity: number; movement: MovementType },
   tx: DbOrTx = db,
-) => moveStock(ctx, { ...input, delta: -Math.abs(input.quantity) }, tx)
+) => {
+  assertPositive(input.quantity, 'decreaseStock')
+  return moveStock(ctx, { ...input, delta: -input.quantity }, tx)
+}
 
 export async function getStock(productId: number, branchId: number, tx: DbOrTx = db) {
   const rows = await tx
@@ -168,7 +190,17 @@ export async function appendDeviceEvent(
  * whole lifecycle can be read - and tested - in one place (PRD §5.2).
  */
 const ALLOWED_TRANSITIONS: Record<DeviceStatus, DeviceStatus[]> = {
-  IN_STOCK: ['RESERVED', 'SOLD', 'SOLD_PENDING_IMPORT', 'IN_TRANSIT', 'DAMAGED', 'LOST', 'REPAIR'],
+  IN_STOCK: [
+    'RESERVED',
+    'SOLD',
+    'SOLD_PENDING_IMPORT',
+    'IN_TRANSIT',
+    'DAMAGED',
+    'LOST',
+    'REPAIR',
+    // Only reachable by reversing the purchase that created the unit.
+    'VOIDED',
+  ],
   RESERVED: ['IN_STOCK', 'SOLD', 'SOLD_PENDING_IMPORT'],
   SOLD: ['RETURNED'],
   SOLD_PENDING_IMPORT: ['SOLD', 'RETURNED', 'IN_STOCK'],
@@ -178,6 +210,8 @@ const ALLOWED_TRANSITIONS: Record<DeviceStatus, DeviceStatus[]> = {
   DAMAGED: ['REPAIR', 'IN_STOCK', 'LOST'],
   REPAIR: ['IN_STOCK', 'DAMAGED', 'LOST'],
   LOST: ['IN_STOCK'],
+  // Terminal: a voided unit never re-enters stock.
+  VOIDED: [],
 }
 
 export function canTransition(from: DeviceStatus, to: DeviceStatus): boolean {

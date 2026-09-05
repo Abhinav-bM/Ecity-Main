@@ -50,6 +50,27 @@
       "when": 1788632185443,
       "tag": "0006_m2_battery_health",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788636739607,
+      "tag": "0007_m3_purchases",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788637091422,
+      "tag": "0008_m3_voided_device",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788637309078,
+      "tag": "0009_m3_sequence_nulls",
+      "breakpoints": true
     }
   ]
 }

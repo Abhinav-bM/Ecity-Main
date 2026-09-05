@@ -7,12 +7,15 @@
  * M2: categories, brands, products, per-branch stock, and the serialised
  *     device model - device_unit, device_identifier and the append-only
  *     device_event ledger that M9's IMEI history is read from.
+ * M3: purchases and their lines, the append-only supplier ledger, supplier
+ *     payments and their allocations, and gapless document numbering.
  *
  * Conventions that apply to every table added from here on:
  *  - Money is ALWAYS bigint paise. Never numeric, never float. (docs/03 §4.1)
  *  - Nothing is hard-deleted; records carry a status. (docs/02 §2.2 rule 4)
  *  - Every table carries created/updated audit columns.
  */
+import { sql } from 'drizzle-orm'
 import {
   bigserial,
   bigint,
@@ -61,6 +64,8 @@ export const deviceStatusEnum = pgEnum('device_status', [
   'LOST',
   'REPAIR',
   'IN_TRANSIT',
+  /** Its purchase was reversed. Kept for history; never sellable. */
+  'VOIDED',
 ])
 
 /**
@@ -70,6 +75,24 @@ export const deviceStatusEnum = pgEnum('device_status', [
  * identifier differs.
  */
 export const identifierTypeEnum = pgEnum('identifier_type', ['IMEI', 'SERIAL', 'NONE'])
+
+export const purchaseStatusEnum = pgEnum('purchase_status', [
+  'DRAFT',
+  'CONFIRMED',
+  'REVERSED',
+])
+
+/** PRD FR-5.12. Derived from what has been allocated against the purchase. */
+export const paymentStatusEnum = pgEnum('payment_status', ['UNPAID', 'PARTIAL', 'PAID'])
+
+/** Append-only supplier ledger. Positive increases what the shop owes. */
+export const supplierLedgerEnum = pgEnum('supplier_ledger_entry_type', [
+  'OPENING',
+  'PURCHASE',
+  'PAYMENT',
+  'REVERSAL',
+  'ADJUSTMENT',
+])
 
 /** Which system bills this device (PRD FR-38.1). NEW defaults to EXTERNAL. */
 export const salesChannelEnum = pgEnum('sales_channel', ['ECITY', 'EXTERNAL', 'BOTH'])
@@ -745,6 +768,12 @@ export const deviceUnit = pgTable(
     taxRateId: bigint('tax_rate_id', { mode: 'number' }).references(() => taxRate.id),
 
     supplierId: bigint('supplier_id', { mode: 'number' }).references(() => supplier.id),
+    /**
+     * The purchase line that brought this unit in, when it came through a
+     * purchase rather than opening stock. Reversal uses it to find every unit
+     * a purchase created, and M9 uses it to link the history back to the bill.
+     */
+    purchaseItemId: bigint('purchase_item_id', { mode: 'number' }),
     purchaseDate: timestamp('purchase_date', { withTimezone: true }),
     warrantyMonths: smallint('warranty_months'),
     warrantyExpiresAt: timestamp('warranty_expires_at', { withTimezone: true }),
@@ -833,6 +862,222 @@ export const deviceEvent = pgTable(
     index('device_event_type_idx').on(t.eventType, t.occurredAt),
   ],
 )
+
+
+/* =============================================================== M3 tables */
+
+/**
+ * Gapless per-business document numbering (PRD FR-2.2, FR-26.3).
+ *
+ * A counter row locked with SELECT ... FOR UPDATE, so two people confirming a
+ * purchase at the same moment cannot take the same number. M4 reuses this for
+ * invoices, with `kind` and an optional branch scope.
+ */
+export const documentSequence = pgTable(
+  'document_sequence',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** 'purchase' | 'invoice' | ... */
+    kind: text('kind').notNull(),
+    /** Null for a business-wide series; set for a per-branch one. */
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+    prefix: text('prefix').notNull().default(''),
+    nextNumber: integer('next_number').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /**
+     * The real index carries NULLS NOT DISTINCT - see
+     * drizzle/0009_m3_sequence_nulls.sql. A business-wide series has a NULL
+     * branch, and two NULLs must collide for ON CONFLICT to find the existing
+     * counter; without it every call inserted a fresh counter at 1 and two
+     * purchases could take the same number.
+     *
+     * drizzle-kit's builder cannot express NULLS NOT DISTINCT in this version,
+     * so if a future `db:generate` proposes dropping and recreating this
+     * index, keep the migration's definition.
+     */
+    uniqueIndex('document_sequence_uq').on(t.businessId, t.kind, t.branchId),
+  ],
+)
+
+/**
+ * A purchase from a supplier (PRD FR-5.8). Confirming it is what actually
+ * moves stock; a draft moves nothing.
+ */
+export const purchase = pgTable(
+  'purchase',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    supplierId: bigint('supplier_id', { mode: 'number' })
+      .notNull()
+      .references(() => supplier.id),
+    purchaseNumber: text('purchase_number').notNull(),
+    /** The supplier's own bill number, when they gave one. */
+    supplierInvoiceNumber: text('supplier_invoice_number'),
+    purchaseDate: timestamp('purchase_date', { withTimezone: true }).notNull().defaultNow(),
+    status: purchaseStatusEnum('status').notNull().default('DRAFT'),
+
+    /** Money is bigint paise throughout (docs/03 §4.1). */
+    subtotalPaise: bigint('subtotal_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    discountPaise: bigint('discount_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    taxPaise: bigint('tax_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    totalPaise: bigint('total_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+
+    notes: text('notes'),
+    source: recordSourceEnum('source').notNull().default('ECITY'),
+
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversalReason: text('reversal_reason'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+    updatedBy: bigint('updated_by', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('purchase_number_uq').on(t.businessId, t.purchaseNumber),
+    index('purchase_supplier_idx').on(t.supplierId, t.purchaseDate),
+    index('purchase_branch_idx').on(t.branchId, t.purchaseDate),
+    index('purchase_status_idx').on(t.businessId, t.status),
+  ],
+)
+
+export const purchaseItem = pgTable(
+  'purchase_item',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    purchaseId: bigint('purchase_id', { mode: 'number' })
+      .notNull()
+      .references(() => purchase.id, { onDelete: 'cascade' }),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => product.id),
+    /**
+     * For a serialised line this must equal the number of identifiers
+     * supplied - five IMEIs means five handsets, never four.
+     */
+    quantity: integer('quantity').notNull(),
+    unitCostPaise: bigint('unit_cost_paise', { mode: 'bigint' }).notNull(),
+    discountPaise: bigint('discount_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    taxRateId: bigint('tax_rate_id', { mode: 'number' }).references(() => taxRate.id),
+    taxPaise: bigint('tax_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    lineTotalPaise: bigint('line_total_paise', { mode: 'bigint' }).notNull(),
+    /** Denormalised from the product so reversal need not join. */
+    isSerialised: boolean('is_serialised').notNull().default(false),
+    /** Serialised lines carry these onto every unit they create. */
+    mainType: mainTypeEnum('main_type'),
+    isNewCut: boolean('is_new_cut').notNull().default(false),
+    newCutNotes: text('new_cut_notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('purchase_item_purchase_idx').on(t.purchaseId),
+    index('purchase_item_product_idx').on(t.productId),
+  ],
+)
+
+/**
+ * What the shop owes each supplier (PRD FR-14.1). Append-only: the balance is
+ * always the sum of these rows, never a stored number that can drift.
+ * Positive increases the debt, negative reduces it.
+ */
+export const supplierLedgerEntry = pgTable(
+  'supplier_ledger_entry',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' }).notNull(),
+    supplierId: bigint('supplier_id', { mode: 'number' })
+      .notNull()
+      .references(() => supplier.id),
+    /** Where it happened. Suppliers are shared, but the money is a branch's. */
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+    entryType: supplierLedgerEnum('entry_type').notNull(),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    refType: text('ref_type'),
+    refId: bigint('ref_id', { mode: 'number' }),
+    note: text('note'),
+    actorId: bigint('actor_id', { mode: 'number' }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('supplier_ledger_supplier_idx').on(t.supplierId, t.occurredAt),
+    index('supplier_ledger_ref_idx').on(t.refType, t.refId),
+  ],
+)
+
+/** A payment made to a supplier (PRD FR-14.2). */
+export const supplierPayment = pgTable(
+  'supplier_payment',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    supplierId: bigint('supplier_id', { mode: 'number' })
+      .notNull()
+      .references(() => supplier.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    paymentMethodId: bigint('payment_method_id', { mode: 'number' })
+      .notNull()
+      .references(() => paymentMethod.id),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    paidOn: timestamp('paid_on', { withTimezone: true }).notNull().defaultNow(),
+    reference: text('reference'),
+    notes: text('notes'),
+    /** Voided rather than deleted (docs/02 §2.2 rule 4). */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('supplier_payment_supplier_idx').on(t.supplierId, t.paidOn),
+    index('supplier_payment_branch_idx').on(t.branchId, t.paidOn),
+  ],
+)
+
+/**
+ * Which purchases a payment settled. Without this a supplier balance is known
+ * but no individual purchase could report Paid / Partial / Unpaid (FR-5.12).
+ */
+export const supplierPaymentAllocation = pgTable(
+  'supplier_payment_allocation',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    paymentId: bigint('payment_id', { mode: 'number' })
+      .notNull()
+      .references(() => supplierPayment.id, { onDelete: 'cascade' }),
+    purchaseId: bigint('purchase_id', { mode: 'number' })
+      .notNull()
+      .references(() => purchase.id),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('supplier_allocation_payment_idx').on(t.paymentId),
+    index('supplier_allocation_purchase_idx').on(t.purchaseId),
+  ],
+)
+
+export type Purchase = typeof purchase.$inferSelect
+export type PurchaseItem = typeof purchaseItem.$inferSelect
+export type SupplierPayment = typeof supplierPayment.$inferSelect
+export type SupplierLedgerEntry = typeof supplierLedgerEntry.$inferSelect
+export type PurchaseStatus = (typeof purchaseStatusEnum.enumValues)[number]
+export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number]
 
 export type Category = typeof category.$inferSelect
 export type Brand = typeof brand.$inferSelect

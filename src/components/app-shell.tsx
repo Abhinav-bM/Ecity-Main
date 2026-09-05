@@ -10,11 +10,13 @@ import {
   LayoutDashboard,
   Menu,
   ScrollText,
+  Receipt,
   Settings,
   ShieldCheck,
   Smartphone,
   Truck,
   UserRound,
+  Wallet,
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -53,6 +55,18 @@ const NAV: NavGroup[] = [
         label: 'Low stock',
         icon: AlertTriangle,
         permission: 'inventory.view',
+      },
+    ],
+  },
+  {
+    heading: 'Purchases',
+    items: [
+      { href: '/purchases', label: 'Purchases', icon: Receipt, permission: 'purchase.view' },
+      {
+        href: '/purchases/supplier-dues',
+        label: 'Supplier dues',
+        icon: Wallet,
+        permission: 'supplier_payment.view',
       },
     ],
   },
@@ -98,6 +112,22 @@ function NavLinks({
   pathname: string
   onNavigate?: () => void
 }) {
+  /**
+   * Only the most specific match is active.
+   *
+   * A plain `startsWith` lights up every ancestor, so visiting
+   * /purchases/supplier-dues highlighted both "Suppliers" and "Supplier dues".
+   * Taking the longest matching href means one item is highlighted, always
+   * the right one, however the routes are nested later.
+   */
+  const matches = groups
+    .flatMap((g) => g.items)
+    .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
+  const activeHref = matches.reduce<string | null>(
+    (best, i) => (best === null || i.href.length > best.length ? i.href : best),
+    null,
+  )
+
   return (
     <nav className="space-y-4" aria-label="Main">
       {groups.map((group, i) => (
@@ -108,7 +138,7 @@ function NavLinks({
             </p>
           ) : null}
           {group.items.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
+            const active = item.href === activeHref
             return (
               <Link
                 key={item.href}
@@ -154,9 +184,9 @@ export function AppShell({
 
   const footnote = (
     <p className="text-[11px] leading-relaxed text-muted-foreground">
-      Modules M0–M2 complete.
+      Modules M0–M3 complete.
       <br />
-      Purchases, billing and reporting arrive in M3 onward.
+      Billing and reporting arrive in M4 onward.
     </p>
   )
 

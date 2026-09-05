@@ -12,7 +12,15 @@ import {
 import type { AuthUser } from '@/server/auth/permissions'
 
 /** Entities that may carry files. Keeps entityType from becoming free text. */
-export const ATTACHABLE = ['customer', 'supplier', 'branch', 'business', 'product'] as const
+export const ATTACHABLE = [
+  'customer',
+  'supplier',
+  'branch',
+  'business',
+  'product',
+  // PRD FR-5.13 - supplier bills, photos and PDFs against a purchase.
+  'purchase',
+] as const
 export type Attachable = (typeof ATTACHABLE)[number]
 
 export function isAttachable(value: string): value is Attachable {

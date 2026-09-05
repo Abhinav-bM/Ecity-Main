@@ -51,6 +51,17 @@ export const PERMISSIONS = {
     label: 'See purchase prices and margins',
     description: 'Counter staff normally should not see what stock cost.',
   },
+  // --- M3 purchases ---
+  'purchase.view': { group: 'Purchases', label: 'View purchases' },
+  'purchase.manage': { group: 'Purchases', label: 'Record purchases' },
+  'purchase.reverse': {
+    group: 'Purchases',
+    label: 'Reverse a purchase',
+    description: 'Undoes stock and the supplier debt. Blocked once any unit has moved on.',
+  },
+  'supplier_payment.view': { group: 'Purchases', label: 'View supplier payments and dues' },
+  'supplier_payment.manage': { group: 'Purchases', label: 'Pay suppliers' },
+
   'device.manage': {
     group: 'Inventory',
     label: 'Create and edit devices (IMEI)',
@@ -94,6 +105,10 @@ export const SYSTEM_ROLES = {
       'inventory.view',
       'inventory.view_cost',
       'device.manage',
+      'purchase.view',
+      'purchase.manage',
+      'supplier_payment.view',
+      'supplier_payment.manage',
     ],
   },
   STAFF: {

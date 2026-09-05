@@ -83,6 +83,26 @@ test.describe('authenticated pages', () => {
     await expect(header).toBeInViewport()
   })
 
+  test('exactly one navigation item is highlighted, the most specific one', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobileProject(testInfo.project.name), 'drawer covers the page on a phone')
+
+    // /purchases/supplier-dues sits under /purchases, so a naive prefix match
+    // would light up both. Only the deepest match may be active.
+    for (const [path, expected] of [
+      ['/purchases', 'Purchases'],
+      ['/purchases/supplier-dues', 'Supplier dues'],
+      ['/suppliers', 'Suppliers'],
+      ['/settings/users', 'Users'],
+    ] as const) {
+      await page.goto(path)
+      const current = page.getByRole('navigation', { name: 'Main' }).locator('[aria-current="page"]')
+      await expect(current, `on ${path}`).toHaveCount(1)
+      await expect(current, `on ${path}`).toHaveText(expected)
+    }
+  })
+
   test('branch switcher is usable and does not overflow the header', async ({ page }) => {
     await page.goto('/dashboard')
     const trigger = page.getByRole('button', { name: /Active branch/ })

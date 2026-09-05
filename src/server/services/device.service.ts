@@ -295,12 +295,19 @@ export async function listDevices(actor: AuthUser, filters: DeviceFilters) {
     conditions.push(scope.length > 0 ? inArray(deviceUnit.currentBranchId, scope) : sql`false`)
   }
 
+  /**
+   * A voided unit - one whose purchase was reversed - is not stock and would
+   * only clutter the list. It stays findable when explicitly asked for, so its
+   * history is never lost.
+   */
+  if (filters.status) conditions.push(eq(deviceUnit.status, filters.status))
+  else conditions.push(sql`${deviceUnit.status} <> 'VOIDED'`)
+
   if (filters.mainType) conditions.push(eq(deviceUnit.mainType, filters.mainType))
   if (filters.globalVariant) {
     conditions.push(eq(deviceUnit.mainType, 'GLOBAL'))
     conditions.push(eq(deviceUnit.isNewCut, filters.globalVariant === 'NEW_CUT'))
   }
-  if (filters.status) conditions.push(eq(deviceUnit.status, filters.status))
   if (filters.brandId) conditions.push(eq(product.brandId, filters.brandId))
   if (filters.categoryId) conditions.push(eq(product.categoryId, filters.categoryId))
   if (filters.productId) conditions.push(eq(deviceUnit.productId, filters.productId))

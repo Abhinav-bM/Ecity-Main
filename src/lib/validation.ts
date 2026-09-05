@@ -348,3 +348,70 @@ export const minQuantitySchema = z.object({
   branchId: z.coerce.number().int().positive(),
   minQuantity: z.coerce.number().int().min(0).max(100000),
 })
+
+/* ============================================================ M3 schemas === */
+
+/**
+ * One purchase line. A serialised line carries its identifiers and the
+ * classification that every unit it creates will inherit; a counted line
+ * carries neither. The server re-checks all of this against the product.
+ */
+export const purchaseLineSchema = z.object({
+  productId: z.coerce.number().int().positive('Choose a product.'),
+  quantity: z.coerce.number().int().min(1, 'At least 1.').max(9999),
+  unitCost: z.coerce.number().min(0, 'Cannot be negative.').max(100_000_000),
+  discount: z.coerce.number().min(0).max(100_000_000).default(0),
+  taxRateId: z.preprocess(
+    (v) => (v === '' || v === undefined || v === null ? null : v),
+    z.coerce.number().int().positive().nullable(),
+  ),
+  identifiers: z.array(z.string().trim()).default([]),
+  mainType: z.enum(MAIN_TYPES).optional(),
+  isNewCut: z.boolean().default(false),
+  newCutNotes: optionalText(300),
+})
+
+export const purchaseSchema = z.object({
+  supplierId: z.coerce.number().int().positive('Choose a supplier.'),
+  branchId: z.coerce.number().int().positive('Choose a branch.'),
+  purchaseDate: z.string().trim().optional().or(z.literal('')),
+  supplierInvoiceNumber: optionalText(60),
+  notes: optionalText(1000),
+  lines: z.array(purchaseLineSchema).min(1, 'Add at least one line.'),
+})
+
+export const reversePurchaseSchema = z.object({
+  reason: z.string().trim().min(3, 'Give a reason — it goes on the audit trail.').max(300),
+})
+
+export const supplierPaymentSchema = z.object({
+  supplierId: z.coerce.number().int().positive('Choose a supplier.'),
+  branchId: z.coerce.number().int().positive('Choose a branch.'),
+  paymentMethodId: z.coerce.number().int().positive('Choose a payment method.'),
+  amount: z.coerce.number().positive('Enter an amount.').max(100_000_000),
+  paidOn: z.string().trim().optional().or(z.literal('')),
+  reference: optionalText(80),
+  notes: optionalText(500),
+  /** Empty means allocate oldest-first. */
+  allocations: z
+    .array(
+      z.object({
+        purchaseId: z.coerce.number().int().positive(),
+        amount: z.coerce.number().min(0),
+      }),
+    )
+    .default([]),
+})
+
+export const voidPaymentSchema = z.object({
+  reason: z.string().trim().min(3, 'Give a reason.').max(300),
+})
+
+export const purchaseQuerySchema = z.object({
+  search: z.string().trim().max(80).optional(),
+  supplierId: z.coerce.number().int().positive().optional(),
+  branchId: z.coerce.number().int().positive().optional(),
+  status: z.enum(['DRAFT', 'CONFIRMED', 'REVERSED']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+})
