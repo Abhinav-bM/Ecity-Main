@@ -32,6 +32,12 @@ It upserts, so it is safe to repeat.
 | `manager@ecity.local` | `ChangeMe!2026` | Branch Manager | MAIN only (7 permissions) |
 | `staff@ecity.local` | `ChangeMe!2026` | Staff | MAIN only (3 permissions) |
 
+`ChangeMe!2026` is only the fallback the seed uses when `SEED_PASSWORD` is not
+set — which is the normal case on your own machine. **On staging or any
+deployed server the password is whatever `SEED_PASSWORD` was set to** in that
+server's `.env`; the accounts above are otherwise identical. Read it back with
+`grep SEED_PASSWORD ~/app/.env`.
+
 Use a **private/incognito window** to hold a second session, so you can be two
 users at once without signing out.
 
