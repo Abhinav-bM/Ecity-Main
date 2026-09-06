@@ -28,6 +28,8 @@ COPY src/server/db ./src/server/db
 # env.ts is what db/index.ts reads its connection string through; without it
 # the role sync would crash on a module it cannot resolve.
 COPY src/server/env.ts ./src/server/env.ts
+# The seed hashes the demo passwords, so it needs the auth helpers too.
+COPY src/server/auth ./src/server/auth
 COPY src/lib ./src/lib
 ENV NODE_ENV=production
 CMD ["npm", "run", "db:migrate"]

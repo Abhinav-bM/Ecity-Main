@@ -1,0 +1,13 @@
+# Replace SERVER_IP with your Vultr server's IP, digits and all.
+#
+# sslip.io is a free public DNS service that resolves any <ip>.sslip.io to that
+# IP. It means staging gets a real hostname and a real Let's Encrypt
+# certificate without buying a domain — which matters, because the session
+# cookie is Secure in production mode and so login simply will not work over
+# plain HTTP.
+#
+# When you buy a real domain, replace this whole line with it.
+SERVER_IP.sslip.io {
+	encode gzip
+	reverse_proxy app:3000
+}

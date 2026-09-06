@@ -395,8 +395,13 @@ repository secrets under Settings → Secrets and variables → Actions.
 
 ### 6.2 Standing up staging (M5)
 
+**There is a step-by-step walkthrough for Vultr Mumbai at
+`deploy/staging/README.md`**, with the compose file, Caddyfile and `.env`
+template beside it, already filled in for this repository. Follow that. The
+summary below is what it does and why.
+
 Everything above is written and committed. What is left needs **your provider
-account and card**, so it cannot be automated from here. Roughly 30 minutes:
+account and card**, so it cannot be automated from here. Roughly 40 minutes:
 
 1. **Create the server.** Follow §3 exactly, but name it `ecity-staging`. A
    The smallest 1 GB instance in an India region is enough for staging
@@ -412,8 +417,12 @@ account and card**, so it cannot be automated from here. Roughly 30 minutes:
 4. **Write `.env`** with a *staging* `DATABASE_URL`, a freshly generated
    `AUTH_SECRET` (`openssl rand -base64 32`), and `POSTGRES_PASSWORD`. Never
    reuse production values.
-5. **Point DNS** at the IP: `staging.yourdomain.com`, and set that hostname in
-   the `Caddyfile` so TLS is issued automatically.
+5. **Give it a hostname.** The session cookie is *Secure* in production mode,
+   so a bare `http://<ip>` shows the login page and then silently refuses to
+   log anyone in — HTTPS is not optional. Staging avoids buying a domain by
+   using `<ip>.sslip.io`, a free public DNS service that resolves any such name
+   to that IP; Caddy then gets a real certificate for it automatically. Swap in
+   a proper domain whenever you buy one.
 6. **Give GitHub the keys.** Repository → Settings → Secrets → Actions:
    `SSH_HOST` = the IP, `SSH_KEY` = the private key that matches the one you
    put on the server.
