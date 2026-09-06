@@ -6,6 +6,15 @@ services:
     # Matches the version in docs/05-Database-Guide.md.
     image: postgres:17-alpine
     restart: unless-stopped
+    # Tuned for a 1-2 GB VPS (docs/04 §1.4). The defaults assume a far bigger
+    # machine and will get something OOM-killed at the worst moment.
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
     environment:
       POSTGRES_USER: ecity
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

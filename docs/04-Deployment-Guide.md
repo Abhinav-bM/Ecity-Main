@@ -4,38 +4,92 @@
 
 You need one thing: **a small Linux server on the internet**, rented by the month. That is it. Everything else — the app, the database, the web server — runs inside that one machine as Docker containers.
 
-That kind of rented machine is called a **VPS** (Virtual Private Server) or a "cloud instance". Several companies sell them, and they are direct competitors — you buy from **one** of them, not through AWS:
+That kind of rented machine is called a **VPS** (Virtual Private Server) or a "cloud instance". Several companies sell them, and they are direct competitors — you buy from **one** of them, not through AWS.
 
-| Provider | Where you buy it | Nearest region to India | 2 vCPU / 4 GB per month |
-|---|---|---|---|
-| **Hetzner** (recommended) | `hetzner.com/cloud` | Singapore | **≈ ₹400–600** |
-| DigitalOcean | `digitalocean.com` | Bangalore, India | ≈ ₹1,060 + 18% GST |
-| AWS Lightsail | `aws.amazon.com/lightsail` | Mumbai, India | ≈ ₹1,050 + 18% GST |
-| Linode / Akamai | `linode.com` | Mumbai, India | ≈ ₹1,060 + 18% GST |
+> **Revised September 2026.** This section originally recommended Hetzner
+> Singapore at ≈₹400–600. Two things have since made that advice wrong, and
+> both were found the hard way when the server was actually being bought:
+>
+> 1. **Hetzner's CX line is EU-only.** Singapore never had CX22 or CX23 — it
+>    sells the AMD `CPX` line instead. The old instruction to pick "CX22 in
+>    Singapore" described a machine that does not exist.
+> 2. **Hetzner raised cloud prices sharply on 15 June 2026.** CX22 went from
+>    €7.99 to **€19.49/month** — a 144% rise. Comparable CPX increases were
+>    around 170–190%.
+>
+> The result is that Hetzner is no longer the cheap option. It is now the most
+> expensive of the realistic choices *and* the furthest away.
 
-**Hetzner is a separate company from AWS.** You create an account on their own website and pay them directly. They bill from the EU and do not add 18% GST for Indian customers, which is part of why they land so much cheaper.
+### 1.1 What things actually cost now
 
-Note the two Hetzner products: **Hetzner Cloud** (`console.hetzner.cloud`) is what you want — servers by the hour, resize any time. Hetzner "Robot" sells physical dedicated machines; ignore it.
+Verify each of these yourself before paying — as the box above shows, they move.
 
-### 1.1 The one trade-off
+| Provider | Nearest region | Specs | Per month | Latency from Kerala |
+|---|---|---|---|---|
+| **Vultr** (recommended) | **Mumbai** | 1 vCPU / 2 GB / 55 GB / 2 TB | **$10 ≈ ₹880** + 18% GST | ~20–30 ms |
+| DigitalOcean | Bangalore | 1 vCPU / 2 GB / 50 GB / 2 TB | $12 ≈ ₹1,060 + 18% GST | ~20–30 ms |
+| AWS Lightsail | Mumbai | 2 vCPU / 2 GB / 60 GB / 3 TB | $12 ≈ ₹1,060 + 18% GST | ~20–30 ms |
+| Hetzner | Helsinki (EU) | 2 vCPU / 4 GB / 40 GB | €19.49 ≈ ₹2,000, no GST | ~150 ms |
 
-Hetzner has no India region. Their closest is **Singapore**, about **60–90 ms** away from an Indian shop. DigitalOcean Bangalore is about **20 ms**. On a billing screen 60–90 ms is not noticeable — it is well under the 300 ms target in the PRD. If it ever bothers the staff, moving to DigitalOcean Bangalore is the same setup on a different provider, for roughly ₹800 more a month.
+**Recommendation: an India region, on Vultr Mumbai or DigitalOcean Bangalore.**
+It is now cheaper than Hetzner, three times closer, and it keeps the shop's
+sales records inside India — which is one fewer thing to explain to a CA. Pick
+Vultr on price, DigitalOcean if you would rather have the friendlier control
+panel and much better beginner documentation; the difference is about ₹200 a
+month.
 
-**Recommendation: start on Hetzner Singapore.** Switch only if latency turns out to be a real complaint.
+Nothing in this guide is Hetzner-specific. Every provider gives you the same
+thing: an Ubuntu machine and an IP address. §3 onwards applies unchanged.
 
-### 1.2 Total monthly cost
+### 1.2 You do not need production yet
+
+Right now you need **staging** — somewhere the Alpha can be shown. Production
+does not exist until go-live (M14). So buy the smaller machine now and size
+production properly later, when you know the real load:
+
+- **Staging today:** the smallest 1 GB instance (Vultr $5–6 ≈ ₹500 + GST). The
+  server never compiles anything — it pulls a pre-built image — so 1 GB is
+  enough for Postgres, the app and Caddy with room to spare.
+- **Production at go-live:** 2 GB. Revisit then; a year of prices moving means
+  any number written here today will be wrong by then.
+
+### 1.3 Total monthly cost
+
+For **staging only**, which is where the project is now:
 
 | Item | ₹ / month |
 |---|---|
-| Hetzner CX22 server (2 vCPU, 4 GB RAM, 40 GB SSD) | ~₹400–600 |
-| Hetzner automated snapshots (+20%) | ~₹90 |
+| 1 GB VPS in an India region | ~₹500 + GST |
+| Provider automated backups (+20%) | ~₹100 |
 | Cloudflare R2 — file storage + off-site backups (free tier, 10 GB) | ₹0 |
 | Resend — transactional email (free tier, 3,000/month) | ₹0 |
 | Sentry — error tracking (free tier) | ₹0 |
 | Domain name (`.in`, ~₹800/year) | ~₹70 |
-| **Total** | **≈ ₹550–750** |
+| **Total** | **≈ ₹700–800** |
 
-Confirm the Hetzner Singapore price on their pricing page before you commit — regional prices differ from the German list price, and there may be a small one-time setup fee.
+Add roughly **₹500–600** more when production comes up on a 2 GB instance
+alongside it. The original ₹550–750 estimate for a *production* box no longer
+holds: the honest figure today is **₹1,200–1,400 all-in** once both are
+running. That is the market moving, not a change of plan — and it is still an
+order of magnitude below what a managed platform would charge.
+
+### 1.4 A 2 GB box needs Postgres told to be modest
+
+The defaults assume a machine with far more memory. On a 1–2 GB instance, add
+this to the `db` service in `docker-compose.prod.yml`:
+
+```yaml
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
+```
+
+Without it Postgres will happily reserve more than the box has and the kernel
+will kill something — usually the app, at the worst possible moment.
 
 ---
 
@@ -43,7 +97,9 @@ Confirm the Hetzner Singapore price on their pricing page before you commit — 
 
 Do these four things before touching any code. Budget about an hour.
 
-**2.1 Create a Hetzner Cloud account** — `hetzner.com` → Cloud → Sign Up. You will need a credit/debit card or PayPal. New accounts are sometimes asked for an identity document (passport or ID card) before the first server can be created; this is normal and usually clears within a few hours. Start this first so the wait does not block you.
+**2.1 Create an account with your chosen provider** (see §1.1 — Vultr Mumbai or DigitalOcean Bangalore). You will need a credit/debit card. New accounts are sometimes asked for an identity document before the first server can be created; this is normal and usually clears within a few hours. Start this first so the wait does not block you.
+
+*If you already opened a Hetzner account:* keep it, it costs nothing dormant. Their Singapore region does not sell the machine this guide assumed, and their EU prices tripled in June 2026 — see §1.1.
 
 **2.2 Buy a domain name.** Any registrar works — Namecheap, Cloudflare Registrar, or an Indian registrar like BigRock. A `.in` domain runs about ₹800/year. You will point it at the server in §5.
 
@@ -71,13 +127,13 @@ The `.pub` file is the **public** key and is safe to paste anywhere. The file wi
 
 ### 3.2 Create the server
 
-In the Hetzner Cloud console → **New Project** (call it `ecity`) → **Add Server**:
+In your provider's console, create a project called `ecity` and add a server. The labels differ slightly between providers; the choices are the same:
 
 | Setting | Choose |
 |---|---|
-| Location | **Singapore** |
+| Location | **Mumbai** or **Bangalore** — whichever your provider offers |
 | Image | **Ubuntu 24.04 LTS** |
-| Type | **Shared vCPU → CX22** (2 vCPU, 4 GB RAM, 40 GB) |
+| Type | Shared/Regular vCPU, **1 GB for staging** or **2 GB for production** (§1.2) |
 | Networking | IPv4 + IPv6 (both on) |
 | SSH keys | **Add the public key you just copied** |
 | Volumes / Placement | skip |
@@ -112,7 +168,7 @@ apt update && apt upgrade -y
 apt install -y ufw fail2ban unattended-upgrades
 dpkg-reconfigure --priority=low unattended-upgrades
 
-# 3. host firewall (second layer behind Hetzner's)
+# 3. host firewall (second layer behind the provider's own)
 ufw allow OpenSSH
 ufw allow 80/tcp
 ufw allow 443/tcp
@@ -126,7 +182,7 @@ sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' \
 systemctl restart ssh
 ```
 
-Now open a **second** terminal and confirm `ssh ecity@YOUR_SERVER_IP` works before closing the first one. If you lock yourself out, Hetzner's web console gets you back in — but check first anyway.
+Now open a **second** terminal and confirm `ssh ecity@YOUR_SERVER_IP` works before closing the first one. If you lock yourself out, your provider's web console gets you back in — but check first anyway.
 
 ### 3.4 Install Docker
 
@@ -339,11 +395,12 @@ repository secrets under Settings → Secrets and variables → Actions.
 
 ### 6.2 Standing up staging (M5)
 
-Everything above is written and committed. What is left needs **your Hetzner
+Everything above is written and committed. What is left needs **your provider
 account and card**, so it cannot be automated from here. Roughly 30 minutes:
 
 1. **Create the server.** Follow §3 exactly, but name it `ecity-staging`. A
-   CX22 in Singapore is about ₹400/month. Note the IP.
+   The smallest 1 GB instance in an India region is enough for staging
+   (§1.2) — about ₹500/month. Note the IP.
 2. **Harden it.** §3.1 as written — normal user, firewall, no password logins.
 3. **Put the stack on it.**
    ```bash
@@ -379,7 +436,7 @@ site does not load, the problem is DNS or Caddy, not the app — check
 ### 6.3 Two rules about migrations
 
 1. **Always take a backup before a migration that drops or renames anything.** `./backup.sh` first, every time.
-2. **Test every migration on staging before production.** Staging can be a second, smaller Hetzner server (CX22 ≈ ₹400) or just a second Docker stack on the same box using a different database name and port. Cheap either way, and it is what stops a bad migration reaching real sales data.
+2. **Test every migration on staging before production.** Staging can be a second, smaller instance (~₹500) or just a second Docker stack on the same box using a different database name and port. Cheap either way, and it is what stops a bad migration reaching real sales data.
 
 ---
 
@@ -389,7 +446,7 @@ You are running your own database now, so backups are entirely your responsibili
 
 | Layer | What it protects against | Frequency |
 |---|---|---|
-| Hetzner snapshots | Server dies, disk corrupts | Daily, automatic |
+| Provider snapshots | Server dies, disk corrupts | Daily, automatic |
 | `pg_dump` to Cloudflare R2 | Bad migration, wrong DELETE, provider outage | Nightly, off-site |
 | Restore drill | Backups that were never actually valid | **Monthly, by hand** |
 
@@ -502,14 +559,14 @@ docker compose exec db psql -U ecity ecity
 df -h && free -m && docker system df
 ```
 
-**Resizing the server** (when 10 branches actually arrive): Hetzner console → Server → Rescale → CX32 (4 vCPU / 8 GB). It reboots once, takes about a minute, and nothing else changes. You can scale up freely; scaling disk down is not possible, so do not over-provision the disk early.
+**Resizing the server** (when 10 branches actually arrive): provider console → Server → Resize → the next tier up (4 vCPU / 8 GB). It reboots once, takes about a minute, and nothing else changes. You can scale up freely; scaling disk down is not possible on any of these providers, so do not over-provision the disk early.
 
 ---
 
 ## 10. Go-Live Checklist
 
-- [ ] Hetzner account verified, CX22 in Singapore running, snapshots enabled
-- [ ] Hetzner firewall: only 22, 80, 443 inbound. Port 5432 closed
+- [ ] Provider account verified, instance running in an India region, snapshots enabled
+- [ ] Provider firewall: only 22, 80, 443 inbound. Port 5432 closed
 - [ ] SSH key login working; password login disabled; `ufw` enabled
 - [ ] Domain pointing at the server; HTTPS live with a valid certificate
 - [ ] `.env` present, `chmod 600`, and **not** in git
@@ -534,4 +591,4 @@ df -h && free -m && docker system df
 | Running migrations straight on production | One bad migration, no way back | Staging first, backup immediately before |
 | Disk quietly filling up | Postgres stops accepting writes; the shop stops billing | `docker image prune` on deploy; weekly disk check |
 | Editing files on the server by hand | The next deploy silently overwrites your fix | All changes go through git and CI, always |
-| Only one person holds the SSH key | Nobody can reach the server if that laptop dies | Second key stored securely offline, or Hetzner console access |
+| Only one person holds the SSH key | Nobody can reach the server if that laptop dies | Second key stored securely offline, or provider console access |
