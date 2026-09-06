@@ -65,32 +65,81 @@ web console.
 ssh root@SERVER_IP
 ```
 
-`[server]` — paste this block whole:
+**Paste these in small groups, not all at once.** `apt upgrade` stops on an
+interactive prompt, and anything still sitting in your paste buffer gets eaten
+as answers to it rather than run as commands. Two or three lines at a time.
+
+`[server]` first the user:
 
 ```bash
-# a normal user for day-to-day work
 adduser --disabled-password --gecos "" ecity
 usermod -aG sudo ecity
 rsync --archive --chown=ecity:ecity ~/.ssh /home/ecity/
+passwd ecity
+```
 
-# updates and basic protection
+That last line matters. `--disabled-password` creates the account with no
+password, which is right for key-only SSH login — but `sudo` then has nothing
+to authenticate against and will refuse every time. Set one now and put it in
+your password manager: it is what stops a stolen SSH key from becoming root.
+Recovering from a missed `passwd` means going in through the provider's web
+console, because root SSH is about to be turned off.
+
+Then updates. **Wait for this one to finish before pasting anything else.**
+
+```bash
 apt update && apt upgrade -y
+```
+
+If a purple screen appears asking about a modified `sshd_config`, choose
+**"keep the local version currently installed"** — Tab to `<Ok>`, Enter.
+Installing the maintainer's version would undo the provider's own hardening.
+
+Then brute-force protection and the firewall:
+
+```bash
 apt install -y fail2ban
 systemctl enable --now fail2ban
-
-# host firewall
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow OpenSSH
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
-
-# no password logins at all
-sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-systemctl restart ssh
 ```
+
+Then turn off password logins. **This is not just the main config file.**
+Ubuntu's cloud images ship `/etc/ssh/sshd_config.d/50-cloud-init.conf`
+containing `PasswordAuthentication yes`, and a drop-in overrides the main file
+— so editing only `sshd_config` silently achieves nothing:
+
+```bash
+sed -i 's/^\s*PasswordAuthentication.*/# &/' /etc/ssh/sshd_config.d/*.conf
+cd /etc/ssh/sshd_config.d
+echo 'PasswordAuthentication no' > 01-hardening.conf
+echo 'KbdInteractiveAuthentication no' >> 01-hardening.conf
+echo 'PermitRootLogin no' >> 01-hardening.conf
+sshd -t && systemctl restart ssh
+cd ~
+```
+
+The file is named `01-` deliberately: sshd takes the **first** value it finds,
+so a hardening file has to sort before the cloud-init one. And `sshd -t`
+validates the config, restarting only if it is clean — a typo cannot lock you
+out mid-session.
+
+**Verify it actually took**, rather than assuming:
+
+```bash
+id ecity
+wc -l < /home/ecity/.ssh/authorized_keys
+sshd -T | grep -E 'passwordauth|permitroot|kbdinter'
+ufw status
+systemctl is-active fail2ban
+```
+
+Expect: `ecity` in the `sudo` group, `2` keys, all three ssh settings `no`,
+ufw active with 22/80/443, and fail2ban `active`.
 
 `[laptop]` Open a **second** terminal and check you can get back in **before
 closing the first one**:
