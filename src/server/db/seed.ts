@@ -3,6 +3,7 @@ import { asc, eq, sql } from 'drizzle-orm'
 import { db } from '@/server/db'
 import { hashPassword } from '@/server/auth/password'
 import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions'
+import { syncSystemRoles } from './sync-roles'
 import {
   appUser,
   brand,
@@ -13,7 +14,6 @@ import {
   paymentMethod,
   permission,
   role,
-  rolePermission,
   taxRate,
   userBranch,
 } from './schema'
@@ -72,37 +72,19 @@ async function main() {
     )[0]!
   console.log(`  business: ${biz.name} (#${biz.id})`)
 
-  // 3. System roles
+  // 3. System roles — the same sync the deploy runs, so seeding and
+  //    deploying can never disagree about who may do what.
+  await syncSystemRoles()
   const roleIds: Record<string, number> = {}
-  for (const [code, def] of Object.entries(SYSTEM_ROLES)) {
-    const existing = await db
-      .select()
-      .from(role)
-      .where(sql`${role.businessId} = ${biz.id} and ${role.code} = ${code}`)
-      .limit(1)
-    const r =
-      existing[0] ??
-      (
-        await db
-          .insert(role)
-          .values({
-            businessId: biz.id,
-            code,
-            name: def.name,
-            description: def.description,
-            isSystem: true,
-          })
-          .returning()
-      )[0]!
-    roleIds[code] = r.id
-
-    await db.delete(rolePermission).where(eq(rolePermission.roleId, r.id))
-    if (def.permissions.length > 0) {
+  for (const code of Object.keys(SYSTEM_ROLES)) {
+    const r = (
       await db
-        .insert(rolePermission)
-        .values(def.permissions.map((p) => ({ roleId: r.id, permissionCode: p })))
-    }
-    console.log(`  role: ${code} (${def.permissions.length} permissions)`)
+        .select({ id: role.id })
+        .from(role)
+        .where(sql`${role.businessId} = ${biz.id} and ${role.code} = ${code}`)
+        .limit(1)
+    )[0]!
+    roleIds[code] = r.id
   }
 
   // 4. Two branches so branch scoping can actually be demonstrated.

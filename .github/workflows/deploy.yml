@@ -4,35 +4,92 @@ on:
   push:
     branches: [main]
 
+# A second push while a deploy is running should replace it, not race it.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
 jobs:
+  # Deploy only what passes. Without this the workflow would happily ship a
+  # build whose tests are failing, which is worse than not deploying at all.
+  check:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
-    needs: []
+    needs: [check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+
+      - name: Build and push the app image
+        uses: docker/build-push-action@v6
         with:
           push: true
+          target: run
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
-      - uses: appleboy/ssh-action@v1
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push the migration image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          target: migrate
+          tags: ghcr.io/${{ github.repository }}:migrate
+          cache-from: type=gha
+
+      - name: Migrate, sync roles, then release
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ecity
           key: ${{ secrets.SSH_KEY }}
+          script_stops: true
           script: |
+            set -euo pipefail
             cd /home/ecity/app
             docker compose pull
-            docker compose run --rm app node --experimental-strip-types \
-              node_modules/.bin/drizzle-kit migrate || true
-            docker compose up -d
+
+            # Migrations run to completion before anything new serves traffic.
+            # No "|| true": a failed migration must stop the deploy, not leave
+            # a new build talking to an old schema.
+            docker compose run --rm migrate
+
+            # A module that adds a permission has to reach roles that already
+            # exist, or the new screen 403s for everyone.
+            docker compose run --rm migrate npm run db:sync-roles
+
+            docker compose up -d --wait app caddy
             docker image prune -f
+
+      - name: Verify the deployed build is healthy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ecity
+          key: ${{ secrets.SSH_KEY }}
+          script_stops: true
+          script: |
+            set -euo pipefail
+            # Ten tries at one second: enough for a cold start, short enough
+            # that a broken deploy is reported rather than assumed fine.
+            for i in $(seq 1 10); do
+              if curl -fsS http://localhost:3000/api/health | grep -q '"status":"ok"'; then
+                echo "healthy"; exit 0
+              fi
+              sleep 1
+            done
+            echo "The deployed build never became healthy:"
+            docker compose logs --tail=50 app
+            exit 1

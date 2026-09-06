@@ -25,6 +25,7 @@ const APPEND_ONLY_TABLES = [
   'device_event',
   'stock_ledger',
   'supplier_ledger_entry',
+  'customer_ledger_entry',
   'audit_log',
 ] as const
 
@@ -50,4 +51,18 @@ export async function withAppendOnlySuspended(fn: () => Promise<void>): Promise<
       await db.execute(`alter table ${t} enable trigger user`)
     }
   }
+}
+
+/**
+ * Remove one tenant's customer-credit rows.
+ *
+ * The customer ledger has a foreign key to `customer` and an append-only
+ * trigger, so a test that creates a credit sale cannot delete its customers
+ * afterwards without clearing this first. Call inside withAppendOnlySuspended.
+ */
+export async function clearCustomerCredit(businessId: number) {
+  await db.execute(`delete from customer_payment_allocation where payment_id in
+    (select id from customer_payment where business_id = ${businessId})`)
+  await db.execute(`delete from customer_payment where business_id = ${businessId}`)
+  await db.execute(`delete from customer_ledger_entry where business_id = ${businessId}`)
 }

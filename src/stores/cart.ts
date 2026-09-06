@@ -47,6 +47,9 @@ type CartState = {
   branchId: number | null
   customerId: number | null
   customerName: string | null
+  /** PRD FR-7.2. Only used when the bill leaves unpaid. */
+  dueDate: string | null
+  creditNotes: string
   lines: CartLine[]
   payments: CartPayment[]
   notes: string
@@ -55,6 +58,7 @@ type CartState = {
 
   setBranch: (branchId: number | null) => void
   setCustomer: (id: number | null, name: string | null) => void
+  setCredit: (dueDate: string | null, creditNotes: string) => void
   addLine: (line: Omit<CartLine, 'key'>) => { added: boolean; reason?: string }
   updateLine: (key: string, patch: Partial<CartLine>) => void
   removeLine: (key: string) => void
@@ -76,6 +80,8 @@ const empty = () => ({
   branchId: null,
   customerId: null,
   customerName: null,
+  dueDate: null,
+  creditNotes: '',
   lines: [] as CartLine[],
   payments: [] as CartPayment[],
   notes: '',
@@ -89,6 +95,7 @@ export const useCart = create<CartState>()(
 
       setBranch: (branchId) => set({ branchId }),
       setCustomer: (customerId, customerName) => set({ customerId, customerName }),
+      setCredit: (dueDate, creditNotes) => set({ dueDate, creditNotes }),
 
       addLine: (line) => {
         const state = get()

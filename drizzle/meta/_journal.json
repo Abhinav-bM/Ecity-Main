@@ -99,6 +99,13 @@
       "when": 1788666717328,
       "tag": "0013_supplier_state_code",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788669479366,
+      "tag": "0014_m5_customer_credit",
+      "breakpoints": true
     }
   ]
 }

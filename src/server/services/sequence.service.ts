@@ -15,7 +15,7 @@ export async function nextDocumentNumber(
   tx: DbOrTx,
   input: {
     businessId: number
-    kind: 'purchase' | 'invoice'
+    kind: 'purchase' | 'invoice' | 'customer_receipt'
     branchId?: number | null
     prefix: string
   },

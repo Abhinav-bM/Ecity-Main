@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 200 unit and integration tests, 407
+Automated tests cover the mechanics — 232 unit and integration tests, 467
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -567,8 +567,8 @@ branch. Give a few products an **HSN code** (8517 phones, 8544 cables).
 - **No trade-in** on the bill — also M6
 - **No Excel import** of the other system's sales — that is M12; devices marked
   `SOLD_PENDING_IMPORT` are waiting for it
-- **Returns and payments do not appear in customer history yet** — the tab
-  says so. Returns arrive with M6, payments against dues with M5
+- **Returns do not appear in customer history yet** — the tab says so; they
+  arrive with M6. Payments now have their own Statement and Receipts tabs
 - No daily cash-up or Z-report — M7
 
 ---
@@ -591,6 +591,130 @@ these on **Products, Devices, Customers, Suppliers, Purchases, Sales** and the
 - [ ] Copy a page-2 URL into a new tab → same page, same filters
 - [ ] Browser back returns to the previous page of results
 - [ ] On a phone the buttons are big enough to tap and do not overflow sideways
+
+---
+
+# M5 — Payments, Credit Sales & Customer Dues
+
+**Delivers.** PRD FR-7.1 – FR-7.6.
+
+Credit is where a shop quietly loses money. This module exists so that the
+answer to "who owes us what, and since when?" is one screen and always right.
+
+**Before you start.** Set **Settings → Business → Default credit period**
+(30 days is the default). You need one product in stock and one customer.
+
+## 1. A bill can leave the counter unpaid
+
+- [ ] Bill something to a **named customer** and pay nothing → the **Credit
+      terms** panel appears, with a due date already filled in
+- [ ] Pay the bill in full → the credit panel disappears (a cash sale needs no
+      due date)
+- [ ] Pay part of it → the panel comes back
+- [ ] Try to leave a balance with **no customer** → refused, because a walk-in
+      cannot be given credit
+- [ ] Change the due date by hand and save → the sale shows that date
+- [ ] Save unpaid → the sale shows **UNPAID**; part-paid shows **PARTIAL**
+- [ ] Open that sale: it shows **Outstanding**, the **due date**, your credit
+      note, and a **Collect payment** button
+- [ ] Past the due date, the sale says *overdue* in red
+- [ ] A fully paid sale shows none of that panel
+
+## 2. Customer dues (FR-7.6)
+
+Open **Sell → Customer dues**.
+
+- [ ] Your unpaid customer is listed, with the amount owed
+- [ ] **Total outstanding** matches the sum of the rows
+- [ ] The **By age** panel adds up to the same total
+- [ ] A bill created today sits in the **0–7 days** column
+- [ ] Search by customer name and by phone number
+- [ ] Filter by branch → only that branch's bills count
+- [ ] **Overdue only** hides a bill whose due date has not passed yet
+- [ ] A customer who has paid everything drops off the list entirely
+- [ ] On a phone the rows become cards and nothing scrolls sideways
+
+## 3. Collecting money (FR-7.3)
+
+- [ ] Press **Collect** on a row → the customer's open bills are listed,
+      oldest first
+- [ ] Type an amount → it is allocated down the list, oldest first, and you
+      can see exactly which bills it lands on before saving
+- [ ] **Settle everything** fills in the exact total owed
+- [ ] **Choose invoices** lets you allocate by hand instead
+- [ ] Allocating more than a bill owes is refused, and says which bill
+- [ ] Save → you land on a printable receipt with its own number
+- [ ] The bill is now **PAID** on the sales list *and* on the sale itself
+- [ ] Three part payments settle a bill and flip it to Paid on the third
+
+## 4. Paying at a different branch (FR-7.5)
+
+- [ ] Bill something on credit at **Branch A**
+- [ ] Collect the money at **Branch B** (change *Collected at* on the form)
+- [ ] The receipt shows Branch B; the invoice still shows Branch A
+- [ ] The statement shows both, each against its own line
+
+## 4b. Branch-wise (FR-7.6)
+
+The **By branch** panel appears on the dues screen when there is more than one
+branch with activity.
+
+- [ ] Each branch shows outstanding, overdue, collected and receipt count
+- [ ] The **All branches** row adds up the columns above it
+- [ ] Outstanding here matches the total at the top of the page
+- [ ] Bill on credit at Branch A, collect at Branch B → A's *outstanding*
+      falls, B's *collected* rises. They are not supposed to match
+- [ ] Change the **Collected from / to** dates → only the collected column
+      moves; what is owed is owed regardless of the window
+- [ ] Void a receipt → it stops counting as collected, and the debt returns
+      to the branch that raised the bill
+
+## 5. The receipt (FR-26.2)
+
+- [ ] Shop name, branch, receipt number, date, customer
+- [ ] The amount, the method, and the reference if you gave one
+- [ ] **Applied to** lists each invoice and how much went to it
+- [ ] Money beyond what was owed shows as **held on account as an advance**
+- [ ] **Balance after this receipt** matches the customer's account
+- [ ] Print A4 and Print receipt (80 mm) both produce clean output
+
+## 6. Voiding a receipt
+
+- [ ] **Void** is offered to the owner and manager
+- [ ] It is **not** offered to counter staff — they may collect, not erase
+- [ ] Voiding needs a reason
+- [ ] After voiding: the receipt is marked VOIDED but still on record
+- [ ] The invoice it settled is **UNPAID** again
+- [ ] The customer's balance has gone back up
+- [ ] The statement shows a **Reversal** line — the old line is untouched
+- [ ] Voiding the same receipt twice is refused
+
+## 7. The statement (FR-7.6)
+
+Open a customer → **Statement**.
+
+- [ ] Every movement, oldest first, with a running balance
+- [ ] An invoice appears as a debit; a payment as a credit
+- [ ] Clicking an invoice number opens that sale; a receipt opens that receipt
+- [ ] The closing balance matches the figure at the top of the customer page
+- [ ] A customer in credit shows a negative balance labelled *in credit*
+
+## 8. The numbers reconcile
+
+This is the one that matters. Pick any customer with dues:
+
+- [ ] Add up what their open invoices still owe, by hand
+- [ ] Compare with the balance on the dues list — they must be identical
+- [ ] Compare with the statement's closing balance — also identical
+- [ ] Void a receipt and repeat: all three still agree
+
+## What M5 deliberately does **not** include
+
+- **No returns or exchanges** — M6. A refund is not a negative payment
+- **No cash drawer or daily closing** — M7. Money collected is recorded, but
+  the day is not yet reconciled
+- **No statements by email or WhatsApp** — M13
+- **No interest, credit limits or dunning letters** — not in v1 at all
 
 ## Housekeeping
 

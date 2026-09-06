@@ -119,6 +119,13 @@ export const businessProfileSchema = z.object({
   pincode: optionalText(12),
   gstin: gstinSchema,
   stateCode: stateCodeSchema,
+  /** PRD FR-7.2. Zero means "due immediately", which some shops do run. */
+  defaultCreditDays: z.coerce
+    .number()
+    .int('Whole days only.')
+    .min(0, 'Cannot be negative.')
+    .max(365, 'A year is the longest sensible term.')
+    .default(30),
   currency: z.string().trim().length(3).default('INR'),
   timezone: z.string().trim().min(3).default('Asia/Kolkata'),
   pricesIncludeTax: z.boolean().default(true),

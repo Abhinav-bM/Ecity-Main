@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  HandCoins,
   AlertTriangle,
   Boxes,
   Building2,
@@ -51,6 +52,12 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/billing', label: 'Billing', icon: ScanLine, permission: 'sale.create' },
       { href: '/sales', label: 'Sales', icon: Receipt, permission: 'sale.view' },
+      {
+        href: '/customers/dues',
+        label: 'Customer dues',
+        icon: HandCoins,
+        permission: 'customer_payment.view',
+      },
     ],
   },
   {

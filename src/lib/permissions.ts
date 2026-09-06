@@ -59,6 +59,9 @@ export const PERMISSIONS = {
     label: 'Reverse a purchase',
     description: 'Undoes stock and the supplier debt. Blocked once any unit has moved on.',
   },
+  'customer_payment.view': { group: 'Sales', label: 'View customer dues and receipts' },
+  'customer_payment.manage': { group: 'Sales', label: 'Collect customer payments' },
+  'customer_payment.void': { group: 'Sales', label: 'Void a customer receipt' },
   'supplier_payment.view': { group: 'Purchases', label: 'View supplier payments and dues' },
   'supplier_payment.manage': { group: 'Purchases', label: 'Pay suppliers' },
 
@@ -115,6 +118,9 @@ export const SYSTEM_ROLES = {
       'sale.view',
       'sale.create',
       'sale.discount',
+      'customer_payment.view',
+      'customer_payment.manage',
+      'customer_payment.void',
       'supplier_payment.view',
       'supplier_payment.manage',
     ],
@@ -133,6 +139,13 @@ export const SYSTEM_ROLES = {
       // Billing is the counter's whole job.
       'sale.view',
       'sale.create',
+      /*
+       * Counter staff take money against old bills - a customer walking in to
+       * clear their tab is the counter's job. They cannot VOID a receipt,
+       * which would erase money already recorded as received.
+       */
+      'customer_payment.view',
+      'customer_payment.manage',
     ],
   },
 } as const satisfies Record<

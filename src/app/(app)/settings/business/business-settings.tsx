@@ -96,6 +96,7 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
       state: business.state ?? '',
       pincode: business.pincode ?? '',
       gstin: business.gstin ?? '',
+      defaultCreditDays: business.defaultCreditDays,
       stateCode: business.stateCode ?? '',
       currency: business.currency,
       timezone: business.timezone,
@@ -238,6 +239,22 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
                   : 'Tax is added on top of the price typed on a bill.'}
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 max-w-xs">
+            <Field
+              id="defaultCreditDays"
+              label="Default credit period (days)"
+              error={errors.defaultCreditDays?.message}
+              hint="Prefills the due date when a bill leaves the counter unpaid"
+            >
+              <Input
+                id="defaultCreditDays"
+                inputMode="numeric"
+                disabled={!canManage}
+                {...register('defaultCreditDays')}
+              />
+            </Field>
           </div>
         </CardContent>
       </Card>

@@ -23,6 +23,7 @@ export function BillingScreen({
   branchId,
   branchName,
   canCreateCustomer,
+  defaultCreditDays,
   paymentMethods,
   defaultTaxRateId,
   taxRates,
@@ -31,6 +32,8 @@ export function BillingScreen({
   branchId: number
   branchName: string
   canCreateCustomer: boolean
+  /** PRD FR-7.2. Prefills the due date on a credit bill. */
+  defaultCreditDays: number
   paymentMethods: { id: number; name: string }[]
   defaultTaxRateId: number | null
   taxRates: { id: number; rateBasisPoints: number }[]
@@ -143,6 +146,10 @@ export function BillingScreen({
         branchId,
         customerId: cart.customerId,
         notes: cart.notes,
+        // Only sent when something is left owing; the server ignores them
+        // otherwise, and clears them on a fully paid bill.
+        dueDate: due > 0n ? (cart.dueDate ?? undefined) : undefined,
+        creditNotes: due > 0n ? cart.creditNotes || undefined : undefined,
         // Held in the store so a retry after a dropped connection returns the
         // same bill instead of charging twice.
         idempotencyKey: cart.idempotencyKey,
@@ -174,6 +181,13 @@ export function BillingScreen({
     router.push(`/sales/${saved.id}`)
     router.refresh()
   }
+
+  // The shop's standard term, shown as the default so the salesperson only
+  // touches the date when this customer is an exception.
+  const defaultDueDate = useMemo(() => {
+    const d = new Date(Date.now() + defaultCreditDays * 86_400_000)
+    return d.toISOString().slice(0, 10)
+  }, [defaultCreditDays])
 
   if (!hydrated) {
     return <p className="p-6 text-sm text-muted-foreground">Loading the counter…</p>
@@ -239,6 +253,42 @@ export function BillingScreen({
             selectedId={cart.customerId}
             onSelect={(id, name) => cart.setCustomer(id, name)}
           />
+
+          {/*
+            Credit terms appear only once the bill is actually short - asking
+            for a due date on a cash sale is noise at a busy counter.
+          */}
+          {due > 0n ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Credit terms</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="due-date">Payment due</Label>
+                  <Input
+                    id="due-date"
+                    type="date"
+                    value={cart.dueDate ?? defaultDueDate}
+                    onChange={(e) => cart.setCredit(e.target.value || null, cart.creditNotes)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="credit-notes">Note</Label>
+                  <Input
+                    id="credit-notes"
+                    value={cart.creditNotes}
+                    onChange={(e) => cart.setCredit(cart.dueDate, e.target.value)}
+                    placeholder="Agreed with the owner…"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formatMoney(due)} will be owed. Leave the date as it is to use the shop
+                  default.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader className="pb-3">

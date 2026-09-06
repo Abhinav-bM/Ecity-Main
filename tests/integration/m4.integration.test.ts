@@ -10,7 +10,7 @@ import { getInvoiceData } from '@/server/services/invoice'
 import { createSale, getSale, listSales } from '@/server/services/sale.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { databaseAvailable, withAppendOnlySuspended } from './setup'
+import { clearCustomerCredit, databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -109,6 +109,9 @@ suite('M4 sales and billing (database-backed)', () => {
         .from(schema.deviceUnit)
         .where(eq(schema.deviceUnit.businessId, businessId))
       const ids = devices.map((d) => d.id)
+      // A credit sale writes to the customer ledger now, and that has a
+      // foreign key to customer - clear it before the customers go.
+      await clearCustomerCredit(businessId)
       await db.execute(`delete from sale_payment where sale_id in
         (select id from sale where business_id = ${businessId})`)
       await db.execute(`delete from sale_item where sale_id in

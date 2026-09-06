@@ -18,6 +18,11 @@ import { AppError, conflict, notFound } from '@/server/http'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
 import { computeBill, computeLine } from '@/lib/tax'
 import {
+  postCustomerLedgerEntry,
+  saleReceivedPaise,
+  saleReceivedSql,
+} from './customer-ledger.service'
+import {
   isInterState,
   normaliseStateCode,
   placeOfSupply,
@@ -54,6 +59,9 @@ export type SaleInput = {
   billDiscountPaise?: bigint
   notes?: string
   soldAt?: Date
+  /** PRD FR-7.2. When the balance is expected, if the bill leaves unpaid. */
+  dueDate?: Date | null
+  creditNotes?: string
   /** From the browser, so a retry cannot bill the customer twice. */
   idempotencyKey?: string
 }
@@ -126,6 +134,7 @@ export async function createSale(
         pricesIncludeTax: business.pricesIncludeTax,
         stateCode: business.stateCode,
         gstin: business.gstin,
+        defaultCreditDays: business.defaultCreditDays,
       })
       .from(business)
       .where(eq(business.id, actor.businessId))
@@ -278,6 +287,13 @@ export async function createSale(
       )
     }
 
+    // A credit bill with no agreed date still gets one, from the business
+    // default, so it can be aged and chased rather than drifting forever.
+    const soldAt = input.soldAt ?? new Date()
+    const defaultDueDate = new Date(
+      soldAt.getTime() + (settings?.defaultCreditDays ?? 30) * 86_400_000,
+    )
+
     const series = await invoiceSeriesFor(tx, actor.businessId, input.branchId)
     const invoiceNumber = await nextDocumentNumber(tx, {
       businessId: actor.businessId,
@@ -294,7 +310,7 @@ export async function createSale(
           branchId: input.branchId,
           customerId: input.customerId ?? null,
           invoiceNumber,
-          soldAt: input.soldAt ?? new Date(),
+          soldAt,
           subtotalPaise: totals.subtotalPaise,
           discountPaise: totals.discountPaise,
           taxablePaise: totals.taxablePaise,
@@ -309,6 +325,9 @@ export async function createSale(
           pricesIncludedTax: pricesIncludeTax,
           idempotencyKey: input.idempotencyKey ?? null,
           notes: input.notes?.trim() || null,
+          // Only a bill that leaves unpaid carries credit terms.
+          dueDate: paid < totals.totalPaise ? (input.dueDate ?? defaultDueDate) : null,
+          creditNotes: paid < totals.totalPaise ? input.creditNotes?.trim() || null : null,
           soldBy: actor.id,
         })
         .returning()
@@ -397,6 +416,43 @@ export async function createSale(
       })
     }
 
+    /*
+     * PRD FR-7.4. A named customer gets the whole bill posted to their account
+     * and every rupee taken at the counter posted back off it. Posting gross
+     * rather than just the unpaid remainder is what makes the statement a real
+     * account the customer can be shown, instead of a list of debts.
+     *
+     * A walk-in has no account, so nothing is posted.
+     */
+    if (input.customerId) {
+      await postCustomerLedgerEntry(tx, {
+        businessId: actor.businessId,
+        customerId: input.customerId,
+        branchId: input.branchId,
+        entryType: 'SALE',
+        amountPaise: totals.totalPaise,
+        refType: 'sale',
+        refId: created.id,
+        note: invoiceNumber,
+        actorId: actor.id,
+        occurredAt: soldAt,
+      })
+      if (paid > 0n) {
+        await postCustomerLedgerEntry(tx, {
+          businessId: actor.businessId,
+          customerId: input.customerId,
+          branchId: input.branchId,
+          entryType: 'PAYMENT',
+          amountPaise: -paid,
+          refType: 'sale',
+          refId: created.id,
+          note: `Paid at the counter on ${invoiceNumber}`,
+          actorId: actor.id,
+          occurredAt: soldAt,
+        })
+      }
+    }
+
     await writeAudit(
       ctx,
       {
@@ -414,13 +470,14 @@ export async function createSale(
 
 /* ------------------------------------------------------------- reading --- */
 
-export async function salePaidPaise(saleId: number, tx: DbOrTx = db): Promise<bigint> {
-  const rows = await tx
-    .select({ total: sql<string>`coalesce(sum(${salePayment.amountPaise}), 0)` })
-    .from(salePayment)
-    .where(eq(salePayment.saleId, saleId))
-  return BigInt(rows[0]?.total ?? '0')
-}
+/**
+ * What a sale has been paid, counter payments and later collections together.
+ *
+ * Re-exported from the ledger service so there is exactly one definition:
+ * before M5 this counted only sale_payment, and a bill settled by a later
+ * receipt would still have shown as UNPAID.
+ */
+export const salePaidPaise = saleReceivedPaise
 
 export function salePaymentStatus(totalPaise: bigint, paidPaise: bigint) {
   if (paidPaise <= 0n) return 'UNPAID' as const
@@ -499,8 +556,7 @@ export async function listSales(actor: AuthUser, filters: SaleFilters) {
   // Payment status is derived, so it is filtered with the same expression the
   // list displays - there is no stored column that could disagree.
   if (filters.paymentStatus) {
-    const paidExpr = sql`(select coalesce(sum(sp.amount_paise), 0)
-      from sale_payment sp where sp.sale_id = ${sale.id})`
+    const paidExpr = saleReceivedSql()
     if (filters.paymentStatus === 'PAID') conditions.push(sql`${paidExpr} >= ${sale.totalPaise}`)
     else if (filters.paymentStatus === 'UNPAID') conditions.push(sql`${paidExpr} <= 0`)
     else conditions.push(sql`${paidExpr} > 0 and ${paidExpr} < ${sale.totalPaise}`)
@@ -529,8 +585,7 @@ export async function listSales(actor: AuthUser, filters: SaleFilters) {
         branchName: branch.name,
         branchCode: branch.code,
         itemCount: sql<number>`(select count(*)::int from ${saleItem} where ${saleItem.saleId} = ${sale.id})`,
-        paidPaise: sql<string>`(select coalesce(sum(sp.amount_paise), 0)
-          from sale_payment sp where sp.sale_id = ${sale.id})`,
+        paidPaise: saleReceivedSql(),
       })
       .from(sale)
       .leftJoin(customer, eq(customer.id, sale.customerId))
@@ -627,10 +682,7 @@ export async function markSoldExternally(
  * already gated by `customer.view`.
  */
 export async function getCustomerHistory(actor: AuthUser, customerId: number) {
-  const paidExpr = sql<string>`coalesce((
-    select sum(${salePayment.amountPaise}) from ${salePayment}
-    where ${salePayment.saleId} = ${sale.id}
-  ), 0)`
+  const paidExpr = saleReceivedSql()
 
   const rows = await db
     .select({

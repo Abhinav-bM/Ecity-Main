@@ -27,6 +27,9 @@ const saleSchema = z.object({
     )
     .default([]),
   notes: z.string().trim().max(500).optional(),
+  /** PRD FR-7.2. Only meaningful when the bill leaves unpaid. */
+  dueDate: z.coerce.date().optional(),
+  creditNotes: z.string().trim().max(300).optional(),
   idempotencyKey: z.string().trim().max(64).optional(),
 })
 
@@ -51,6 +54,8 @@ export const POST = route(
       branchId: body.branchId,
       customerId: body.customerId ?? null,
       notes: body.notes,
+      dueDate: body.dueDate,
+      creditNotes: body.creditNotes,
       idempotencyKey: body.idempotencyKey,
       lines: body.lines.map((l) => ({
         productId: l.productId,

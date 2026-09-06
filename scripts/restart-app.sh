@@ -27,10 +27,19 @@ fi
 
 echo "› starting"
 npm start > "$LOG" 2>&1 &
+SERVER_PID=$!
 
 for _ in $(seq 1 60); do
+  # A dead starter means the health check below would be answering from some
+  # other process - an older build that never released the port. That produced
+  # a whole test run against stale code once, so treat it as fatal.
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "✗ the server process exited during startup. Log:" >&2
+    tail -20 "$LOG" >&2
+    exit 1
+  fi
   if curl -fsS -m 2 "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
-    echo "✓ up: $(curl -s "http://localhost:$PORT/api/health")"
+    echo "✓ up (pid $SERVER_PID): $(curl -s "http://localhost:$PORT/api/health")"
     exit 0
   fi
   sleep 0.5

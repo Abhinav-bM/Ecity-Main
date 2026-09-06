@@ -283,49 +283,100 @@ Keep the proxy **off** at first so Caddy can obtain its certificate. You can tur
 
 Build the image in GitHub Actions, push it to GitHub's container registry, then have the server pull it. The server never compiles anything — it only downloads and restarts, so a deploy takes seconds and a bad build never reaches production.
 
-### 6.1 `.github/workflows/deploy.yml`
+### 6.1 The workflow
 
-```yaml
-name: deploy
-on:
-  push:
-    branches: [main]
+The real file is `.github/workflows/deploy.yml` in the repository — read that
+rather than a copy here, since a copy in a document goes stale. What it does,
+and *why* each part is the way it is:
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    permissions: { contents: read, packages: write }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck && npm run lint && npm test
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          push: true
-          tags: ghcr.io/YOURNAME/ecity:latest
-      - uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ecity
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            cd /home/ecity/app
-            docker compose pull
-            docker compose run --rm app npm run db:migrate
-            docker compose up -d
-            docker image prune -f
+**It refuses to deploy code that fails.** The deploy job declares
+`needs: [check]`, and `check` calls the whole CI workflow. A push whose tests,
+types or lint fail never reaches the server. An earlier version of this file
+had `needs: []`, which meant a red build shipped anyway — worse than no
+automation at all, because it looks safe.
+
+**Two images are built, not one.**
+
+| Tag | What it is | Why |
+|---|---|---|
+| `:latest`, `:<sha>` | the Next.js standalone server | what serves customers |
+| `:migrate` | node_modules + `drizzle/` + the db scripts | runs migrations, then exits |
+
+The runtime image is a `.next/standalone` bundle. It has **no `drizzle-kit`
+and no `tsx`** — those are dev dependencies, and shipping a toolchain into the
+container that faces the internet is not worth it. So migrations get their own
+small image which is run once per deploy and thrown away. (The original
+workflow tried to run `drizzle-kit` from the app image with `|| true` on the
+end. It could never have worked, and the `|| true` would have hidden that
+forever while the app served traffic against an un-migrated schema.)
+
+**The order matters, and nothing is allowed to fail quietly:**
+
+```
+docker compose pull
+docker compose run --rm migrate                     # schema first
+docker compose run --rm migrate npm run db:sync-roles   # then permissions
+docker compose up -d --wait app caddy               # then release
+curl /api/health                                    # then prove it
 ```
 
-Add `SSH_HOST` (the server IP) and `SSH_KEY` (your **private** key) as GitHub repository secrets under Settings → Secrets and variables → Actions.
+`script_stops: true` plus `set -euo pipefail` means any step failing stops the
+deploy with a red build, instead of carrying on to start a broken release.
 
-### 6.2 Two rules about migrations
+**Why `db:sync-roles` is a deploy step.** A module that adds a permission adds
+it to `SYSTEM_ROLES` in the code. Roles already in the database keep whatever
+they were seeded with, so the new screen returns 403 for *everyone* — including
+the owner — until the roles are re-synced. M5 hit exactly this: `Customer dues`
+was built, deployed, and invisible. The sync is idempotent, touches only roles
+marked `is_system`, and leaves anything the shop created itself alone.
+
+**The health check is not optional.** Ten one-second tries against
+`/api/health`; if none succeed the job prints the last 50 lines of the app log
+and fails. Without it a deploy that crash-loops reports success.
+
+Add `SSH_HOST` (the server IP) and `SSH_KEY` (your **private** key) as GitHub
+repository secrets under Settings → Secrets and variables → Actions.
+
+### 6.2 Standing up staging (M5)
+
+Everything above is written and committed. What is left needs **your Hetzner
+account and card**, so it cannot be automated from here. Roughly 30 minutes:
+
+1. **Create the server.** Follow §3 exactly, but name it `ecity-staging`. A
+   CX22 in Singapore is about ₹400/month. Note the IP.
+2. **Harden it.** §3.1 as written — normal user, firewall, no password logins.
+3. **Put the stack on it.**
+   ```bash
+   ssh ecity@<ip>
+   mkdir -p ~/app && cd ~/app
+   # copy docker-compose.prod.yml, Caddyfile and .env from the repo
+   # in docker-compose.prod.yml replace YOURNAME with your GitHub username
+   ```
+4. **Write `.env`** with a *staging* `DATABASE_URL`, a freshly generated
+   `AUTH_SECRET` (`openssl rand -base64 32`), and `POSTGRES_PASSWORD`. Never
+   reuse production values.
+5. **Point DNS** at the IP: `staging.yourdomain.com`, and set that hostname in
+   the `Caddyfile` so TLS is issued automatically.
+6. **Give GitHub the keys.** Repository → Settings → Secrets → Actions:
+   `SSH_HOST` = the IP, `SSH_KEY` = the private key that matches the one you
+   put on the server.
+7. **Let the registry pull.** On the server,
+   `docker login ghcr.io -u <github-username>` with a personal access token
+   that has `read:packages`.
+8. **Push to `main`.** The workflow builds, migrates, syncs roles, releases and
+   health-checks. Watch it under the Actions tab.
+9. **Seed it once**, so there is something to log in with:
+   ```bash
+   docker compose run --rm migrate npm run db:seed
+   ```
+   Staging only. The seed creates accounts with known passwords.
+
+**Verify it worked:** open `https://staging.yourdomain.com`, sign in, and walk
+the M0 section of the Manual Test Checklist. If the health check passed but the
+site does not load, the problem is DNS or Caddy, not the app — check
+`docker compose logs caddy`.
+
+### 6.3 Two rules about migrations
 
 1. **Always take a backup before a migration that drops or renames anything.** `./backup.sh` first, every time.
 2. **Test every migration on staging before production.** Staging can be a second, smaller Hetzner server (CX22 ≈ ₹400) or just a second Docker stack on the same box using a different database name and port. Cheap either way, and it is what stops a bad migration reaching real sales data.

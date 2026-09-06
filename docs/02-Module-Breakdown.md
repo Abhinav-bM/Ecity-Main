@@ -254,11 +254,22 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Delivers.** FR-7.1 – FR-7.6.
 
-**Data model.** `customer_payment`, `customer_ledger_entry`, credit fields on `sale` (outstanding, due_date, notes).
+**Data model.** `customer_payment`, `customer_payment_allocation`, `customer_ledger_entry`, credit fields on `sale` (due_date, credit_notes).
+
+*Built as:* there is deliberately **no stored `outstanding` column**. It is always summed from the append-only ledger (docs/03 §4.2), so the screen and the books cannot disagree. The customer side mirrors the supplier side table for table, which means one mental model and one place to fix allocation or voiding. `customer_ledger_entry` is append-only, enforced by a database trigger rather than by convention.
 
 **Screens.** Payment collection against one or many open sales; customer dues list with aging; customer statement; overdue view; payment receipt print.
 
 **Server work.** Ledger-based balance, never a stored mutable number: outstanding is always derived and reconcilable. Allocation of a payment across invoices. Automatic status flip to Paid when settled. Both the sale branch and the collection branch recorded on the payment.
+
+*Built as:*
+- **One definition of "what a sale has been paid".** Counter payments (`sale_payment`) and later collections (`customer_payment_allocation`) are summed by a single shared SQL expression used by the sale detail, the sale list, the payment-status filter and the customer history. Before M5 there were four separate copies; leaving them would have meant a bill settled by a receipt still showing UNPAID in the list.
+- **Receipts are gaplessly numbered** through the same `document_sequence` machinery as invoices, per-branch where the branch has its own prefix.
+- **A voided receipt settles nothing** — the allocations stay as a record of what the receipt claimed, and the ledger gets a REVERSAL entry rather than an edit. The invoice reopens automatically.
+- **`customer_payment.void` is its own permission.** Counter staff may collect (a customer clearing their tab is the counter's job) but may not erase a collection already recorded.
+- **Allocation runs inside the caller's transaction.** The first cut queried the pool from inside an open transaction and deadlocked under concurrency — 25 parallel receipts hung for 70 seconds. It also did two queries per open invoice; it is now one.
+- **The agreed terms appear on the bill.** FR-7.2 says a credit sale stores its due date and notes; storing them without showing them would mean the salesperson agreed a date nobody could see again. An unpaid sale carries an outstanding figure, the due date (in red once past), the note, and a link straight to collection.
+- **Branch-wise (FR-7.6) reports two different figures deliberately.** A branch is shown what it is *owed* (on bills it raised) beside what it *collected* (money taken at its counter, whoever raised the bill). They are not meant to match: a customer may buy at one shop and settle at another, and a branch doing the group's collecting should look like it. Collections are bounded by a date range, defaulting to the current month, because "collected" with no period is not a number anyone can act on.
 
 **Done when.**
 - A credit sale creates the correct outstanding and due date; three partial payments settle it and flip it to Paid.
@@ -266,6 +277,8 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - Customer outstanding recomputed from the ledger equals the displayed balance for every customer in the test data.
 - Aging buckets 0–7 / 8–30 / 31–60 / 60+ are correct against hand-checked dates.
 - **Carried from M0:** the Hetzner server is provisioned, and pushing to `main` deploys to staging automatically. Alpha is the first release someone outside the project sees, so it needs somewhere to live. See the Deployment Guide.
+
+*Built as:* the pipeline is written, and the deployment guide §6.2 has the half that needs a Hetzner account. Fixing the workflow found three faults that would each have broken a real deploy: it did not wait for CI (`needs: []`), the migration step ran `drizzle-kit` from an image that does not contain it with `|| true` swallowing the failure, and the compose file referenced a `worker.js` that does not exist. It also now runs `db:sync-roles`, without which a module that adds a permission ships a screen nobody can open.
 
 **Depends on.** M4. **Effort.** 1.5 weeks.
 

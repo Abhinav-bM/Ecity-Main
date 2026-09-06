@@ -1,8 +1,10 @@
 # Production stack for the single Hetzner server (docs/04-Deployment-Guide.md).
-# App, database, worker and TLS proxy as four containers on one machine.
+# App, database and TLS proxy as three long-running containers on one machine,
+# plus a migration container the deploy runs and throws away.
 services:
   db:
-    image: postgres:16-alpine
+    # Matches the version in docs/05-Database-Guide.md.
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ecity
@@ -28,13 +30,14 @@ services:
       interval: 30s
       retries: 3
 
-  worker:
-    image: ghcr.io/YOURNAME/ecity:latest
-    command: ['node', 'worker.js']
-    restart: unless-stopped
+  # Run on demand by the deploy, never left running. Carries drizzle-kit and
+  # tsx, which the app image deliberately does not.
+  migrate:
+    image: ghcr.io/YOURNAME/ecity:migrate
     env_file: .env
     depends_on:
       db: { condition: service_healthy }
+    profiles: ['tools']
 
   caddy:
     image: caddy:2-alpine

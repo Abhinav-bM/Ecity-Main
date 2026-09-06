@@ -94,7 +94,15 @@ describe('seed roles', () => {
 
   it('does not give Staff any management permission', () => {
     const staff = SYSTEM_ROLES.STAFF.permissions as readonly string[]
-    expect(staff.filter((p) => p.endsWith('.manage') && p !== 'customer.manage')).toEqual([])
+    // customer_payment.manage is deliberate: taking money against an old bill
+    // is the counter's job. Voiding one is not - see customer_payment.void.
+    expect(
+      staff.filter(
+        (p) => p.endsWith('.manage') && !['customer.manage', 'customer_payment.manage'].includes(p),
+      ),
+    ).toEqual([])
+    // Collecting is allowed; erasing a collection is not.
+    expect(staff).not.toContain('customer_payment.void')
     expect(staff).not.toContain('branch.view_all')
     expect(staff).not.toContain('audit.view')
   })

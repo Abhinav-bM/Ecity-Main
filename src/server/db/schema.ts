@@ -97,6 +97,18 @@ export const supplierLedgerEnum = pgEnum('supplier_ledger_entry_type', [
   'ADJUSTMENT',
 ])
 
+/**
+ * Customer ledger movements (PRD FR-7.4). Positive means the customer owes
+ * more; negative means they owe less.
+ */
+export const customerLedgerEnum = pgEnum('customer_ledger_entry_type', [
+  'OPENING',
+  'SALE',
+  'PAYMENT',
+  'REVERSAL',
+  'ADJUSTMENT',
+])
+
 /** Which system bills this device (PRD FR-38.1). NEW defaults to EXTERNAL. */
 export const salesChannelEnum = pgEnum('sales_channel', ['ECITY', 'EXTERNAL', 'BOTH'])
 
@@ -172,6 +184,11 @@ export const business = pgTable('business', {
    * rather than a per-document choice.
    */
   pricesIncludeTax: boolean('prices_include_tax').notNull().default(true),
+  /**
+   * PRD FR-7.2. How many days a credit sale gets by default. The counter can
+   * always override it on the bill.
+   */
+  defaultCreditDays: integer('default_credit_days').notNull().default(30),
   /** PRD FR-2.2. Branch-level prefixes override this - see branch.invoicePrefix. */
   invoicePrefix: text('invoice_prefix').notNull().default('INV'),
   /**
@@ -1146,6 +1163,15 @@ export const sale = pgTable(
     idempotencyKey: text('idempotency_key'),
 
     notes: text('notes'),
+
+    /**
+     * PRD FR-7.2. Set when a bill leaves the counter unpaid. Outstanding is
+     * NOT stored - it is always derived from the ledger (docs/03 §4.2) - but
+     * the date the shop expects the money is a fact about the sale.
+     */
+    dueDate: timestamp('due_date', { withTimezone: true }),
+    creditNotes: text('credit_notes'),
+
     source: recordSourceEnum('source').notNull().default('ECITY'),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     voidReason: text('void_reason'),
@@ -1264,3 +1290,106 @@ export type Role = typeof role.$inferSelect
 export type AppUser = typeof appUser.$inferSelect
 export type Session = typeof session.$inferSelect
 export type AuditLog = typeof auditLog.$inferSelect
+
+/* ============================================================ M5 — credit ===
+
+   What customers owe. Mirrors the supplier side deliberately: the same shape
+   means one mental model, and a fix to allocation or voiding lands on both.
+   ========================================================================== */
+
+/**
+ * The customer's account (PRD FR-7.4, FR-7.6).
+ *
+ * Append-only, enforced by a database trigger. The balance is ALWAYS the sum
+ * of these rows and never a stored counter, so a disagreement between the
+ * screen and the books is impossible rather than merely unlikely.
+ */
+export const customerLedgerEntry = pgTable(
+  'customer_ledger_entry',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' }).notNull(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customer.id),
+    /**
+     * PRD FR-7.5. For a SALE this is where it was billed; for a PAYMENT it is
+     * where the money was actually collected, which may be a different shop.
+     */
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+    entryType: customerLedgerEnum('entry_type').notNull(),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    refType: text('ref_type'),
+    refId: bigint('ref_id', { mode: 'number' }),
+    note: text('note'),
+    actorId: bigint('actor_id', { mode: 'number' }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('customer_ledger_customer_idx').on(t.customerId, t.occurredAt),
+    index('customer_ledger_ref_idx').on(t.refType, t.refId),
+    index('customer_ledger_branch_idx').on(t.branchId, t.occurredAt),
+  ],
+)
+
+/** Money collected from a customer after the sale (PRD FR-7.3). */
+export const customerPayment = pgTable(
+  'customer_payment',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customer.id),
+    /** PRD FR-7.5. Where the money was taken, not where the sale happened. */
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    paymentMethodId: bigint('payment_method_id', { mode: 'number' })
+      .notNull()
+      .references(() => paymentMethod.id),
+    /** Gapless per-branch series, same machinery as invoices. */
+    receiptNumber: text('receipt_number').notNull(),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    receivedOn: timestamp('received_on', { withTimezone: true }).notNull().defaultNow(),
+    reference: text('reference'),
+    notes: text('notes'),
+    /** Voided rather than deleted (docs/02 §2.2 rule 4). */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('customer_payment_customer_idx').on(t.customerId, t.receivedOn),
+    index('customer_payment_branch_idx').on(t.branchId, t.receivedOn),
+    uniqueIndex('customer_payment_receipt_uq').on(t.businessId, t.receiptNumber),
+  ],
+)
+
+/**
+ * Which invoices a payment settled (PRD FR-7.3).
+ *
+ * Unallocated money is an advance: it still reduces the balance, it just is
+ * not tied to a particular bill yet.
+ */
+export const customerPaymentAllocation = pgTable(
+  'customer_payment_allocation',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    paymentId: bigint('payment_id', { mode: 'number' })
+      .notNull()
+      .references(() => customerPayment.id, { onDelete: 'cascade' }),
+    saleId: bigint('sale_id', { mode: 'number' })
+      .notNull()
+      .references(() => sale.id),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('customer_allocation_payment_idx').on(t.paymentId),
+    index('customer_allocation_sale_idx').on(t.saleId),
+  ],
+)

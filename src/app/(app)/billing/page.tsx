@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { listPaymentMethods, listTaxRates } from '@/server/services/business.service'
+import { getBusiness, listPaymentMethods, listTaxRates } from '@/server/services/business.service'
 import { listAccessibleBranches } from '@/server/services/branch.service'
 import { BillingScreen } from './billing-screen'
 
@@ -32,9 +32,10 @@ export default async function BillingPage() {
 
   // Customers are no longer prefetched: the picker searches the server, so a
   // shop past 500 customers can still find the one at the counter.
-  const [methods, rates] = await Promise.all([
+  const [methods, rates, business] = await Promise.all([
     listPaymentMethods(session.user),
     listTaxRates(session.user),
+    getBusiness(session.user),
   ])
 
   return (
@@ -46,6 +47,7 @@ export default async function BillingPage() {
       taxRates={rates.map((r) => ({ id: r.id, rateBasisPoints: r.rateBasisPoints }))}
       canDiscount={hasPermission(session.user, 'sale.discount')}
       canCreateCustomer={hasPermission(session.user, 'customer.manage')}
+      defaultCreditDays={business.defaultCreditDays}
     />
   )
 }
