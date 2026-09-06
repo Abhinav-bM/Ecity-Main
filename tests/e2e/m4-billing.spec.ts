@@ -320,12 +320,13 @@ test.describe('the bill, after it is saved', () => {
     await page.goto('/sales')
     const filters = page.getByTestId('sale-filters')
     await filters.getByRole('searchbox', { name: 'Search sales' }).fill(invoiceNumber)
-    await filters.getByRole('button', { name: 'Search' }).click()
+    // Enter submits the form - what a user does, and not dependent on the
+    // button being clickable at whatever scroll position it lands in.
+    await filters.getByRole('searchbox', { name: 'Search sales' }).press('Enter')
     await expect(page.getByRole('link', { name: invoiceNumber })).toBeVisible()
 
     // It was paid in full, so the UNPAID filter must exclude it.
     await filters.getByRole('combobox', { name: 'Payment status' }).selectOption('UNPAID')
-    await filters.getByRole('button', { name: 'Search' }).click()
     await expect(page.getByRole('link', { name: invoiceNumber })).toHaveCount(0)
 
     await expectNoHorizontalOverflow(page)

@@ -19,7 +19,8 @@
     "worker": "tsx src/server/jobs/worker.ts",
     "restart": "bash scripts/restart-app.sh",
     "docs:pdf": "bash scripts/build-docs.sh",
-    "db:sync-roles": "tsx src/server/db/sync-roles.ts"
+    "db:sync-roles": "tsx src/server/db/sync-roles.ts",
+    "test:e2e:clean": "bash scripts/test-clean-db.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

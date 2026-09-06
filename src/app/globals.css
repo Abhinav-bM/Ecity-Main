@@ -287,6 +287,16 @@
   }
 }
 
+/*
+ * The app header is sticky and 3.5rem tall, so anything the browser scrolls to
+ * the top of the viewport - an anchor, a focused control, find-in-page - lands
+ * underneath it and cannot be clicked. Reserve the header's height plus a
+ * little breathing room on every element.
+ */
+* {
+  scroll-margin-top: 4.5rem;
+}
+
 /* ==========================================================================
    PRINT — invoices (PRD FR-26.4)
    Two formats from one document: A4 for a filed copy, 80 mm for the counter

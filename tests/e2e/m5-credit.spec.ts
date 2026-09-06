@@ -66,7 +66,7 @@ async function billOnCredit(page: Page, product: string, customer: string, paid:
 async function collectFor(page: Page, buyer: string) {
   await page.goto('/customers/dues')
   await page.getByRole('searchbox', { name: 'Search customers' }).fill(buyer)
-  await page.getByRole('button', { name: 'Search' }).click()
+  await page.getByRole('searchbox', { name: 'Search customers' }).press('Enter')
   await expect(page.getByRole('link', { name: buyer })).toBeVisible()
   // Scoped to this customer's own row - .first() would pick whichever the
   // search happened to return first. One testid covers both layouts: a table
@@ -153,7 +153,7 @@ test.describe('dues and aging', () => {
 
     await page.goto('/customers/dues')
     await page.getByRole('searchbox', { name: 'Search customers' }).fill(buyer)
-    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('searchbox', { name: 'Search customers' }).press('Enter')
 
     await expect(page.getByRole('link', { name: buyer })).toBeVisible()
     await expect(page.getByText('Total outstanding')).toBeVisible()
@@ -173,7 +173,7 @@ test.describe('dues and aging', () => {
 
     await page.goto('/customers/dues?overdue=1')
     await page.getByRole('searchbox', { name: 'Search customers' }).fill(buyer)
-    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('searchbox', { name: 'Search customers' }).press('Enter')
     // Owed, but the default term has not elapsed.
     await expect(page.getByRole('link', { name: buyer })).toHaveCount(0)
   })
@@ -227,7 +227,7 @@ test.describe('collecting a payment', () => {
     // 600 still owed, so they stay on the dues list.
     await page.goto('/customers/dues')
     await page.getByRole('searchbox', { name: 'Search customers' }).fill(buyer)
-    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('searchbox', { name: 'Search customers' }).press('Enter')
     await expect(page.getByRole('link', { name: buyer })).toBeVisible()
   })
 
@@ -248,7 +248,14 @@ test.describe('collecting a payment', () => {
     await page.getByRole('button', { name: 'Void', exact: true }).click()
     await page.getByRole('textbox', { name: 'Reason' }).fill('Cheque bounced')
     await page.getByRole('button', { name: 'Void receipt' }).click()
-    await expect(page.getByText('VOIDED')).toBeVisible()
+
+    // Wait for the dialog to close and the reason to appear on the receipt
+    // itself. Asserting on the word "voided" matched the dialog's own
+    // description - getByText is case-insensitive substring matching - so it
+    // passed before the request had even been sent, and the next step then
+    // raced the server.
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByText('Cheque bounced')).toBeVisible()
 
     // The bill is owing again.
     await page.goto(saleUrl)
@@ -321,7 +328,7 @@ test.describe('the customer statement', () => {
 
     await page.goto('/customers/dues')
     await page.getByRole('searchbox', { name: 'Search customers' }).fill(buyer)
-    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('searchbox', { name: 'Search customers' }).press('Enter')
     await page.getByRole('link', { name: buyer }).click()
     await expect(page).toHaveURL(/\/customers\/\d+$/)
 

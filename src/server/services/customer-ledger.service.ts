@@ -414,7 +414,11 @@ export async function branchDues(
   }
 
   return {
-    rows: rows.filter((r) => r.outstandingPaise > 0n || r.collectedPaise > 0n),
+    // Every branch, including quiet ones. Dropping branches with no activity
+    // hid the whole comparison exactly when it was most useful - a two-branch
+    // shop where only one has dues - and a zero row is itself information:
+    // "this branch collected nothing this month".
+    rows,
     totalOutstandingPaise: rows.reduce((sum, r) => sum + r.outstandingPaise, 0n),
     totalCollectedPaise: rows.reduce((sum, r) => sum + r.collectedPaise, 0n),
   }

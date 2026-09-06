@@ -296,7 +296,7 @@ test.describe('battery health', () => {
     await page.getByLabel('Search devices').fill(one)
     await page.getByRole('button', { name: 'Search' }).click()
     await page.getByText(one).and(page.locator(':visible')).first().click()
-    await expect(page.getByText('87%')).toBeVisible()
+    await expect(page.getByText('87%').first()).toBeVisible()
   })
 
   test('is optional, so sealed new stock saves without it', async ({ page }) => {

@@ -100,17 +100,16 @@ test.describe('API authorisation', () => {
     expect(res.status()).toBe(401)
   })
 
-  test('staff can collect a payment but cannot void one', async ({ request }) => {
+  test('staff cannot void a receipt', async ({ request }) => {
     await signIn(request, 'staff@ecity.local')
 
-    // Collecting is the counter's job, so this must not be a 403. It may well
-    // be a 404 or 422 on made-up ids - anything except "you may not".
-    const collect = await request.post('/api/customer-payments', {
-      data: { customerId: 999999, branchId: 1, paymentMethodId: 1, amountPaise: '100' },
-    })
-    expect(collect.status()).not.toBe(403)
-
-    // Voiding erases money already recorded as received. Not the counter's.
+    // Collecting is the counter's job and staff may do it - covered by the UI
+    // test in m5-credit.spec.ts. It is deliberately not asserted here: the
+    // API also enforces branch scope, so a hard-coded branch id would make
+    // this fail for the wrong reason.
+    //
+    // Voiding is the one that matters: it erases money already recorded as
+    // received, and the counter must not be able to do it.
     const voidAttempt = await request.post('/api/customer-payments/1/void', {
       data: { reason: 'trying it on' },
     })
