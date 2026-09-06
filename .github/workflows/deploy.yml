@@ -70,7 +70,6 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ecity
           key: ${{ secrets.SSH_KEY }}
-          script_stops: true
           script: |
             set -euo pipefail
             cd /home/ecity/app
@@ -85,29 +84,23 @@ jobs:
             # exist, or the new screen 403s for everyone.
             docker compose run --rm migrate npm run db:sync-roles
 
-            docker compose up -d --wait app caddy
+            # Plain "up -d", not "--wait": the app's healthcheck runs on a
+            # 30s interval, so --wait can time out on a build that is fine.
+            # The loop below is both faster and says what went wrong.
+            docker compose up -d
             docker image prune -f
-
-      - name: Verify the deployed build is healthy
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ecity
-          key: ${{ secrets.SSH_KEY }}
-          script_stops: true
-          script: |
-            set -euo pipefail
-            cd /home/ecity/app
-            # Asked from INSIDE the container: the app only exposes 3000 on the
-            # Docker network, never to the host, so curl on the host would
-            # never connect and this check would always fail.
+            # Ten tries at two seconds, asked from INSIDE the container: the
+            # app exposes 3000 only on the Docker network, so curl on the host
+            # would never connect.
             for i in $(seq 1 15); do
               if docker compose exec -T app node -e \
                    "fetch('http://localhost:3000/api/health').then(r=>r.json()).then(j=>process.exit(j.status==='ok'?0:1)).catch(()=>process.exit(1))"; then
-                echo "healthy"; exit 0
+                echo "healthy"
+                exit 0
               fi
               sleep 2
             done
             echo "The deployed build never became healthy:"
+            docker compose ps
             docker compose logs --tail=50 app
             exit 1
