@@ -119,6 +119,11 @@ export const businessProfileSchema = z.object({
   pincode: optionalText(12),
   gstin: gstinSchema,
   stateCode: stateCodeSchema,
+  /**
+   * PRD FR-38.1 / OQ-11. Which system bills NEW stock. Anything not NEW is
+   * always sold here, so this only governs the NEW case.
+   */
+  newStockSalesChannel: z.enum(['EXTERNAL', 'ECITY', 'BOTH']).default('EXTERNAL'),
   /** PRD FR-7.2. Zero means "due immediately", which some shops do run. */
   defaultCreditDays: z.coerce
     .number()

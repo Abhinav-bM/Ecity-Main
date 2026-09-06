@@ -3,6 +3,7 @@ import { db, type DbOrTx } from '@/server/db'
 import {
   brand,
   branch,
+  business,
   category,
   deviceEvent,
   deviceIdentifier,
@@ -177,6 +178,17 @@ export async function createDevice(
   assertClassificationValid(input)
 
   const run = async (t: DbOrTx) => {
+    // Read on the caller's transaction, so a purchase confirming many devices
+    // sees one consistent answer.
+    const newStockChannel =
+      (
+        await t
+          .select({ channel: business.newStockSalesChannel })
+          .from(business)
+          .where(eq(business.id, actor.businessId))
+          .limit(1)
+      )[0]?.channel ?? 'EXTERNAL'
+
     const identifierType = await identifierTypeForProduct(input.productId, t)
     const identifiers = normaliseIdentifiers(input.identifiers, identifierType)
     await assertIdentifiersFree(identifiers, identifierType, undefined, t)
@@ -214,7 +226,8 @@ export async function createDevice(
           warrantyExpiresAt,
           currentBranchId: input.branchId,
           status: 'IN_STOCK',
-          salesChannel: input.salesChannel ?? defaultSalesChannel(input.mainType),
+          salesChannel:
+            input.salesChannel ?? defaultSalesChannel(input.mainType, newStockChannel),
           source: input.source ?? 'ECITY',
           notes: input.notes?.trim() || null,
           createdBy: actor.id,

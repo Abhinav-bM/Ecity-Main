@@ -1,0 +1,1 @@
+ALTER TABLE "business" ADD COLUMN "new_stock_sales_channel" "sales_channel" DEFAULT 'EXTERNAL' NOT NULL;

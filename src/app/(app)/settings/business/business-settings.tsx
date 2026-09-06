@@ -97,6 +97,7 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
       pincode: business.pincode ?? '',
       gstin: business.gstin ?? '',
       defaultCreditDays: business.defaultCreditDays,
+      newStockSalesChannel: business.newStockSalesChannel,
       stateCode: business.stateCode ?? '',
       currency: business.currency,
       timezone: business.timezone,
@@ -239,6 +240,26 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
                   : 'Tax is added on top of the price typed on a bill.'}
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 max-w-sm">
+            <Field
+              id="newStockSalesChannel"
+              label="NEW stock is billed in"
+              error={errors.newStockSalesChannel?.message}
+              hint="Only affects NEW items. Everything else is always sold here."
+            >
+              <select
+                id="newStockSalesChannel"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                disabled={!canManage}
+                {...register('newStockSalesChannel')}
+              >
+                <option value="EXTERNAL">The other billing system only</option>
+                <option value="ECITY">ECITY only</option>
+                <option value="BOTH">Both systems</option>
+              </select>
+            </Field>
           </div>
 
           <div className="mt-4 max-w-xs">

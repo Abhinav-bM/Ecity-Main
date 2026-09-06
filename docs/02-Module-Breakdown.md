@@ -294,6 +294,12 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Screens.** Return by invoice / customer / IMEI; full, partial and exchange return flows; inspection queue for returned devices with the classify action (Available / Used / Damaged / Repair Required); trade-in capture inside the billing screen, with valuation and difference payable — extends M4's Zustand cart store rather than introducing a second one.
 
+**Carried in — correcting a device (raised during M5).** There is no way to edit a device after it is created, which means a wrong main type is permanent. That matters more than it sounds: main type decides whether a handset reaches the till at all, so one keystroke can hide sellable stock for good, with no way back. This module already builds a reclassify action for returned devices, so the general edit belongs here rather than in a module of its own.
+
+- **Edit a device** (manager and admin): main type and NEW CUT, variant / RAM / storage / colour, battery health, purchase and selling price, tax rate, supplier, warranty, and sales channel.
+- Every change writes an audit entry **and** a `device_event`, so the M9 timeline shows corrections as part of the device's history rather than silently rewriting it.
+- Identifiers stay out of the edit form. Changing an IMEI is not a correction, it is a different handset; the existing uniqueness and history rules make that deliberate.
+
 **Server work.**
 - Returned mobiles go to `Returned / Inspection`, never straight back to sellable (this is the rule most likely to be got wrong).
 - Refund posts against a payment method and the branch cash drawer or account.
@@ -309,6 +315,12 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 ---
 ## M7 — Expenses, Cash Drawer, Bank Accounts & Daily Closing
+
+**Carried in — correcting a purchase (raised during M5).** A confirmed purchase can be reversed but not edited, so a typo in an invoice number or date has no fix once a unit from it has sold, because reversal is then refused.
+
+- **Edit a purchase's metadata** (manager and admin): supplier invoice number, purchase date, notes.
+- **Lines, quantities and costs stay uneditable.** A confirmed purchase has already moved stock, created device units and posted to the supplier ledger; editing a cost afterwards would leave the ledger disagreeing with the stock and nothing to reconcile against. Reversal already handles that case and already refuses once a unit is sold — a working reversal is worth more than an edit that quietly corrupts the books.
+- Belongs here because this is the module that owns money movement and reconciliation.
 
 **Goal.** The day balances. Expected money is compared with counted money, per branch, every day.
 
@@ -412,6 +424,14 @@ column plus a check constraint, the same shape as `is_new_cut`.
 ---
 
 ## M11 — Reports, Exports, Imports & Opening Balances
+
+**Carried in — managing brands and categories (raised during M5).** The API and permissions exist (`product.manage`) and the seed creates 15 brands and 13 categories, which is why the dropdowns work. There is no screen to add a sixteenth. Nobody noticed because the seeded lists were adequate; a real shop taking on a new brand hits a wall.
+
+- **Brands** and **Categories** management screens (admin): create, rename, deactivate.
+- Deactivate rather than delete — a category is referenced by products, and products by sales. Removing one would break invoices already issued.
+- A category carries `isSerialised` and `identifierType`, which decide whether its products are tracked by IMEI, by serial, or by quantity. Those must be locked once any product uses the category: changing them would reinterpret existing stock.
+
+**On main types.** `NEW / USED / ER / ACT / GLOBAL` stays a database enum, not a user-managed list. Main type is not a label — it decides which devices reach the till (FR-38.2), what the invoice prints, how GLOBAL carries NEW CUT, and how the dashboards group. A user-created sixth type would carry no behaviour and would silently sit outside all of those rules. Adding one is a migration and a deploy, and the question to answer first is what the new type *means*, because that is what determines the code.
 
 **Goal.** Data gets in at the start and out whenever it is needed.
 

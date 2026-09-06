@@ -689,4 +689,60 @@ suite('M2 inventory core (database-backed)', () => {
     expect(d.events.at(-1)!.eventType).toBe('INSPECTED')
     expect(d.events.at(-1)!.payload).toMatchObject({ grade: 'A' })
   })
+
+  describe('who bills NEW stock (PRD OQ-11)', () => {
+    async function setChannel(channel: 'EXTERNAL' | 'ECITY' | 'BOTH') {
+      await db
+        .update(schema.business)
+        .set({ newStockSalesChannel: channel })
+        .where(eq(schema.business.id, businessId))
+    }
+
+    it('defaults NEW stock to the other billing system', async () => {
+      await setChannel('EXTERNAL')
+      const { id } = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(400)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      expect((await getDevice(actor, id)).device.salesChannel).toBe('EXTERNAL')
+    })
+
+    it('lets a shop that sells new stock itself say so', async () => {
+      await setChannel('ECITY')
+      const { id } = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(401)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      // The whole point: this handset now reaches the till (FR-38.2).
+      expect((await getDevice(actor, id)).device.salesChannel).toBe('ECITY')
+    })
+
+    it('supports stock billed in both systems', async () => {
+      await setChannel('BOTH')
+      const { id } = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(402)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      expect((await getDevice(actor, id)).device.salesChannel).toBe('BOTH')
+    })
+
+    it('never applies the setting to anything that is not NEW', async () => {
+      await setChannel('EXTERNAL')
+      const { id } = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(403)],
+        mainType: 'USED',
+        branchId: branchA,
+      })
+      // A used handset is always the shop's own to sell, whatever the setting.
+      expect((await getDevice(actor, id)).device.salesChannel).toBe('ECITY')
+      await setChannel('EXTERNAL')
+    })
+  })
 })

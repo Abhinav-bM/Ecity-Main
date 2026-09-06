@@ -281,6 +281,17 @@ export async function setDeviceStatus(
 }
 
 /** The default channel for a main type (PRD FR-38.1). NEW is billed elsewhere. */
-export function defaultSalesChannel(mainType: string): 'ECITY' | 'EXTERNAL' {
-  return mainType === 'NEW' ? 'EXTERNAL' : 'ECITY'
+/**
+ * Which system bills a newly registered device (PRD FR-38.1, OQ-11).
+ *
+ * Only NEW stock is in question - everything else is always sold here. The
+ * answer for NEW comes from the business setting rather than being fixed in
+ * code, because getting it wrong either hides sellable stock from the till or
+ * lets one handset be invoiced in two systems.
+ */
+export function defaultSalesChannel(
+  mainType: string,
+  newStockChannel: 'ECITY' | 'EXTERNAL' | 'BOTH' = 'EXTERNAL',
+): 'ECITY' | 'EXTERNAL' | 'BOTH' {
+  return mainType === 'NEW' ? newStockChannel : 'ECITY'
 }

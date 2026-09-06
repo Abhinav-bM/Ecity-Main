@@ -106,6 +106,13 @@
       "when": 1788669479366,
       "tag": "0014_m5_customer_credit",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788704971454,
+      "tag": "0015_new_stock_channel_setting",
+      "breakpoints": true
     }
   ]
 }

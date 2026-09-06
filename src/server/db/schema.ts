@@ -185,6 +185,17 @@ export const business = pgTable('business', {
    */
   pricesIncludeTax: boolean('prices_include_tax').notNull().default(true),
   /**
+   * PRD FR-38.1 / OQ-11. Which system bills NEW stock.
+   *
+   * The shop's other system handles new items, so NEW defaults to EXTERNAL
+   * and such devices never reach the ECITY till. Not every shop splits it
+   * that way, so this is a setting rather than a rule in the code. Anything
+   * that is not NEW is always ECITY.
+   */
+  newStockSalesChannel: salesChannelEnum('new_stock_sales_channel')
+    .notNull()
+    .default('EXTERNAL'),
+  /**
    * PRD FR-7.2. How many days a credit sale gets by default. The counter can
    * always override it on the bill.
    */
