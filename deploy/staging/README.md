@@ -192,7 +192,7 @@ scp deploy/staging/env.example        ecity@SERVER_IP:~/app/.env
 
 ```bash
 cd ~/app
-sed -i "s/SERVER_IP/$(curl -s ifconfig.me)/" Caddyfile
+sed -i "s/SERVER_IP/$(curl -s -4 ifconfig.me)/" Caddyfile
 cat Caddyfile          # confirm it now reads like 139.84.x.x.sslip.io
 ```
 

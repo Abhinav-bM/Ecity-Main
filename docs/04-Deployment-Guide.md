@@ -423,6 +423,11 @@ account and card**, so it cannot be automated from here. Roughly 40 minutes:
    using `<ip>.sslip.io`, a free public DNS service that resolves any such name
    to that IP; Caddy then gets a real certificate for it automatically. Swap in
    a proper domain whenever you buy one.
+
+   Use the **IPv4** address. `curl ifconfig.me` returns IPv6 on a dual-stack
+   server, and an IPv6 address contains colons, which are illegal in a domain
+   name — Let's Encrypt refuses to issue, and the site then hangs with nothing
+   obvious in the browser. Force it with `curl -s -4 ifconfig.me`.
 6. **Give GitHub the keys.** Repository → Settings → Secrets → Actions:
    `SSH_HOST` = the IP, `SSH_KEY` = the private key that matches the one you
    put on the server.
