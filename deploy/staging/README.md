@@ -205,7 +205,7 @@ cat Caddyfile          # confirm it now reads like 139.84.x.x.sslip.io
 ```bash
 cd ~/app
 openssl rand -base64 32     # copy this — it is AUTH_SECRET
-openssl rand -base64 24     # copy this — it is the database password
+openssl rand -hex 24        # copy this — it is the database password
 nano .env
 ```
 
@@ -213,6 +213,9 @@ In `.env`:
 
 - put the database password in **both** `DATABASE_URL` and
   `POSTGRES_PASSWORD` — they must match
+- the database password is **hex, not base64**: base64 contains `/`, `+` and
+  `=`, and a `/` in a URL password breaks the connection string with
+  "Invalid URL" before Postgres is even contacted
 - put the 32-byte string in `AUTH_SECRET`
 - replace `SERVER_IP` in `AUTH_URL` with the real IP
 - set `SEED_PASSWORD` to something you will remember
