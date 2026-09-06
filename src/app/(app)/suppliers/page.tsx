@@ -6,6 +6,8 @@ import { listParties } from '@/server/services/party.service'
 
 export const dynamic = 'force-dynamic'
 
+const PAGE_SIZE = 25
+
 export default async function SuppliersPage({
   searchParams,
 }: {
@@ -16,14 +18,15 @@ export default async function SuppliersPage({
   if (!hasPermission(session.user, 'supplier.view')) redirect('/dashboard')
 
   const params = await searchParams
+  const page = Math.max(1, Number(params.page ?? '1') || 1)
   const search = params.search ?? ''
   const includeInactive = params.includeInactive === '1'
 
   const { rows, total } = await listParties(session.user, 'supplier', {
     search,
     includeInactive,
-    page: Math.max(1, Number(params.page ?? '1') || 1),
-    pageSize: 25,
+    page,
+    pageSize: PAGE_SIZE,
   })
 
   return (
@@ -31,6 +34,8 @@ export default async function SuppliersPage({
       kind="supplier"
       rows={rows as PartyRow[]}
       total={total}
+      page={page}
+      pageSize={PAGE_SIZE}
       canManage={hasPermission(session.user, 'supplier.manage')}
       search={search}
       includeInactive={includeInactive}

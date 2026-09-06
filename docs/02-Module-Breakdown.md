@@ -206,7 +206,9 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Delivers.** FR-6.1 – FR-6.8, FR-26.1, FR-26.3, FR-26.4.
 
-**Data model.** `sale`, `sale_item`, `sale_payment`, `invoice_series` (per branch where configured).
+**Data model.** `sale`, `sale_item`, `sale_payment`.
+
+*Built as:* no separate `invoice_series` table was needed. M3 already introduced `document_sequence`, which allocates gapless per-branch, per-year counters under `SELECT … FOR UPDATE`; invoices reuse it with a different document kind. One table, one concurrency proof, one place to audit.
 
 **Screens.** The billing screen — a single keyboard-driven page: search by name/SKU/barcode/IMEI, cart with line discounts and tax, customer attach/create inline, split payment across methods, save & print. Sale list with filters. Sale detail. Printable invoice in A4 and 80 mm thermal layouts, plus PDF download.
 
@@ -216,6 +218,8 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - **Persist the store to `localStorage`**, including the bill's idempotency key. This is what satisfies PRD §9.3 — a dropped connection or an accidental refresh must not lose a half-built bill, and re-submitting must not create a second one.
 - Clear the store only on a confirmed save, never optimistically.
 - **TanStack Query** joins here too, for client-side reads (product and IMEI search as the user types). Keep the division strict: Query owns anything Postgres owns; Zustand owns only what exists in the browser. Never copy sale or stock data into the store.
+
+*Built as:* Zustand with `persist` as planned. TanStack Query was **deferred** — the search box is the only client-side read in M4, and a debounced `fetch` covers it without adding a second data layer. Revisit when a screen needs shared caching or background refetch.
 
 **Server work.**
 - Availability check and device lock at save: the exact device must be `In Stock` at the selling branch, and a conditional update prevents two tills selling the same IMEI.

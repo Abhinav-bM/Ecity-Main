@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 51 unit and integration tests, 91
+Automated tests cover the mechanics — 174 unit and integration tests, 387
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -394,6 +394,154 @@ At ~375px, ~810px and full width:
 - Attachments have a working API and storage layer, but **no upload button on
   any screen yet**; the first screen that needs one is M3's purchase form
 - Logo upload is not wired to the business profile
+
+---
+
+# M4 — Sales & Billing
+
+**Delivers.** PRD FR-6.1 – FR-6.8, FR-26.1, FR-26.3, FR-26.4, FR-38.2, FR-38.3.
+
+This is the screen the shop lives on. Everything before it existed so that this
+one could work: a bill is built, money is taken, stock drops, and an invoice
+comes out. Test it standing up, at speed, the way the counter will.
+
+**Before you start.** You need stock. Run through M3 once to bring in at least
+one USED or ER handset with an IMEI, and one accessory with a quantity of ten.
+
+## 1. Speed at the counter
+
+Go to **Billing**.
+
+- [ ] The search box already has focus — you can start typing without clicking
+- [ ] Type an accessory name → results appear as you type
+- [ ] With exactly one result, pressing **Enter** puts it on the bill
+- [ ] Scan or paste an IMEI → that exact handset lands on the bill
+- [ ] **Time yourself:** accessory → Cash → Save, keyboard only, under 20 seconds
+- [ ] The whole flow needs no mouse
+
+## 2. The bill
+
+- [ ] A device line shows the IMEI or serial underneath the product name
+- [ ] A device line shows its main type (USED / ER / ACT / GLOBAL)
+- [ ] A GLOBAL device also shows **NEW CUT** where that applies
+- [ ] A device line's quantity is fixed at 1 and cannot be edited
+- [ ] An accessory line's quantity can be raised, and the total follows
+- [ ] Adding the same IMEI twice is refused with a clear message
+- [ ] Line discount reduces that line only; bill discount reduces the total
+- [ ] **Staff** signed in cannot give a discount at all
+- [ ] Totals: taxable + GST equals the total, exactly, to the paisa
+- [ ] Change a quantity and the totals update instantly
+
+## 3. The bill survives real life
+
+- [ ] Build a half-finished bill and **reload the page** → it is still there
+- [ ] Clear bill empties it, and asks nothing you would regret confirming
+- [ ] Switch branch with a bill open → the bill clears (it belonged to the
+      other branch's stock)
+
+## 4. Payment
+
+- [ ] **+ Cash** fills the full balance in one press
+- [ ] Split across two methods (say Cash 500 + UPI rest) → both are recorded
+- [ ] Pay less than the total with **no customer attached** → refused, because
+      an unpaid balance needs someone to owe it
+- [ ] Attach a customer, then save partly paid → the sale shows **PARTIAL**
+- [ ] Overpaying is refused
+
+## 5. Customer, without leaving the bill
+
+- [ ] Press **New** beside the Customer box
+- [ ] Name and phone only → **Add to bill**
+- [ ] The new customer is created *and* attached, and the bill is untouched
+- [ ] A duplicate phone number is refused with a message naming the clash
+- [ ] Cancel closes the dialog and changes nothing
+
+## 6. The invoice
+
+Save a bill; you land on the sale.
+
+- [ ] The invoice shows shop name, GSTIN, branch, invoice number and date
+- [ ] Customer details appear, or "Walk-in customer"
+- [ ] Every line shows quantity, price, tax and amount
+- [ ] GST is broken out per rate
+- [ ] **Print A4** produces a clean full-page invoice with no navigation on it
+- [ ] **Print receipt (80 mm)** produces a narrow slip that fits the thermal roll
+- [ ] **Download PDF** saves a file named after the invoice number
+- [ ] Open the PDF: every figure matches the screen, and no character shows as
+      a blank box
+- [ ] The PDF's amounts are labelled INR (the rupee glyph is deliberately not
+      used — see `src/server/pdf/invoice-pdf.tsx`)
+
+## 7. Stock actually moved
+
+- [ ] The handset you sold is now **Sold** on the device page
+- [ ] Its IMEI no longer appears in billing search
+- [ ] The accessory's branch stock dropped by the quantity sold
+- [ ] The stock ledger shows one `SALE` row referencing the invoice
+
+## 8. The other billing system (FR-38.2, FR-38.3)
+
+- [ ] A **NEW** handset never appears in billing search at all
+- [ ] Forcing one onto a bill is refused server-side too
+- [ ] Open that device → **Sold in other system** is offered
+- [ ] Mark it → status becomes `SOLD_PENDING_IMPORT` and stock drops now
+- [ ] It disappears from billing search, so it cannot be sold twice
+- [ ] An ECITY-channel device does **not** offer that button
+
+## 9. Sales list
+
+- [ ] Every saved sale is listed, newest first
+- [ ] Search by invoice number, customer name or IMEI finds it
+- [ ] Payment status filter: PAID / PARTIAL / UNPAID each return the right rows
+- [ ] Branch filter narrows to that branch; a branch-scoped user sees only theirs
+- [ ] From/To dates include both end days
+- [ ] Filters survive a page reload (they are in the URL, so they are shareable)
+
+## 10. Concurrency — needs two browsers
+
+- [ ] Sign in on two windows, put the **same IMEI** on both bills
+- [ ] Save both → the first succeeds, the second fails with a clear message
+- [ ] The device is Sold exactly once, and only one sale exists
+- [ ] Save a bill, then press Save again on a restored copy → still one sale
+
+## 11. Responsive
+
+- [ ] On a phone the billing screen is usable one-handed; nothing overflows
+      sideways
+- [ ] The cart and the totals panel stack rather than squeeze
+- [ ] The invoice is readable on a phone
+- [ ] On a large screen the search, cart and payment panel sit side by side
+
+## What M4 deliberately does **not** include
+
+- **No returns or exchanges** — that is M6
+- **No trade-in** on the bill — also M6
+- **No Excel import** of the other system's sales — that is M12; devices marked
+  `SOLD_PENDING_IMPORT` are waiting for it
+- **No customer history tab** still — carried from M1, now buildable, planned
+  for M5
+- No daily cash-up or Z-report — M7
+
+---
+
+# Cross-cutting — Lists & pagination
+
+Every list in the app is paginated server-side at **25 rows a page**. Check
+these on **Products, Devices, Customers, Suppliers, Purchases, Sales** and the
+**Audit log** — the control is the same one everywhere.
+
+- [ ] Under each list: *"Showing 1–25 of N"*, with the real total
+- [ ] A list with more than 25 rows offers **Previous / Next**
+- [ ] A list with 25 or fewer offers no page buttons, but still states the count
+- [ ] On page 1, **Previous** is greyed out and does nothing when clicked
+- [ ] On the last page, **Next** is greyed out
+- [ ] **Next** advances, and the rows are genuinely different
+- [ ] Page 1's URL has no `?page=` on it — one address for the first page
+- [ ] Apply a filter, then page forward → **the filter is still applied**
+- [ ] Change a filter while on page 3 → you go back to page 1, not an empty page
+- [ ] Copy a page-2 URL into a new tab → same page, same filters
+- [ ] Browser back returns to the previous page of results
+- [ ] On a phone the buttons are big enough to tap and do not overflow sideways
 
 ## Housekeeping
 

@@ -11,6 +11,7 @@ import {
   Menu,
   ScrollText,
   Receipt,
+  ScanLine,
   Settings,
   ShieldCheck,
   Smartphone,
@@ -46,6 +47,13 @@ const NAV: NavGroup[] = [
     items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
   },
   {
+    heading: 'Sell',
+    items: [
+      { href: '/billing', label: 'Billing', icon: ScanLine, permission: 'sale.create' },
+      { href: '/sales', label: 'Sales', icon: Receipt, permission: 'sale.view' },
+    ],
+  },
+  {
     heading: 'Inventory',
     items: [
       { href: '/devices', label: 'Devices', icon: Smartphone, permission: 'inventory.view' },
@@ -61,7 +69,7 @@ const NAV: NavGroup[] = [
   {
     heading: 'Purchases',
     items: [
-      { href: '/purchases', label: 'Purchases', icon: Receipt, permission: 'purchase.view' },
+      { href: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchase.view' },
       {
         href: '/purchases/supplier-dues',
         label: 'Supplier dues',
@@ -74,7 +82,7 @@ const NAV: NavGroup[] = [
     heading: 'Master data',
     items: [
       { href: '/customers', label: 'Customers', icon: UserRound, permission: 'customer.view' },
-      { href: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'supplier.view' },
+      { href: '/suppliers', label: 'Suppliers', icon: Building2, permission: 'supplier.view' },
     ],
   },
   {
@@ -184,9 +192,9 @@ export function AppShell({
 
   const footnote = (
     <p className="text-[11px] leading-relaxed text-muted-foreground">
-      Modules M0–M3 complete.
+      Modules M0–M4 complete.
       <br />
-      Billing and reporting arrive in M4 onward.
+      Credit, returns and reporting arrive in M5 onward.
     </p>
   )
 

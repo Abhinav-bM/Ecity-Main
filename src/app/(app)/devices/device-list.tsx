@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ClientPagination } from '@/components/pagination-client'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -45,6 +46,8 @@ type Row = {
 export function DeviceList({
   rows,
   total,
+  page,
+  pageSize,
   summary,
   brands,
   categories,
@@ -56,6 +59,8 @@ export function DeviceList({
 }: {
   rows: Row[]
   total: number
+  page: number
+  pageSize: number
   summary: { mainType: MainType; isNewCut: boolean; units: number }[]
   brands: { id: number; name: string }[]
   categories: { id: number; name: string }[]
@@ -153,12 +158,13 @@ export function DeviceList({
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            type="search"
             className="pl-8"
             placeholder="IMEI, serial or product"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             aria-label="Search devices"
-            />
+          />
         </div>
         <Button type="submit" variant="secondary">
           Search
@@ -345,6 +351,14 @@ export function DeviceList({
           </Card>
         </>
       )}
+
+      <ClientPagination
+        basePath="/devices"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        noun="devices"
+      />
     </div>
   )
 }

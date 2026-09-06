@@ -71,6 +71,13 @@
       "when": 1788637309078,
       "tag": "0009_m3_sequence_nulls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788640940885,
+      "tag": "0010_m4_sales",
+      "breakpoints": true
     }
   ]
 }

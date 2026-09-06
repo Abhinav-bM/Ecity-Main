@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Pagination } from '@/components/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -19,6 +20,8 @@ import { listPurchases } from '@/server/services/purchase.service'
 
 export const dynamic = 'force-dynamic'
 
+const PAGE_SIZE = 25
+
 const PAY_VARIANT = { PAID: 'success', PARTIAL: 'warning', UNPAID: 'muted' } as const
 
 export default async function PurchasesPage({
@@ -31,11 +34,12 @@ export default async function PurchasesPage({
   if (!hasPermission(session.user, 'purchase.view')) redirect('/dashboard')
 
   const p = await searchParams
+  const page = Math.max(1, Number(p.page ?? '1') || 1)
   const { rows, total } = await listPurchases(session.user, {
     search: p.search,
     status: p.status as never,
-    page: Math.max(1, Number(p.page ?? '1') || 1),
-    pageSize: 25,
+    page,
+    pageSize: PAGE_SIZE,
   })
   const canManage = hasPermission(session.user, 'purchase.manage')
 
@@ -131,6 +135,15 @@ export default async function PurchasesPage({
               </TableBody>
             </Table>
           </Card>
+
+          <Pagination
+            basePath="/purchases"
+            params={p}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            noun="purchases"
+          />
         </>
       )}
     </div>

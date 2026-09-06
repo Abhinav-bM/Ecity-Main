@@ -8,6 +8,7 @@ import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getDevice } from '@/server/services/device.service'
+import { SoldExternallyButton } from './sold-externally-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,11 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
         <DeviceStatusBadge status={device.status} />
         {device.salesChannel === 'EXTERNAL' ? (
           <Badge variant="outline">Billed in the other system</Badge>
+        ) : null}
+        {device.salesChannel !== 'ECITY' &&
+        device.status === 'IN_STOCK' &&
+        hasPermission(session.user, 'sale.create') ? (
+          <SoldExternallyButton deviceId={device.id} />
         ) : null}
         {device.source === 'LEGACY' ? <Badge variant="muted">Imported</Badge> : null}
       </div>

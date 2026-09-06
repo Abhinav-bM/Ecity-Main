@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 export const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'ChangeMe!2026'
 
@@ -74,4 +74,26 @@ export async function expectTouchTargets(page: Page, minPx = 40) {
 
 export function isMobileProject(name: string) {
   return name.startsWith('mobile')
+}
+
+/**
+ * Tab forward until `target` holds focus, so a test can prove a control is
+ * reachable without a mouse rather than just clicking it.
+ *
+ * Fails with the accessible name of whatever ended up focused, which is far
+ * easier to debug than a bare timeout when the tab order changes.
+ */
+export async function tabTo(page: Page, target: Locator, maxPresses = 25) {
+  for (let i = 0; i < maxPresses; i++) {
+    if (await target.evaluate((el) => el === document.activeElement).catch(() => false)) return
+    await page.keyboard.press('Tab')
+  }
+  if (await target.evaluate((el) => el === document.activeElement).catch(() => false)) return
+  const focused = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null
+    return el ? `${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 40) ?? ''}"` : 'nothing'
+  })
+  throw new Error(
+    `Could not reach the target with ${maxPresses} Tab presses; focus stopped on ${focused}.`,
+  )
 }

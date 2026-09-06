@@ -1,7 +1,6 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Pagination } from '@/components/pagination'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
   Table,
@@ -47,7 +46,6 @@ export default async function AuditPage({
     action: params.action,
   })
 
-  const pages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
     <div className="space-y-4">
@@ -148,21 +146,14 @@ export default async function AuditPage({
         </Table>
       </Card>
 
-      {pages > 1 ? (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            Page {page} of {pages}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild disabled={page <= 1}>
-              <Link href={`/settings/audit?page=${page - 1}`}>Previous</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild disabled={page >= pages}>
-              <Link href={`/settings/audit?page=${page + 1}`}>Next</Link>
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <Pagination
+        basePath="/settings/audit"
+        params={params}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        noun="entries"
+      />
     </div>
   )
 }

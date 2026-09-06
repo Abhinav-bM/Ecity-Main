@@ -286,3 +286,53 @@
     }
   }
 }
+
+/* ==========================================================================
+   PRINT — invoices (PRD FR-26.4)
+   Two formats from one document: A4 for a filed copy, 80 mm for the counter
+   thermal printer. Which one is chosen sets `data-print` on <html>.
+   ========================================================================== */
+@media print {
+  /* Only the invoice prints. The app around it does not. */
+  body * {
+    visibility: hidden;
+  }
+  #invoice,
+  #invoice * {
+    visibility: visible;
+  }
+  #invoice {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+    color: #000;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}
+
+/* A thermal roll is 80 mm wide with no margins to spare. */
+@media print {
+  :root[data-print='thermal'] #invoice {
+    width: 72mm;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  :root[data-print='thermal'] .a4-only {
+    display: none !important;
+  }
+  :root[data-print='thermal'] table {
+    font-size: 10px;
+  }
+}
+@page thermal {
+  size: 80mm auto;
+  margin: 3mm;
+}

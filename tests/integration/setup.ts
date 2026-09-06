@@ -18,3 +18,36 @@ export async function databaseAvailable(): Promise<boolean> {
     return false
   }
 }
+
+import { db } from '@/server/db'
+
+const APPEND_ONLY_TABLES = [
+  'device_event',
+  'stock_ledger',
+  'supplier_ledger_entry',
+  'audit_log',
+] as const
+
+/**
+ * Run teardown deletes with the append-only triggers suspended.
+ *
+ * Suspending them is global DDL, not per-connection, so integration test
+ * files MUST NOT run in parallel - otherwise one file's teardown switches the
+ * triggers off while another is asserting that they fire, and that assertion
+ * silently passes. `fileParallelism: false` in vitest.config.ts is what makes
+ * this safe; do not remove one without the other.
+ *
+ * Test teardown is the only legitimate reason to bypass these triggers.
+ */
+export async function withAppendOnlySuspended(fn: () => Promise<void>): Promise<void> {
+  for (const t of APPEND_ONLY_TABLES) {
+    await db.execute(`alter table ${t} disable trigger user`)
+  }
+  try {
+    await fn()
+  } finally {
+    for (const t of APPEND_ONLY_TABLES) {
+      await db.execute(`alter table ${t} enable trigger user`)
+    }
+  }
+}

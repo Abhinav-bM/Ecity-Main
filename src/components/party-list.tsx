@@ -7,6 +7,7 @@ import { Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ClientPagination } from '@/components/pagination-client'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -33,6 +34,8 @@ export function PartyList({
   kind,
   rows,
   total,
+  page,
+  pageSize,
   canManage,
   search,
   includeInactive,
@@ -40,6 +43,8 @@ export function PartyList({
   kind: 'customer' | 'supplier'
   rows: PartyRow[]
   total: number
+  page: number
+  pageSize: number
   canManage: boolean
   search: string
   includeInactive: boolean
@@ -221,6 +226,14 @@ export function PartyList({
           </Card>
         </>
       )}
+
+      <ClientPagination
+        basePath={`/${plural}`}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        noun={plural}
+      />
     </div>
   )
 }

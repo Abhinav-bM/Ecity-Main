@@ -62,6 +62,11 @@ export const PERMISSIONS = {
   'supplier_payment.view': { group: 'Purchases', label: 'View supplier payments and dues' },
   'supplier_payment.manage': { group: 'Purchases', label: 'Pay suppliers' },
 
+  // --- M4 sales ---
+  'sale.view': { group: 'Sales', label: 'View sales and invoices' },
+  'sale.create': { group: 'Sales', label: 'Bill a customer' },
+  'sale.discount': { group: 'Sales', label: 'Give a discount on a bill' },
+
   'device.manage': {
     group: 'Inventory',
     label: 'Create and edit devices (IMEI)',
@@ -107,6 +112,9 @@ export const SYSTEM_ROLES = {
       'device.manage',
       'purchase.view',
       'purchase.manage',
+      'sale.view',
+      'sale.create',
+      'sale.discount',
       'supplier_payment.view',
       'supplier_payment.manage',
     ],
@@ -122,6 +130,9 @@ export const SYSTEM_ROLES = {
       'product.view',
       // Staff can see what is in stock, but not what it cost.
       'inventory.view',
+      // Billing is the counter's whole job.
+      'sale.view',
+      'sale.create',
     ],
   },
 } as const satisfies Record<

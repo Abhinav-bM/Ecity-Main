@@ -24,7 +24,7 @@ import { getStock, setDeviceStatus } from '@/server/services/stock.service'
 import { listDevices } from '@/server/services/device.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { databaseAvailable } from './setup'
+import { databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -88,11 +88,7 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
 
   afterAll(async () => {
     if (!available) return
-    await db.execute('alter table device_event disable trigger user')
-    await db.execute('alter table stock_ledger disable trigger user')
-    await db.execute('alter table supplier_ledger_entry disable trigger user')
-    await db.execute('alter table audit_log disable trigger user')
-    try {
+    await withAppendOnlySuspended(async () => {
       const devices = await db
         .select({ id: schema.deviceUnit.id })
         .from(schema.deviceUnit)
@@ -120,12 +116,7 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
       await db.execute(`delete from audit_log where business_id = ${businessId}`)
       await db.delete(schema.branch).where(eq(schema.branch.businessId, businessId))
       await db.delete(schema.business).where(eq(schema.business.id, businessId))
-    } finally {
-      await db.execute('alter table device_event enable trigger user')
-      await db.execute('alter table stock_ledger enable trigger user')
-      await db.execute('alter table supplier_ledger_entry enable trigger user')
-      await db.execute('alter table audit_log enable trigger user')
-    }
+    })
   })
 
   describe('confirming a purchase — the M3 acceptance case', () => {

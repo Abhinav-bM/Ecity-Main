@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Pagination } from '@/components/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -19,6 +20,8 @@ import { ProductFilters } from './product-filters'
 
 export const dynamic = 'force-dynamic'
 
+const PAGE_SIZE = 25
+
 export default async function ProductsPage({
   searchParams,
 }: {
@@ -29,13 +32,14 @@ export default async function ProductsPage({
   if (!hasPermission(session.user, 'product.view')) redirect('/dashboard')
 
   const p = await searchParams
+  const page = Math.max(1, Number(p.page ?? '1') || 1)
   const search = p.search ?? ''
   const { rows, total } = await listProducts(session.user, {
     search,
     serialised: p.kind === 'mobile' ? true : p.kind === 'accessory' ? false : undefined,
     includeInactive: p.includeInactive === '1',
-    page: Math.max(1, Number(p.page ?? '1') || 1),
-    pageSize: 25,
+    page,
+    pageSize: PAGE_SIZE,
   })
 
   const canManage = hasPermission(session.user, 'product.manage')
@@ -153,6 +157,15 @@ export default async function ProductsPage({
               </TableBody>
             </Table>
           </Card>
+
+          <Pagination
+            basePath="/products"
+            params={p}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            noun="products"
+          />
         </>
       )}
     </div>

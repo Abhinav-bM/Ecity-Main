@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { db } from '@/server/db'
 import * as schema from '@/server/db/schema'
 import {
@@ -23,7 +23,7 @@ import {
 } from '@/server/services/stock.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { databaseAvailable } from './setup'
+import { databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -85,9 +85,7 @@ suite('M2 inventory core (database-backed)', () => {
     // point — production must never be able to rewrite a device's history.
     // Test teardown is the one legitimate exception, so the triggers are
     // disabled for these statements only and restored immediately.
-    await db.execute('alter table device_event disable trigger user')
-    await db.execute('alter table stock_ledger disable trigger user')
-    try {
+    await withAppendOnlySuspended(async () => {
       const devices = await db
         .select({ id: schema.deviceUnit.id })
         .from(schema.deviceUnit)
@@ -98,10 +96,7 @@ suite('M2 inventory core (database-backed)', () => {
       }
       await db.delete(schema.deviceUnit).where(eq(schema.deviceUnit.businessId, businessId))
       await db.execute(`delete from stock_ledger where business_id = ${businessId}`)
-    } finally {
-      await db.execute('alter table device_event enable trigger user')
-      await db.execute('alter table stock_ledger enable trigger user')
-    }
+    })
     await db.delete(schema.branchStock).where(eq(schema.branchStock.productId, accessoryProductId))
     await db.delete(schema.product).where(eq(schema.product.businessId, businessId))
     await db.delete(schema.category).where(eq(schema.category.businessId, businessId))
@@ -361,6 +356,7 @@ suite('M2 inventory core (database-backed)', () => {
         .select()
         .from(schema.stockLedger)
         .where(eq(schema.stockLedger.productId, accessoryProductId))
+        .orderBy(asc(schema.stockLedger.id))
       await decreaseStock(
         { businessId },
         { productId: accessoryProductId, branchId: branchA, quantity: 2, movement: 'SALE' },
@@ -369,6 +365,9 @@ suite('M2 inventory core (database-backed)', () => {
         .select()
         .from(schema.stockLedger)
         .where(eq(schema.stockLedger.productId, accessoryProductId))
+        // Without an explicit order Postgres may return heap order, and
+        // at(-1) would then pick an arbitrary row rather than the newest.
+        .orderBy(asc(schema.stockLedger.id))
       expect(after.length).toBe(before.length + 1)
       expect(after.at(-1)!.delta).toBe(-2)
       expect(after.at(-1)!.quantityAfter).toBe(8)

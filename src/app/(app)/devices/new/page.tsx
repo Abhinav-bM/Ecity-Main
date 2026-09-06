@@ -16,7 +16,9 @@ export default async function NewDevicePage() {
 
   const [business, products, suppliers, branches, taxRates] = await Promise.all([
     getBusiness(session.user),
-    listProducts(session.user, { serialised: true, page: 1, pageSize: 500 }),
+    // The picker searches on demand, so the page only needs to know whether
+    // any serialised product exists at all.
+    listProducts(session.user, { serialised: true, page: 1, pageSize: 1 }),
     listParties(session.user, 'supplier', { page: 1, pageSize: 500 }),
     listAccessibleBranches(session.user),
     listTaxRates(session.user),
@@ -27,11 +29,7 @@ export default async function NewDevicePage() {
       // FR-4.11: the setting controls how many IMEI inputs appear, and
       // nothing else. The request body is always a list.
       imeiSlots={business.imeiSlots}
-      products={products.rows.map((p) => ({
-        id: p.id,
-        name: p.name,
-        identifierType: p.identifierType === 'SERIAL' ? ('SERIAL' as const) : ('IMEI' as const),
-      }))}
+      hasProducts={products.total > 0}
       suppliers={suppliers.rows.map((s) => ({ id: s.id, name: s.name }))}
       branches={branches}
       taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}

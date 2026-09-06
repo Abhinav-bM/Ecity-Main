@@ -9,6 +9,9 @@ const config: NextConfig = {
   // Next's built-in detection only recognises eslint-config-next, which is
   // eslintrc-only and incompatible with ESLint 9 flat config.
   eslint: { ignoreDuringBuilds: true },
+  // react-pdf ships its own font/layout engine and must not be run through
+  // the webpack/turbopack bundler - let Node require it at runtime instead.
+  serverExternalPackages: ['@react-pdf/renderer'],
   experimental: {
     // Server Actions are used for form mutations; keep the body limit tight.
     serverActions: { bodySizeLimit: '2mb' },

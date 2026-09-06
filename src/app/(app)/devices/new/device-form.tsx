@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { ProductPicker, type PickedProduct } from '@/components/product-picker'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -24,7 +25,7 @@ const selectClass =
 
 export function DeviceForm({
   imeiSlots,
-  products,
+  hasProducts,
   suppliers,
   branches,
   taxRates,
@@ -33,7 +34,7 @@ export function DeviceForm({
   imeiSlots: number
   /** Each product carries its category's identifier type, so the form can
    *  label the field "IMEI" for a phone and "Serial number" for a laptop. */
-  products: { id: number; name: string; identifierType: 'IMEI' | 'SERIAL' }[]
+  hasProducts: boolean
   suppliers: { id: number; name: string }[]
   branches: { id: number; code: string; name: string }[]
   taxRates: { id: number; name: string }[]
@@ -68,7 +69,6 @@ export function DeviceForm({
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<Values>({
     resolver: zodResolver(deviceSchema),
@@ -90,7 +90,8 @@ export function DeviceForm({
 
   // A phone is identified by IMEI, a laptop or speaker by a serial number.
   // The classification below is identical for both.
-  const chosenProduct = products.find((p) => p.id === Number(watch('productId')))
+  const [picked, setPicked] = useState<PickedProduct | null>(null)
+  const chosenProduct = picked
   const identifierLabel = chosenProduct?.identifierType === 'SERIAL' ? 'Serial number' : 'IMEI'
   const isSerial = chosenProduct?.identifierType === 'SERIAL'
 
@@ -124,7 +125,7 @@ export function DeviceForm({
 
   // Nothing can be registered against a catalogue that has no serialised
   // products, so say so rather than showing an empty dropdown.
-  if (products.length === 0) {
+  if (!hasProducts) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
@@ -202,14 +203,20 @@ export function DeviceForm({
             ))}
 
             <Field id="productId" label="Product" required error={errors.productId?.message}>
-              <select id="productId" className={selectClass} {...register('productId')}>
-                <option value="">Choose a product…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              {/*
+                A <select> would have to be capped, and a shop with hundreds of
+                serialised products would find the ones past the cap simply
+                missing. Same searchable picker the purchase form uses.
+              */}
+              <ProductPicker
+                id="productId"
+                serialisedOnly
+                value={picked}
+                onSelect={(p) => {
+                  setPicked(p)
+                  setValue('productId', p.id, { shouldValidate: true })
+                }}
+              />
             </Field>
 
             <Field id="branchId" label="Branch" required error={errors.branchId?.message}>
