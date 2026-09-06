@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
+import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
 
 /** M2 — inventory core. Runs at every viewport. Requires a seeded database. */
 
@@ -9,9 +9,7 @@ const imei = (suffix: number) => String(35_000_000_000_000 + (Date.now() % 1_000
 async function createProductIn(page: Page, name: string, categoryLabel: string) {
   await page.goto('/products/new')
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
-  await page
-    .getByRole('combobox', { name: 'Category', exact: true })
-    .selectOption({ label: categoryLabel })
+  await choose(page.getByRole('combobox', { name: 'Category', exact: true }), categoryLabel)
   await page.getByRole('button', { name: 'Create product' }).click()
   await expect(page).toHaveURL(/\/products$/)
 }
@@ -186,7 +184,7 @@ test.describe('completing FR-4.6 — every specified filter', () => {
 
   test('filtering by status narrows the list', async ({ page }, testInfo) => {
     await page.goto('/devices')
-    await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('SOLD')
+    await choose(page.getByRole('combobox', { name: 'Status', exact: true }), 'Sold')
     await expect(page).toHaveURL(/status=SOLD/)
 
     // The table is the desktop layout; phones show cards instead.

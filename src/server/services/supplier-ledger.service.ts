@@ -85,8 +85,24 @@ export type SupplierOutstanding = {
   lastPurchaseAt: Date | null
 }
 
-/** PRD FR-14.3 — supplier-wise outstanding, business-wide. */
-export async function supplierOutstanding(actor: AuthUser): Promise<SupplierOutstanding[]> {
+/**
+ * PRD FR-14.3 — supplier-wise outstanding, business-wide.
+ *
+ * Paged in memory: the balance comes from a grouped ledger sum joined to
+ * purchase counts, and the list grows with every supplier the shop has ever
+ * owed. Rendering all of them was the problem, not the query.
+ */
+export async function supplierOutstanding(
+  actor: AuthUser,
+  page = 1,
+  pageSize = 25,
+): Promise<{
+  rows: SupplierOutstanding[]
+  total: number
+  page: number
+  pageSize: number
+  totalOwedPaise: bigint
+}> {
   const rows = await db
     .select({
       supplierId: supplier.id,
@@ -112,7 +128,7 @@ export async function supplierOutstanding(actor: AuthUser): Promise<SupplierOuts
 
   const byId = new Map(counts.map((c) => [c.supplierId, c]))
 
-  return rows
+  const all = rows
     .map((r) => ({
       supplierId: r.supplierId,
       supplierName: r.supplierName,
@@ -124,6 +140,19 @@ export async function supplierOutstanding(actor: AuthUser): Promise<SupplierOuts
     }))
     .filter((r) => r.balancePaise !== 0n || r.purchaseCount > 0)
     .sort((a, b) => Number(b.balancePaise - a.balancePaise))
+
+  // Owed in total across every supplier, not just this page.
+  const totalOwedPaise = all.reduce((sum, r) => sum + r.balancePaise, 0n)
+  const safePage = Math.max(1, page)
+  const start = (safePage - 1) * pageSize
+
+  return {
+    rows: all.slice(start, start + pageSize),
+    total: all.length,
+    page: safePage,
+    pageSize,
+    totalOwedPaise,
+  }
 }
 
 /** The supplier profile's history tab (PRD FR-5.11). */

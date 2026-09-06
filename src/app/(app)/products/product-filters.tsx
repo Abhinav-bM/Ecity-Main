@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AppSelect } from '@/components/app-select'
 
 export function ProductFilters({
   search,
@@ -52,16 +53,17 @@ export function ProductFilters({
       <Button type="submit" variant="secondary">
         Search
       </Button>
-      <select
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        aria-label="Product kind"
-        value={kind}
-        onChange={(e) => apply({ kind: e.target.value })}
-      >
-        <option value="">All products</option>
-        <option value="mobile">Mobiles (IMEI)</option>
-        <option value="accessory">Accessories</option>
-      </select>
+      <AppSelect
+          label="Product kind"
+          className="w-full sm:w-48"
+          value={kind === '' ? 'all' : kind}
+          onValueChange={(v) => apply({ kind: v === 'all' ? null : v })}
+          options={[
+            { value: 'all', label: 'All products' },
+            { value: 'mobile', label: 'Mobiles (IMEI)' },
+            { value: 'accessory', label: 'Accessories' },
+          ]}
+        />
       <Button
         type="button"
         variant={includeInactive ? 'default' : 'outline'}

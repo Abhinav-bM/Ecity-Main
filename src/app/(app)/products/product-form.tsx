@@ -15,11 +15,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
+import { FormSelect } from '@/components/app-select'
 
 type Values = z.infer<typeof productSchema>
-
-const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
 export function ProductForm({
   id,
@@ -40,6 +38,7 @@ export function ProductForm({
   const [formError, setFormError] = useState<string | null>(null)
 
   const {
+    control,
     register,
     handleSubmit,
     watch,
@@ -121,25 +120,31 @@ export function ProductForm({
               <Input id="name" autoFocus {...register('name')} />
             </Field>
             <Field id="categoryId" label="Category" required error={errors.categoryId?.message}>
-              <select id="categoryId" className={selectClass} {...register('categoryId')}>
-                <option value="">Choose a category…</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.isSerialised ? ` (${c.identifierType})` : ''}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                control={control}
+                name="categoryId"
+                id="categoryId"
+                label="Category"
+                placeholder="Choose a category…"
+                options={categories.map((c) => ({
+                  value: String(c.id),
+                  // The identifier type is part of the label: a shop needs to
+                  // see that "Mobiles" means IMEI-tracked before choosing it.
+                  label: `${c.name}${c.isSerialised ? ` (${c.identifierType})` : ''}`,
+                }))}
+              />
             </Field>
             <Field id="brandId" label="Brand" error={errors.brandId?.message}>
-              <select id="brandId" className={selectClass} {...register('brandId')}>
-                <option value="">No brand</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                control={control}
+                name="brandId"
+                id="brandId"
+                label="Brand"
+                allowEmpty
+                emptyLabel="No brand"
+                placeholder="No brand"
+                options={brands.map((b) => ({ value: String(b.id), label: b.name }))}
+              />
             </Field>
             <Field id="model" label="Model" error={errors.model?.message}>
               <Input id="model" {...register('model')} />
@@ -186,32 +191,32 @@ export function ProductForm({
               <Input id="sellingPrice" inputMode="decimal" {...register('sellingPrice')} />
             </Field>
             <Field id="taxRateId" label="Tax rate" error={errors.taxRateId?.message}>
-              <select id="taxRateId" className={selectClass} {...register('taxRateId')}>
-                <option value="">No tax rate</option>
-                {taxRates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                control={control}
+                name="taxRateId"
+                id="taxRateId"
+                label="Tax rate"
+                allowEmpty
+                emptyLabel="No tax rate"
+                placeholder="No tax rate"
+                options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
+              />
             </Field>
             <Field
               id="defaultSupplierId"
               label="Usual supplier"
               error={errors.defaultSupplierId?.message}
             >
-              <select
+              <FormSelect
+                control={control}
+                name="defaultSupplierId"
                 id="defaultSupplierId"
-                className={selectClass}
-                {...register('defaultSupplierId')}
-              >
-                <option value="">Not set</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                label="Default supplier"
+                allowEmpty
+                emptyLabel="None"
+                placeholder="None"
+                options={suppliers.map((x) => ({ value: String(x.id), label: x.name }))}
+              />
             </Field>
           </CardContent>
         </Card>

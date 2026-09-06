@@ -12,9 +12,10 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { StateCodeSelect } from '@/components/state-code-select'
+import { FormStateCodeSelect } from '@/components/state-code-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
+import { FormSelect } from '@/components/app-select'
 
 type Values = z.infer<typeof branchSchema>
 
@@ -31,6 +32,7 @@ export function BranchForm({
   const [formError, setFormError] = useState<string | null>(null)
 
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
@@ -109,18 +111,16 @@ export function BranchForm({
               label="Manager"
               error={errors.managerUserId?.message}
             >
-              <select
+              <FormSelect
+                control={control}
+                name="managerUserId"
                 id="managerUserId"
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                {...register('managerUserId')}
-              >
-                <option value="">No manager assigned</option>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+                label="Branch manager"
+                allowEmpty
+                emptyLabel="No manager assigned"
+                placeholder="No manager assigned"
+                options={managers.map((m) => ({ value: String(m.id), label: m.name }))}
+              />
             </Field>
           </CardContent>
         </Card>
@@ -145,7 +145,7 @@ export function BranchForm({
               error={errors.stateCode?.message}
               hint="A branch in another state bills inter-state (IGST)"
             >
-              <StateCodeSelect id="stateCode" {...register('stateCode')} />
+              <FormStateCodeSelect control={control} name="stateCode" id="stateCode" />
             </Field>
             <div className="hidden sm:block" />
             <Field id="addressLine1" label="Address line 1" className="sm:col-span-2" error={errors.addressLine1?.message}>

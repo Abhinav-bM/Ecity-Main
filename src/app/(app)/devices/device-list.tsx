@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ClientPagination } from '@/components/pagination-client'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { AppSelect } from '@/components/app-select'
 import {
   Table,
   TableBody,
@@ -115,8 +116,6 @@ export function DeviceList({
     },
   ]
 
-  const selectClass =
-    'h-9 rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
   return (
     <div className="space-y-4">
@@ -170,89 +169,74 @@ export function DeviceList({
           Search
         </Button>
 
-        <select
-          className={selectClass}
-          aria-label="Main type"
+        <AppSelect
+          label="Main type"
+          className="w-full sm:w-40"
+          allowEmpty
+          emptyLabel="All types"
+          placeholder="All types"
           value={String(filters.mainType ?? '')}
-          onChange={(e) => apply({ mainType: e.target.value, globalVariant: null })}
-        >
-          <option value="">All types</option>
-          {MAIN_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => apply({ mainType: v, globalVariant: null })}
+          options={MAIN_TYPES.map((t) => ({ value: t, label: t }))}
+        />
 
-        <select
-          className={selectClass}
-          aria-label="Branch"
+        <AppSelect
+          label="Branch"
+          className="w-full sm:w-40"
+          allowEmpty
+          emptyLabel="All branches"
+          placeholder="All branches"
           value={String(filters.branchId ?? '')}
-          onChange={(e) => apply({ branchId: e.target.value })}
-        >
-          <option value="">All branches</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => apply({ branchId: v })}
+          options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
+        />
 
-        <select
-          className={selectClass}
-          aria-label="Brand"
+        <AppSelect
+          label="Brand"
+          className="w-full sm:w-40"
+          allowEmpty
+          emptyLabel="All brands"
+          placeholder="All brands"
           value={String(filters.brandId ?? '')}
-          onChange={(e) => apply({ brandId: e.target.value })}
-        >
-          <option value="">All brands</option>
-          {brands.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => apply({ brandId: v })}
+          options={brands.map((b) => ({ value: String(b.id), label: b.name }))}
+        />
 
-        <select
-          className={selectClass}
-          aria-label="Status"
+        <AppSelect
+          label="Status"
+          className="w-full sm:w-40"
+          allowEmpty
+          emptyLabel="All statuses"
+          placeholder="All statuses"
           value={String(filters.status ?? '')}
-          onChange={(e) => apply({ status: e.target.value })}
-        >
-          <option value="">Any status</option>
-          {Object.entries(DEVICE_STATUS_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => apply({ status: v })}
+          options={Object.entries(DEVICE_STATUS_LABEL).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+        />
 
-        <select
-          className={selectClass}
-          aria-label="Supplier"
+        <AppSelect
+          label="Supplier"
+          className="w-full sm:w-40"
+          allowEmpty
+          emptyLabel="All suppliers"
+          placeholder="All suppliers"
           value={String(filters.supplierId ?? '')}
-          onChange={(e) => apply({ supplierId: e.target.value })}
-        >
-          <option value="">Any supplier</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => apply({ supplierId: v })}
+          options={suppliers.map((x) => ({ value: String(x.id), label: x.name }))}
+        />
 
-        <select
-          className={selectClass}
-          aria-label="Category"
+        <AppSelect
+          label="Category"
+          className="w-full sm:w-40"
+          allowEmpty
+          emptyLabel="All categories"
+          placeholder="All categories"
           value={String(filters.categoryId ?? '')}
-          onChange={(e) => apply({ categoryId: e.target.value })}
-        >
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => apply({ categoryId: v })}
+          options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+        />
       </form>
 
       {rows.length === 0 ? (

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
+import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
 
 /** M3 — purchases and supplier ledger. Requires a seeded database. */
 
@@ -28,9 +28,7 @@ async function pickProduct(page: Page, name: string, lineIndex = 1) {
 async function createProduct(page: Page, name: string, categoryLabel: string) {
   await page.goto('/products/new')
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
-  await page
-    .getByRole('combobox', { name: 'Category', exact: true })
-    .selectOption({ label: categoryLabel })
+  await choose(page.getByRole('combobox', { name: 'Category', exact: true }), categoryLabel)
   await page.getByRole('button', { name: 'Create product' }).click()
   await expect(page).toHaveURL(/\/products$/)
 }
@@ -158,7 +156,7 @@ test.describe('the product picker scales', () => {
     // ordered by name, this is exactly what fell off the end.
     await page.goto('/products/new')
     await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
-    await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: 'Mobiles (IMEI)' })
+    await choose(page.getByRole('combobox', { name: 'Category', exact: true }), 'Mobiles (IMEI)')
     await page.getByRole('textbox', { name: 'SKU', exact: true }).fill(`SKU${id}`)
     await page.getByRole('button', { name: 'Create product' }).click()
     await expect(page).toHaveURL(/\/products$/)

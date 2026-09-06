@@ -5,9 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-
-const selectClass =
-  'h-9 rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+import { AppSelect } from '@/components/app-select'
 
 export function SaleFilters({
   search,
@@ -63,31 +61,31 @@ export function SaleFilters({
         Search
       </Button>
 
-      <select
-        className={selectClass}
-        aria-label="Payment status"
+      <AppSelect
+        label="Payment status"
+        className="w-full sm:w-44"
+        allowEmpty
+        emptyLabel="Any status"
+        placeholder="Any status"
         value={paymentStatus}
-        onChange={(e) => apply({ paymentStatus: e.target.value })}
-      >
-        <option value="">Any payment</option>
-        <option value="PAID">Paid</option>
-        <option value="PARTIAL">Partly paid</option>
-        <option value="UNPAID">Unpaid</option>
-      </select>
+        onValueChange={(v) => apply({ paymentStatus: v || null })}
+        options={[
+          { value: 'PAID', label: 'Paid' },
+          { value: 'PARTIAL', label: 'Partly paid' },
+          { value: 'UNPAID', label: 'Unpaid' },
+        ]}
+      />
 
-      <select
-        className={selectClass}
-        aria-label="Branch"
+      <AppSelect
+        label="Branch"
+        className="w-full sm:w-48"
+        allowEmpty
+        emptyLabel="All branches"
+        placeholder="All branches"
         value={branchId}
-        onChange={(e) => apply({ branchId: e.target.value })}
-      >
-        <option value="">All branches</option>
-        {branches.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name}
-          </option>
-        ))}
-      </select>
+        onValueChange={(v) => apply({ branchId: v || null })}
+        options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
+      />
 
       <Input
         type="date"

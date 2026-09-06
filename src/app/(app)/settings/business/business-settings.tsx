@@ -18,11 +18,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { StateCodeSelect } from '@/components/state-code-select'
+import { FormStateCodeSelect } from '@/components/state-code-select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Field } from '@/components/form-field'
+import { FormSelect } from '@/components/app-select'
 
 type ProfileValues = z.infer<typeof businessProfileSchema>
 
@@ -80,6 +81,7 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
   const [includeTax, setIncludeTax] = useState(business.pricesIncludeTax)
 
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
@@ -163,7 +165,7 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
             error={errors.stateCode?.message}
             hint="Where the shop is registered. Sets the default place of supply."
           >
-            <StateCodeSelect id="stateCode" disabled={!canManage} {...register('stateCode')} />
+            <FormStateCodeSelect control={control} name="stateCode" id="stateCode" disabled={!canManage} />
           </Field>
           <Field id="invoicePrefix" label="Invoice prefix" error={errors.invoicePrefix?.message}>
             <Input
@@ -249,16 +251,18 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
               error={errors.newStockSalesChannel?.message}
               hint="Only affects NEW items. Everything else is always sold here."
             >
-              <select
+              <FormSelect
+                control={control}
+                name="newStockSalesChannel"
                 id="newStockSalesChannel"
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                label="NEW stock is billed in"
                 disabled={!canManage}
-                {...register('newStockSalesChannel')}
-              >
-                <option value="EXTERNAL">The other billing system only</option>
-                <option value="ECITY">ECITY only</option>
-                <option value="BOTH">Both systems</option>
-              </select>
+                options={[
+                  { value: 'EXTERNAL', label: 'The other billing system only' },
+                  { value: 'ECITY', label: 'ECITY only' },
+                  { value: 'BOTH', label: 'Both systems' },
+                ]}
+              />
             </Field>
           </div>
 

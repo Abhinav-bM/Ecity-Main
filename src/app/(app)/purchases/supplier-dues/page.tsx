@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Pagination } from '@/components/pagination'
 import { Card } from '@/components/ui/card'
 import {
   Table,
@@ -17,14 +18,24 @@ import { supplierOutstanding } from '@/server/services/supplier-ledger.service'
 
 export const dynamic = 'force-dynamic'
 
+const PAGE_SIZE = 25
+
 /** PRD FR-14.3 — supplier-wise outstanding. Suppliers are shared across branches. */
-export default async function SupplierOutstandingPage() {
+export default async function SupplierOutstandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   if (!hasPermission(session.user, 'supplier_payment.view')) redirect('/dashboard')
 
-  const rows = await supplierOutstanding(session.user)
-  const totalOwed = rows.reduce((sum, r) => sum + (r.balancePaise > 0n ? r.balancePaise : 0n), 0n)
+  const p = await searchParams
+  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const dues = await supplierOutstanding(session.user, page, PAGE_SIZE)
+  const rows = dues.rows
+  // Owed across every supplier, not just the ones on this page.
+  const totalOwed = dues.totalOwedPaise > 0n ? dues.totalOwedPaise : 0n
 
   return (
     <div className="space-y-4">
@@ -115,6 +126,15 @@ export default async function SupplierOutstandingPage() {
           </Card>
         </>
       )}
+
+      <Pagination
+        basePath="/purchases/supplier-dues"
+        params={p}
+        page={dues.page}
+        pageSize={dues.pageSize}
+        total={dues.total}
+        noun="suppliers"
+      />
     </div>
   )
 }

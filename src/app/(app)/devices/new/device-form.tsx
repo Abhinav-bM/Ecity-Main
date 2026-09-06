@@ -17,11 +17,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
+import { FormSelect } from '@/components/app-select'
 
 type Values = z.infer<typeof deviceSchema>
-
-const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
 export function DeviceForm({
   imeiSlots,
@@ -66,6 +64,7 @@ export function DeviceForm({
   }
 
   const {
+    control,
     register,
     handleSubmit,
     setValue,
@@ -204,7 +203,7 @@ export function DeviceForm({
 
             <Field id="productId" label="Product" required error={errors.productId?.message}>
               {/*
-                A <select> would have to be capped, and a shop with hundreds of
+                A plain dropdown would have to be capped, and a shop with hundreds of
                 serialised products would find the ones past the cap simply
                 missing. Same searchable picker the purchase form uses.
               */}
@@ -220,13 +219,13 @@ export function DeviceForm({
             </Field>
 
             <Field id="branchId" label="Branch" required error={errors.branchId?.message}>
-              <select id="branchId" className={selectClass} {...register('branchId')}>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                control={control}
+                name="branchId"
+                id="branchId"
+                label="Branch"
+                options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
+              />
             </Field>
           </CardContent>
         </Card>
@@ -321,24 +320,28 @@ export function DeviceForm({
               <Input id="sellingPrice" inputMode="decimal" {...register('sellingPrice')} />
             </Field>
             <Field id="taxRateId" label="Tax rate" error={errors.taxRateId?.message}>
-              <select id="taxRateId" className={selectClass} {...register('taxRateId')}>
-                <option value="">Use the product default</option>
-                {taxRates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                control={control}
+                name="taxRateId"
+                id="taxRateId"
+                label="Tax rate"
+                allowEmpty
+                emptyLabel="Use the product default"
+                placeholder="Use the product default"
+                options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
+              />
             </Field>
             <Field id="supplierId" label="Supplier" error={errors.supplierId?.message}>
-              <select id="supplierId" className={selectClass} {...register('supplierId')}>
-                <option value="">Not recorded</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                control={control}
+                name="supplierId"
+                id="supplierId"
+                label="Supplier"
+                allowEmpty
+                emptyLabel="Not recorded"
+                placeholder="Not recorded"
+                options={suppliers.map((x) => ({ value: String(x.id), label: x.name }))}
+              />
             </Field>
             <Field id="purchaseDate" label="Purchase date" error={errors.purchaseDate?.message}>
               <Input id="purchaseDate" type="date" {...register('purchaseDate')} />

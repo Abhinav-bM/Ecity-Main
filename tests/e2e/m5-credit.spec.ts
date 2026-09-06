@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
+import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
 
 /** M5 — customer credit, collections and dues. Needs a seeded, migrated database. */
 
@@ -8,7 +8,7 @@ const unique = () => String(Date.now()).slice(-8)
 async function createProduct(page: Page, name: string, price: string) {
   await page.goto('/products/new')
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
-  await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: 'Cables' })
+  await choose(page.getByRole('combobox', { name: 'Category', exact: true }), 'Cables')
   await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill(price)
   await page.getByRole('button', { name: 'Create product' }).click()
   await expect(page).toHaveURL(/\/products$/)

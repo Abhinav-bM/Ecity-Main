@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AppSelect } from '@/components/app-select'
 import { formatDateShort } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
 
@@ -229,18 +230,13 @@ function PayDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pay-method">Payment method</Label>
-            <select
+            <AppSelect
               id="pay-method"
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              label="Payment method"
               value={methodId}
-              onChange={(e) => setMethodId(e.target.value)}
-            >
-              {paymentMethods.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setMethodId}
+              options={paymentMethods.map((m) => ({ value: String(m.id), label: m.name }))}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pay-reference">Reference</Label>

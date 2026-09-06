@@ -153,6 +153,8 @@ export type DuesFilters = {
   /** Only customers with something past its due date. */
   overdueOnly?: boolean
   search?: string
+  page?: number
+  pageSize?: number
 }
 
 /**
@@ -166,7 +168,14 @@ export async function customerDues(
   actor: AuthUser,
   filters: DuesFilters = {},
   now: Date = new Date(),
-): Promise<{ rows: CustomerDue[]; totals: Record<AgingBucket, bigint>; totalPaise: bigint }> {
+): Promise<{
+  rows: CustomerDue[]
+  totals: Record<AgingBucket, bigint>
+  totalPaise: bigint
+  total: number
+  page: number
+  pageSize: number
+}> {
   const conditions: SQL[] = [
     eq(sale.businessId, actor.businessId),
     isNotNull(sale.customerId),
@@ -237,6 +246,11 @@ export async function customerDues(
   if (filters.overdueOnly) result = result.filter((r) => r.overduePaise > 0n)
   result.sort((a, b) => Number(b.balancePaise - a.balancePaise))
 
+  /*
+   * Totals are summed over EVERY debtor, then the rows are paged. The figure
+   * at the top of the screen has to be what the shop is owed in total - not
+   * the total of whichever 25 customers happen to be on this page.
+   */
   const totals = emptyBuckets()
   let totalPaise = 0n
   for (const r of result) {
@@ -244,7 +258,25 @@ export async function customerDues(
     for (const b of AGING_BUCKETS) totals[b] += r.buckets[b]
   }
 
-  return { rows: result, totals, totalPaise }
+  /*
+   * Paged in memory rather than in SQL. The aggregation is per-customer over
+   * per-invoice rows, which SQL pagination would have to reproduce; the query
+   * is already bounded by open invoices only, and rendering hundreds of rows
+   * was the actual problem. Revisit if a shop ever carries enough open
+   * invoices for the query itself to hurt.
+   */
+  const page = Math.max(1, filters.page ?? 1)
+  const pageSize = Math.max(1, filters.pageSize ?? 25)
+  const start = (page - 1) * pageSize
+
+  return {
+    rows: result.slice(start, start + pageSize),
+    totals,
+    totalPaise,
+    total: result.length,
+    page,
+    pageSize,
+  }
 }
 
 /* ------------------------------------------------------- the statement --- */

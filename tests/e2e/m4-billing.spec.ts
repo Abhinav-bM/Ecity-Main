@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { expectNoHorizontalOverflow, isMobileProject, signIn, tabTo, USERS } from './helpers'
+import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, tabTo, USERS } from './helpers'
 
 /** M4 — sales and billing. Requires a seeded, migrated database. */
 
@@ -9,7 +9,7 @@ const imei = (n: number) => String(35_400_000_000_000 + (Date.now() % 1_000_000)
 async function createProduct(page: Page, name: string, category: string, price: string) {
   await page.goto('/products/new')
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
-  await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: category })
+  await choose(page.getByRole('combobox', { name: 'Category', exact: true }), category)
   await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill(price)
   await page.getByRole('textbox', { name: 'HSN code', exact: true }).fill('8517')
   await page.getByRole('button', { name: 'Create product' }).click()
@@ -326,7 +326,7 @@ test.describe('the bill, after it is saved', () => {
     await expect(page.getByRole('link', { name: invoiceNumber })).toBeVisible()
 
     // It was paid in full, so the UNPAID filter must exclude it.
-    await filters.getByRole('combobox', { name: 'Payment status' }).selectOption('UNPAID')
+    await choose(filters.getByRole('combobox', { name: 'Payment status' }), 'Unpaid')
     await expect(page.getByRole('link', { name: invoiceNumber })).toHaveCount(0)
 
     await expectNoHorizontalOverflow(page)
@@ -458,7 +458,7 @@ test.describe('customer history (FR-6.7)', () => {
     await page.keyboard.press('Enter')
     await page.getByRole('link', { name: buyer }).first().click()
     await page.getByRole('tab', { name: 'Details' }).click()
-    await page.getByRole('combobox', { name: 'GST state' }).selectOption('32')
+    await choose(page.getByRole('combobox', { name: 'GST state' }), 'Kerala (32)')
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page).toHaveURL(/\/customers$/)
   })

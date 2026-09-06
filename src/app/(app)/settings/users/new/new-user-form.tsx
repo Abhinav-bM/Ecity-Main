@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { FormSelect } from '@/components/app-select'
 
 type Values = z.infer<typeof createUserSchema>
 
@@ -29,6 +30,7 @@ export function NewUserForm({
   const [selected, setSelected] = useState<number[]>([])
 
   const {
+    control,
     register,
     handleSubmit,
     setValue,
@@ -100,18 +102,14 @@ export function NewUserForm({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="roleId">Role</Label>
-                <select
+                <FormSelect
+                  control={control}
+                  name="roleId"
                   id="roleId"
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  {...register('roleId')}
-                >
-                  <option value="">Choose a role…</option>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
+                  label="Role"
+                  placeholder="Choose a role…"
+                  options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
+                />
                 {errors.roleId ? (
                   <p className="text-xs text-destructive">{errors.roleId.message}</p>
                 ) : null}

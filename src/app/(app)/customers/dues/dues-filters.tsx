@@ -5,9 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-
-const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:w-auto'
+import { AppSelect } from '@/components/app-select'
 
 export function DuesFilters({
   branches,
@@ -52,29 +50,27 @@ export function DuesFilters({
         Search
       </Button>
 
-      <select
-        className={selectClass}
-        aria-label="Branch"
+      <AppSelect
+        label="Branch"
+        className="w-full sm:w-48"
+        allowEmpty
+        emptyLabel="All branches"
+        placeholder="All branches"
         value={params.get('branchId') ?? ''}
-        onChange={(e) => apply({ branchId: e.target.value || null })}
-      >
-        <option value="">All branches</option>
-        {branches.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name}
-          </option>
-        ))}
-      </select>
+        onValueChange={(v) => apply({ branchId: v || null })}
+        options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
+      />
 
-      <select
-        className={selectClass}
-        aria-label="Show"
-        value={params.get('overdue') === '1' ? '1' : ''}
-        onChange={(e) => apply({ overdue: e.target.value || null })}
-      >
-        <option value="">Everything owed</option>
-        <option value="1">Overdue only</option>
-      </select>
+      <AppSelect
+        label="Show"
+        className="w-full sm:w-44"
+        value={params.get('overdue') === '1' ? '1' : 'all'}
+        onValueChange={(v) => apply({ overdue: v === '1' ? '1' : null })}
+        options={[
+          { value: 'all', label: 'Everything owed' },
+          { value: '1', label: 'Overdue only' },
+        ]}
+      />
 
       {/* Bounds the collections column only; what is owed is owed today. */}
       <Input

@@ -9,12 +9,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/form-field'
 import { Input } from '@/components/ui/input'
+import { AppSelect } from '@/components/app-select'
 import { formatMoney } from '@/lib/money'
 import { rupeesToPaise } from '@/lib/validation'
 import { formatDateShort } from '@/lib/utils'
-
-const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
 export type OpenSale = {
   id: number
@@ -155,33 +153,23 @@ export function CollectForm({
 
           <Field id="branchId" label="Collected at" required>
             {/* FR-7.5: a customer can settle at any shop, not only where they bought. */}
-            <select
+            <AppSelect
               id="branchId"
-              className={selectClass}
+              label="Collected at"
               value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setBranchId}
+              options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
+            />
           </Field>
 
           <Field id="methodId" label="Method" required>
-            <select
+            <AppSelect
               id="methodId"
-              className={selectClass}
+              label="Method"
               value={methodId}
-              onChange={(e) => setMethodId(e.target.value)}
-            >
-              {methods.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setMethodId}
+              options={methods.map((m) => ({ value: String(m.id), label: m.name }))}
+            />
           </Field>
 
           <Field id="reference" label="Reference">

@@ -12,7 +12,7 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { StateCodeSelect } from '@/components/state-code-select'
+import { FormStateCodeSelect } from '@/components/state-code-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 
@@ -40,6 +40,7 @@ export function PartyForm({
   const label = kind === 'customer' ? 'Customer' : 'Supplier'
 
   const {
+    control,
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
@@ -118,7 +119,7 @@ export function PartyForm({
               error={errors.stateCode?.message}
               hint="Decides CGST/SGST or IGST on their invoices"
             >
-              <StateCodeSelect id="stateCode" {...register('stateCode')} />
+              <FormStateCodeSelect control={control} name="stateCode" id="stateCode" />
             </Field>
           </CardContent>
         </Card>

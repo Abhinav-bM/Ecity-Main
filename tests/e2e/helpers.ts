@@ -97,3 +97,18 @@ export async function tabTo(page: Page, target: Locator, maxPresses = 25) {
     `Could not reach the target with ${maxPresses} Tab presses; focus stopped on ${focused}.`,
   )
 }
+
+/**
+ * Choose an option from an AppSelect.
+ *
+ * These are Radix comboboxes, not native <select>s — `selectOption` only works
+ * on the latter. Click the trigger, then pick from the listbox that opens.
+ */
+export async function choose(trigger: Locator, optionName: string | RegExp) {
+  await trigger.click()
+  await trigger
+    .page()
+    .getByRole('option', { name: optionName, exact: typeof optionName === 'string' })
+    .first()
+    .click()
+}

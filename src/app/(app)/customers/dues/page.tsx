@@ -15,10 +15,13 @@ import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listAccessibleBranches } from '@/server/services/branch.service'
 import { AGING_BUCKETS, branchDues, customerDues } from '@/server/services/customer-ledger.service'
+import { Pagination } from '@/components/pagination'
 import { formatMoney } from '@/lib/money'
 import { DuesFilters } from './dues-filters'
 
 export const dynamic = 'force-dynamic'
+
+const PAGE_SIZE = 25
 
 const BUCKET_LABEL: Record<string, string> = {
   '0-7': '0–7 days',
@@ -51,6 +54,8 @@ export default async function CustomerDuesPage({
       branchId: p.branchId ? Number(p.branchId) : null,
       overdueOnly: p.overdue === '1',
       search: p.search,
+      page: Math.max(1, Number(p.page ?? '1') || 1),
+      pageSize: PAGE_SIZE,
     }),
     branchDues(session.user, { from, to }, now),
     listAccessibleBranches(session.user),
@@ -299,8 +304,18 @@ export default async function CustomerDuesPage({
         </>
       )}
 
+      <Pagination
+        basePath="/customers/dues"
+        params={p}
+        page={dues.page}
+        pageSize={dues.pageSize}
+        total={dues.total}
+        noun="customers"
+      />
+
       <p className="text-xs text-muted-foreground">
         Ages run from the agreed due date, or the sale date where none was set.
+        The totals above cover every debtor, not just this page.
       </p>
     </div>
   )

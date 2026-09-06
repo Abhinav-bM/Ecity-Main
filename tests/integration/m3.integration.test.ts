@@ -522,7 +522,7 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
 
   describe('supplier reporting', () => {
     it('outstanding lists the supplier with their balance', async () => {
-      const rows = await supplierOutstanding(actor)
+      const rows = (await supplierOutstanding(actor, 1, 500)).rows
       const row = rows.find((r) => r.supplierId === supplierId)
       expect(row).toBeTruthy()
       expect(row!.purchaseCount).toBeGreaterThan(0)

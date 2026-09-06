@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
+import { AppSelect } from '@/components/app-select'
 
 type Line = {
   key: string
@@ -28,9 +29,6 @@ type Line = {
   /** One per unit. Length must equal quantity for a serialised line. */
   identifiers: string[]
 }
-
-const selectClass =
-  'flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
 let counter = 0
 const newLine = (): Line => ({
@@ -188,18 +186,13 @@ export function PurchaseForm({
             />
           </Field>
           <Field id="branchId" label="Received at branch" required>
-            <select
+            <AppSelect
               id="branchId"
-              className={selectClass}
+              label="Received at branch"
               value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setBranchId}
+              options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
+            />
           </Field>
           <Field id="purchaseDate" label="Purchase date">
             <Input
