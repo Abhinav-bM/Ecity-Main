@@ -50,6 +50,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             model: p.model ?? '',
             sku: p.sku ?? '',
             barcode: p.barcode ?? '',
+            hsnCode: p.hsnCode ?? '',
             description: p.description ?? '',
             purchasePrice: p.defaultPurchasePricePaise
               ? paiseToRupees(p.defaultPurchasePricePaise)

@@ -1,4 +1,5 @@
 import { and, asc, count, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { normaliseStateCode, stateCodeFromGstin } from '@/lib/gst'
 import { db } from '@/server/db'
 import { customer, supplier, type Customer, type Supplier } from '@/server/db/schema'
 import { diff, writeAudit, type AuditContext } from '@/server/db/audit'
@@ -124,6 +125,7 @@ export type PartyInput = {
   state?: string
   pincode?: string
   gstin?: string
+  stateCode?: string
   notes?: string
 }
 
@@ -142,6 +144,9 @@ function normalise(input: PartyInput) {
     state: clean(input.state),
     pincode: clean(input.pincode),
     gstin: clean(input.gstin)?.toUpperCase() ?? null,
+    // Fall back to the state carried in the GSTIN, so a shop that fills in
+    // one does not have to remember the other.
+    stateCode: normaliseStateCode(input.stateCode) ?? stateCodeFromGstin(input.gstin),
     notes: clean(input.notes),
   }
 }

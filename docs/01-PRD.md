@@ -48,7 +48,7 @@ Two characteristics separate this from generic retail/POS software and drive mos
 - E-commerce storefront, online ordering, or customer-facing app.
 - Repair-workshop job-card management (device repair events are *recorded* against a device, but the repair workflow itself is out of scope for v1).
 - Payroll and HR.
-- Offline-first operation at the counter. v1 assumes a working internet connection; see §9.3 and Open Question OQ-7.
+- Offline-first operation at the counter. v1 assumes a working internet connection; see §9.3. *(OQ-7 answered: not required.)*
 - Native mobile applications. v1 is a responsive web app usable on a tablet and phone browser.
 
 ---
@@ -285,6 +285,7 @@ All analytics honour the user's role and branch scope, support date-range select
 - FR-26.2 Purchase invoices/documents, and receipts for customer and supplier payments.
 - FR-26.3 Branch-specific invoice numbering where configured.
 - FR-26.4 Print output for both A4 and 80 mm thermal receipt formats, plus PDF download and share.
+- FR-26.5 Every sales invoice is a statutory GST tax invoice: HSN/SAC per line, CGST/SGST for intra-state supply or IGST for inter-state, place of supply, and an HSN-wise tax summary. *(Added when OQ-4 was answered.)*
 
 ### 6.18 Notifications & Alerts (FR-27)
 
@@ -528,10 +529,10 @@ Sizing assumption for v1: up to 10 branches, 50 users, 30 concurrent users, ~500
 | OQ-1 | Do **ER** or **ACT** carry extra information, the way GLOBAL carries NEW CUT? | This is the only part that touches the schema. What the letters *stand for* is a display label (§5.1) and needs no answer to build. If a sub-designation is needed it is a nullable column plus a check constraint — cheaper to know early, but not a blocker | During M2, not before |
 | OQ-2 | Does **NEW CUT** need structured fields (e.g. cut type, cut date, notes, photo) or is a flag plus free text enough? | Determines the GLOBAL sub-schema and the analytics breakdown | Module 2 |
 | OQ-3 | How many branches, users and daily bills at launch, and over three years? | Drives hosting tier and index strategy | Module 0 (before infrastructure choice) |
-| OQ-4 | Is GST invoice formatting required to be statutory-compliant (HSN, CGST/SGST/IGST split, place of supply)? | Changes the invoice template and tax engine substantially | Module 4 (Sales) |
+| ~~OQ-4~~ | ~~Is GST invoice formatting required to be statutory-compliant?~~ **ANSWERED (M4): yes.** Built — HSN/SAC per product and snapshotted per line, CGST/SGST for intra-state and IGST for inter-state, place of supply derived from the customer's state (falling back to the branch's), and an HSN-wise summary on the A4 invoice. | — | **Closed** |
 | OQ-5 | Should the owner be able to *edit* a closed day, or only reverse it with a correction entry? | Affects audit design and permissions | Module 7 (Daily closing) |
 | OQ-6 | Are WhatsApp/SMS/email notifications and invoice sharing needed in v1? | Adds a third-party provider, cost and compliance | Module 12 (Notifications) |
-| OQ-7 | Is offline billing genuinely required, or is a reliable connection acceptable? | Offline-first roughly doubles the effort of the sales module | Before Module 4 |
+| ~~OQ-7~~ | ~~Is offline billing genuinely required?~~ **ANSWERED (M4): no.** A reliable connection is acceptable. A half-built bill still survives a refresh or a dropped connection via the persisted cart, and a retried submit cannot double-bill — but saving needs the server. Revisit as its own module if the shop's connection proves unreliable. | — | **Closed** |
 | OQ-8 | Multi-currency, or single currency per business? | Currently assumed single | Module 1 |
 | OQ-9 | Which existing data must be migrated in (products, IMEIs, customer dues, supplier dues), and in what format? | Shapes the importer and go-live plan | Module M11 |
 | OQ-10 | **What do the other system's Excel exports actually look like?** One real sales export and one purchase export, with real data | Nothing about the adapter can be finalised without a sample. Everything else in M12 can be built first | Module M12 |

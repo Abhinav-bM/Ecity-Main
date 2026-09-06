@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { StateCodeSelect } from '@/components/state-code-select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -95,6 +96,7 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
       state: business.state ?? '',
       pincode: business.pincode ?? '',
       gstin: business.gstin ?? '',
+      stateCode: business.stateCode ?? '',
       currency: business.currency,
       timezone: business.timezone,
       pricesIncludeTax: business.pricesIncludeTax,
@@ -152,6 +154,14 @@ function ProfileForm({ business, canManage }: { business: Business; canManage: b
           </Field>
           <Field id="gstin" label="GST number" error={errors.gstin?.message}>
             <Input id="gstin" className="uppercase" disabled={!canManage} {...register('gstin')} />
+          </Field>
+          <Field
+            id="stateCode"
+            label="GST state"
+            error={errors.stateCode?.message}
+            hint="Where the shop is registered. Sets the default place of supply."
+          >
+            <StateCodeSelect id="stateCode" disabled={!canManage} {...register('stateCode')} />
           </Field>
           <Field id="invoicePrefix" label="Invoice prefix" error={errors.invoicePrefix?.message}>
             <Input

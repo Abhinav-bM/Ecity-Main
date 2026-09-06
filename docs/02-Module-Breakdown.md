@@ -204,13 +204,15 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Goal.** The counter can sell, and produce an invoice. The highest-traffic screen in the product.
 
-**Delivers.** FR-6.1 – FR-6.8, FR-26.1, FR-26.3, FR-26.4.
+**Delivers.** FR-6.1 – FR-6.8, FR-26.1, FR-26.3, FR-26.4, FR-26.5, FR-38.2, FR-38.3.
 
 **Data model.** `sale`, `sale_item`, `sale_payment`.
 
 *Built as:* no separate `invoice_series` table was needed. M3 already introduced `document_sequence`, which allocates gapless per-branch, per-year counters under `SELECT … FOR UPDATE`; invoices reuse it with a different document kind. One table, one concurrency proof, one place to audit.
 
-**Screens.** The billing screen — a single keyboard-driven page: search by name/SKU/barcode/IMEI, cart with line discounts and tax, customer attach/create inline, split payment across methods, save & print. Sale list with filters. Sale detail. Printable invoice in A4 and 80 mm thermal layouts, plus PDF download.
+**Screens.** The billing screen — a single keyboard-driven page: search by name/SKU/barcode/IMEI, cart with line discounts and tax, customer attach/create inline, split payment across methods, save & print. Sale list with filters. Sale detail. Printable invoice in A4 and 80 mm thermal layouts, plus PDF download and share. Customer history (FR-6.7) on the customer record: spend, purchases across every branch, and what is still owed.
+
+*Built as:* the customer, supplier and product fields are **searchable pickers**, not `<select>`s. A capped dropdown silently omits records — found in production-shaped data at 571 suppliers and 693 serialised products against a 500 cap — and the omission is invisible to the user.
 
 **Client state — the first module that needs a store.** The bill being built is real client state: cart lines, per-line and bill-level discounts, the attached customer, split payments across methods, and later the trade-in from M6. Four or five sibling components read and write it — the search box, the cart, the totals panel, the payment panel — which is past what props or context handle cleanly.
 
@@ -226,6 +228,10 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - **Channel check:** a device with `sales_channel = 'EXTERNAL'` is refused at search time and at save time, with the message *"This device is billed through the other system."* This is what makes M12 safe — it removes the possibility of the same phone being invoiced in both systems.
 - **Mark as sold externally**, a permissioned action setting `SOLD_PENDING_IMPORT`: stock drops now, and M12's upload completes the record with the real invoice. This is the fallback for `BOTH`-channel devices.
 - Tax computation honouring inclusive/exclusive configuration.
+
+*Built as:* **OQ-4 was answered "yes — statutory".** So the tax engine also splits every line into CGST/SGST (intra-state) or IGST (inter-state), and the invoice carries HSN/SAC per line, the place of supply, and an HSN-wise summary. Place of supply follows the customer's registered state and falls back to the branch's; where neither is known the sale stays intra-state rather than guessing IGST. The split is stored, not derived at print time, because a reprint years later must be identical even if the branch or customer has since moved state. CGST takes the floor of the halving and SGST the remainder, so the two always add back to exactly the tax charged.
+
+*Built as:* **OQ-7 was answered "no — a reliable connection is acceptable".** The persisted cart still covers a refresh or a dropped connection, and idempotency still prevents a double bill, but saving requires the server. Offline-first would be its own module.
 - Invoice number allocation, gapless per branch series, safe under concurrency.
 - Idempotent sale submission keyed by a client-generated id, so a retried request after a dropped connection does not create a second bill.
 - Sale completion in one transaction: stock down, `device_event: sold`, payments posted, invoice numbered.
@@ -238,7 +244,7 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - Both invoice formats print correctly, and the branch invoice series has no gaps or duplicates after 200 concurrent test sales.
 - A half-built bill survives a browser refresh and a dropped connection, and submitting it twice creates exactly one sale.
 
-**Depends on.** M3. **Effort.** 3.0 weeks. *Blocked on PRD OQ-4 and OQ-7.*
+**Depends on.** M3. **Effort.** 3.0 weeks. *OQ-4 and OQ-7 both answered during M4 — see below.*
 
 ---
 

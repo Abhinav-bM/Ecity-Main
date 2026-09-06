@@ -1,4 +1,5 @@
 import { and, asc, count, eq, inArray, ne } from 'drizzle-orm'
+import { normaliseStateCode, stateCodeFromGstin } from '@/lib/gst'
 import { db } from '@/server/db'
 import { appUser, branch, userBranch } from '@/server/db/schema'
 import { diff, writeAudit, type AuditContext } from '@/server/db/audit'
@@ -96,6 +97,7 @@ export type BranchInput = {
   state?: string
   pincode?: string
   gstin?: string
+  stateCode?: string
   invoicePrefix?: string
   managerUserId?: number | null
   notes?: string
@@ -114,6 +116,9 @@ function normalise(input: BranchInput) {
     state: clean(input.state),
     pincode: clean(input.pincode),
     gstin: clean(input.gstin)?.toUpperCase() ?? null,
+    // Fall back to the state carried in the GSTIN, so a shop that fills in
+    // one does not have to remember the other.
+    stateCode: normaliseStateCode(input.stateCode) ?? stateCodeFromGstin(input.gstin),
     invoicePrefix: clean(input.invoicePrefix)?.toUpperCase() ?? null,
     notes: clean(input.notes),
   }

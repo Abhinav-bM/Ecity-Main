@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { GST_STATE_CODES } from '@/lib/gst'
 
 export const emailSchema = z
   .string()
@@ -86,6 +87,19 @@ export const gstinSchema = z
   .optional()
   .or(z.literal(''))
 
+/**
+ * Two-digit GST state code (PRD OQ-4). Blank is allowed - a shop that is not
+ * registered has no state code to give, and the invoice simply omits the
+ * place-of-supply line rather than printing a wrong one.
+ */
+export const stateCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[0-9]{2}$/, 'Choose a state.')
+  .refine((v) => v in GST_STATE_CODES, 'That is not a valid GST state code.')
+  .optional()
+  .or(z.literal(''))
+
 export const phoneSchema = z
   .string()
   .trim()
@@ -104,6 +118,7 @@ export const businessProfileSchema = z.object({
   state: optionalText(80),
   pincode: optionalText(12),
   gstin: gstinSchema,
+  stateCode: stateCodeSchema,
   currency: z.string().trim().length(3).default('INR'),
   timezone: z.string().trim().min(3).default('Asia/Kolkata'),
   pricesIncludeTax: z.boolean().default(true),
@@ -165,6 +180,7 @@ export const branchSchema = z.object({
   state: optionalText(80),
   pincode: optionalText(12),
   gstin: gstinSchema,
+  stateCode: stateCodeSchema,
   invoicePrefix: optionalText(10),
   /**
    * An unselected <select> submits '', which z.coerce turns into 0 and then
@@ -192,6 +208,7 @@ export const partySchema = z.object({
   state: optionalText(80),
   pincode: optionalText(12),
   gstin: gstinSchema,
+  stateCode: stateCodeSchema,
   notes: optionalText(1000),
 })
 
@@ -244,6 +261,16 @@ export const productSchema = z.object({
   model: optionalText(80),
   sku: optionalText(40),
   barcode: optionalText(60),
+  /**
+   * HSN (goods) or SAC (services). GST allows 4, 6 or 8 digits depending on
+   * turnover, so the length is not pinned - only that it is digits.
+   */
+  hsnCode: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{4,8}$/, 'HSN is 4 to 8 digits.')
+    .optional()
+    .or(z.literal('')),
   description: optionalText(500),
   purchasePrice: optionalMoney,
   sellingPrice: optionalMoney,

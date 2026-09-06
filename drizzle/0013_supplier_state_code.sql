@@ -1,0 +1,1 @@
+ALTER TABLE "supplier" ADD COLUMN "state_code" text;

@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
+import { PartyPicker, type PickedParty } from '@/components/party-picker'
 
 type Line = {
   key: string
@@ -44,16 +45,14 @@ const newLine = (): Line => ({
 })
 
 export function PurchaseForm({
-  suppliers,
   branches,
   defaultBranchId,
 }: {
-  suppliers: { id: number; name: string }[]
   branches: { id: number; code: string; name: string }[]
   defaultBranchId: number | null
 }) {
   const router = useRouter()
-  const [supplierId, setSupplierId] = useState('')
+  const [supplier, setSupplier] = useState<PickedParty | null>(null)
   const [branchId, setBranchId] = useState(String(defaultBranchId ?? branches[0]?.id ?? ''))
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('')
@@ -129,7 +128,7 @@ export function PurchaseForm({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        supplierId,
+        supplierId: supplier?.id,
         branchId,
         purchaseDate,
         supplierInvoiceNumber,
@@ -178,19 +177,15 @@ export function PurchaseForm({
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field id="supplierId" label="Supplier" required>
-            <select
+            {/* Searchable, not a capped list — see PartyPicker. */}
+            <PartyPicker
+              kind="supplier"
               id="supplierId"
-              className={selectClass}
-              value={supplierId}
-              onChange={(e) => setSupplierId(e.target.value)}
-            >
-              <option value="">Choose a supplier…</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              label="Supplier"
+              placeholder="Choose a supplier…"
+              value={supplier}
+              onSelect={(s) => setSupplier(s)}
+            />
           </Field>
           <Field id="branchId" label="Received at branch" required>
             <select

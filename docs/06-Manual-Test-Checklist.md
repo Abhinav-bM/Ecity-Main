@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 174 unit and integration tests, 387
+Automated tests cover the mechanics — 200 unit and integration tests, 407
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -456,6 +456,33 @@ Go to **Billing**.
 - [ ] A duplicate phone number is refused with a message naming the clash
 - [ ] Cancel closes the dialog and changes nothing
 
+## 5c. Pickers do not silently truncate
+
+Customers, suppliers and products are chosen through a **searchable picker**,
+never a fixed dropdown — a capped list drops records with no hint that it did.
+
+- [ ] The Customer box on billing opens a search, not a long dropdown
+- [ ] Typing a phone number finds the customer
+- [ ] A customer created minutes ago is findable
+- [ ] Same for **Supplier** on the purchase form
+- [ ] Same for **Product** on the purchase form and on Add device
+
+## 5b. Customer history (FR-6.7)
+
+Open **Customers** and click a customer who has bought something.
+
+- [ ] The **History** tab opens first — that is what you came to see
+- [ ] Total spend, number of purchases, outstanding and last purchase date
+- [ ] Every invoice is listed, newest first, with branch and item count
+- [ ] Clicking an invoice number opens that sale
+- [ ] Purchases from **every branch** appear, not just the current one
+- [ ] A part-paid bill shows **PARTIAL**, and outstanding is non-zero and red
+- [ ] A voided bill is listed but does **not** count towards spend or dues
+- [ ] A customer who has bought nothing says so, rather than showing an empty
+      table
+- [ ] The **Details** tab still edits the customer and saves
+- [ ] On a phone the history becomes cards and nothing overflows sideways
+
 ## 6. The invoice
 
 Save a bill; you land on the sale.
@@ -471,6 +498,28 @@ Save a bill; you land on the sale.
       a blank box
 - [ ] The PDF's amounts are labelled INR (the rupee glyph is deliberately not
       used — see `src/server/pdf/invoice-pdf.tsx`)
+- [ ] **Share** hands the PDF to the phone's share sheet (WhatsApp, mail); on a
+      desktop browser it copies the invoice link instead
+
+## 6b. The invoice is a statutory GST document (OQ-4)
+
+First set **Settings → Business → GST state**, and a **GST state** on each
+branch. Give a few products an **HSN code** (8517 phones, 8544 cables).
+
+- [ ] The invoice is headed **Tax Invoice**
+- [ ] **Place of supply** appears, with the state code and name
+- [ ] Each line shows its **HSN** code
+- [ ] An ordinary local sale shows **CGST** and **SGST** as separate lines,
+      each half the rate — never a single combined "GST 18%"
+- [ ] CGST + SGST adds up to exactly the tax shown
+- [ ] An **HSN summary** table appears below the totals on A4
+- [ ] The HSN summary's taxable and tax columns add up to the invoice totals
+- [ ] Set a customer's **GST state** to another state, bill them → the invoice
+      shows a single **IGST** line and no CGST/SGST
+- [ ] The customer pays the same total either way — only the split changes
+- [ ] A product with no HSN still bills; the line shows "—" and stays out of
+      the summary
+- [ ] The downloaded PDF matches the screen on every one of these
 
 ## 7. Stock actually moved
 
@@ -518,8 +567,8 @@ Save a bill; you land on the sale.
 - **No trade-in** on the bill — also M6
 - **No Excel import** of the other system's sales — that is M12; devices marked
   `SOLD_PENDING_IMPORT` are waiting for it
-- **No customer history tab** still — carried from M1, now buildable, planned
-  for M5
+- **Returns and payments do not appear in customer history yet** — the tab
+  says so. Returns arrive with M6, payments against dues with M5
 - No daily cash-up or Z-report — M7
 
 ---

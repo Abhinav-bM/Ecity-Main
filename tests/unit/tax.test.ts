@@ -128,3 +128,96 @@ describe('bill totals', () => {
     expect(bill.taxablePaise + bill.taxPaise).toBe(bill.totalPaise)
   })
 })
+
+describe('GST split on a bill (OQ-4: statutory invoices)', () => {
+  const line = (hsn: string, price: bigint, qty: number, bp: number) => ({
+    hsnCode: hsn,
+    unitPricePaise: price,
+    quantity: qty,
+    taxRateBasisPoints: bp,
+  })
+
+  it('splits an intra-state bill into CGST and SGST that add back to the tax', () => {
+    const bill = computeBill([line('8517', 7499900n, 1, 1800)], true, 0n, false)
+    expect(bill.cgstPaise + bill.sgstPaise).toBe(bill.taxPaise)
+    expect(bill.igstPaise).toBe(0n)
+    expect(bill.taxablePaise + bill.taxPaise).toBe(bill.totalPaise)
+  })
+
+  it('puts everything in IGST across state lines', () => {
+    const bill = computeBill([line('8517', 7499900n, 1, 1800)], true, 0n, true)
+    expect(bill.igstPaise).toBe(bill.taxPaise)
+    expect(bill.cgstPaise).toBe(0n)
+    expect(bill.sgstPaise).toBe(0n)
+  })
+
+  it('the customer pays the same either way', () => {
+    const intra = computeBill([line('8517', 7499900n, 1, 1800)], true, 0n, false)
+    const inter = computeBill([line('8517', 7499900n, 1, 1800)], true, 0n, true)
+    expect(intra.totalPaise).toBe(inter.totalPaise)
+    expect(intra.taxPaise).toBe(inter.taxPaise)
+  })
+
+  it('the HSN summary adds up to the bill', () => {
+    const bill = computeBill(
+      [
+        line('8517', 7499900n, 1, 1800),
+        line('8517', 19900n, 3, 1800),
+        line('8544', 25000n, 2, 1200),
+      ],
+      true,
+      0n,
+      false,
+    )
+    // Same HSN at the same rate collapses to one row; a different rate does not.
+    expect(bill.hsnSummary).toHaveLength(2)
+    const summed = bill.hsnSummary.reduce(
+      (acc, r) => ({
+        taxable: acc.taxable + r.taxablePaise,
+        tax: acc.tax + r.taxPaise,
+        cgst: acc.cgst + r.cgstPaise,
+        sgst: acc.sgst + r.sgstPaise,
+      }),
+      { taxable: 0n, tax: 0n, cgst: 0n, sgst: 0n },
+    )
+    expect(summed.taxable).toBe(bill.taxablePaise)
+    expect(summed.tax).toBe(bill.taxPaise)
+    expect(summed.cgst).toBe(bill.cgstPaise)
+    expect(summed.sgst).toBe(bill.sgstPaise)
+    expect(bill.hsnSummary.find((r) => r.hsnCode === '8517')!.quantity).toBe(4)
+  })
+
+  it('the per-rate breakdown carries its own split', () => {
+    const bill = computeBill(
+      [line('8517', 100000n, 1, 1800), line('8544', 100000n, 1, 500)],
+      false,
+      0n,
+      false,
+    )
+    for (const row of bill.taxByRate) {
+      expect(row.cgstPaise + row.sgstPaise).toBe(row.taxPaise)
+    }
+    expect(bill.taxByRate.map((r) => r.rateBasisPoints)).toEqual([500, 1800])
+  })
+
+  it('never loses a paisa across 100 odd-tax lines', () => {
+    // 99 paise at 18% inclusive gives an odd tax, which is where a naive
+    // halving would drift a rupee over a long bill.
+    const lines = Array.from({ length: 100 }, () => line('8517', 99n, 1, 1800))
+    const bill = computeBill(lines, true, 0n, false)
+    expect(bill.cgstPaise + bill.sgstPaise).toBe(bill.taxPaise)
+    expect(bill.taxablePaise + bill.taxPaise).toBe(bill.totalPaise)
+    expect(bill.totalPaise).toBe(9900n)
+  })
+
+  it('a line with no HSN stays out of the summary but still counts in the totals', () => {
+    const bill = computeBill(
+      [{ unitPricePaise: 50000n, quantity: 1, taxRateBasisPoints: 1800 }],
+      true,
+      0n,
+      false,
+    )
+    expect(bill.hsnSummary).toHaveLength(0)
+    expect(bill.taxPaise).toBeGreaterThan(0n)
+  })
+})

@@ -12,6 +12,7 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { StateCodeSelect } from '@/components/state-code-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 
@@ -25,10 +26,13 @@ export function PartyForm({
   kind,
   id,
   initial,
+  readOnly = false,
 }: {
   kind: 'customer' | 'supplier'
   id?: number
   initial?: Partial<Values>
+  /** View-only for a role that can see the record but not change it. */
+  readOnly?: boolean
 }) {
   const router = useRouter()
   const [formError, setFormError] = useState<string | null>(null)
@@ -82,6 +86,9 @@ export function PartyForm({
       </div>
 
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4" noValidate>
+        {/* A disabled fieldset blocks every control inside it, so a new field
+            cannot accidentally stay editable for a read-only viewer. */}
+        <fieldset disabled={readOnly} className="space-y-4">
         {formError ? <Alert variant="destructive">{formError}</Alert> : null}
 
         <Card>
@@ -104,6 +111,14 @@ export function PartyForm({
               hint="15 characters, e.g. 29ABCDE1234F1Z5"
             >
               <Input id="gstin" className="uppercase" {...register('gstin')} />
+            </Field>
+            <Field
+              id="stateCode"
+              label="GST state"
+              error={errors.stateCode?.message}
+              hint="Decides CGST/SGST or IGST on their invoices"
+            >
+              <StateCodeSelect id="stateCode" {...register('stateCode')} />
             </Field>
           </CardContent>
         </Card>
@@ -164,14 +179,18 @@ export function PartyForm({
           </CardContent>
         </Card>
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
-            <Link href={`/${plural}`}>Cancel</Link>
-          </Button>
-          <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-            {isSubmitting ? 'Saving…' : id ? 'Save changes' : `Create ${kind}`}
-          </Button>
-        </div>
+        </fieldset>
+
+        {readOnly ? null : (
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
+              <Link href={`/${plural}`}>Cancel</Link>
+            </Button>
+            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+              {isSubmitting ? 'Saving…' : id ? 'Save changes' : `Create ${kind}`}
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   )

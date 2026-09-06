@@ -22,7 +22,6 @@ import type { MainType } from '@/server/db/schema'
 export function BillingScreen({
   branchId,
   branchName,
-  customers,
   canCreateCustomer,
   paymentMethods,
   defaultTaxRateId,
@@ -31,7 +30,6 @@ export function BillingScreen({
 }: {
   branchId: number
   branchName: string
-  customers: { id: number; name: string; phone: string | null }[]
   canCreateCustomer: boolean
   paymentMethods: { id: number; name: string }[]
   defaultTaxRateId: number | null
@@ -236,8 +234,8 @@ export function BillingScreen({
 
         <div className="space-y-4">
           <CustomerPanel
-            customers={customers}
             canCreate={canCreateCustomer}
+            selectedName={cart.customerName}
             selectedId={cart.customerId}
             onSelect={(id, name) => cart.setCustomer(id, name)}
           />

@@ -1,4 +1,5 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm'
+import { normaliseStateCode, stateCodeFromGstin } from '@/lib/gst'
 import { db } from '@/server/db'
 import { business, expenseCategory, paymentMethod, taxRate } from '@/server/db/schema'
 import { diff, writeAudit, type AuditContext } from '@/server/db/audit'
@@ -20,9 +21,16 @@ export async function updateBusiness(
   input: Partial<typeof business.$inferInsert>,
 ) {
   const before = await getBusiness(actor)
+  // '' from an unset picker must become NULL, or the place-of-supply fallback
+  // chain on an invoice sees a truthy blank and stops there.
+  const values =
+    'stateCode' in input
+      ? { ...input, stateCode: normaliseStateCode(input.stateCode) ?? stateCodeFromGstin(input.gstin) }
+      : input
+
   await db
     .update(business)
-    .set({ ...input, updatedAt: new Date() })
+    .set({ ...values, updatedAt: new Date() })
     .where(eq(business.id, actor.businessId))
 
   await writeAudit(ctx, {
@@ -30,7 +38,7 @@ export async function updateBusiness(
     entityType: 'business',
     entityId: actor.businessId,
     summary: 'Updated business profile',
-    changes: diff(before, input),
+    changes: diff(before, values),
   })
 }
 

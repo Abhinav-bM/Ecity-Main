@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PartyPicker } from '@/components/party-picker'
 import {
   Dialog,
   DialogContent,
@@ -27,20 +28,23 @@ export type BillCustomer = { id: number; name: string; phone: string | null }
  * with someone standing there (PRD FR-6.6).
  */
 export function CustomerPanel({
-  customers,
   canCreate,
   selectedId,
+  selectedName,
   onSelect,
 }: {
-  customers: BillCustomer[]
   /** customer.manage. Without it the create call would only 403. */
   canCreate: boolean
   selectedId: number | null
+  /**
+   * Carried alongside the id rather than looked up in a prefetched list: the
+   * attached customer may have been created moments ago, or sit beyond any
+   * page of results, and the box must still show their name after a reload.
+   */
+  selectedName: string | null
   onSelect: (id: number | null, name: string | null) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [created, setCreated] = useState<BillCustomer[]>([])
-  const all = [...created, ...customers]
 
   return (
     <Card>
@@ -54,23 +58,15 @@ export function CustomerPanel({
         ) : null}
       </CardHeader>
       <CardContent>
-        <select
-          aria-label="Customer"
-          className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          value={selectedId ?? ''}
-          onChange={(e) => {
-            const id = e.target.value ? Number(e.target.value) : null
-            onSelect(id, all.find((c) => c.id === id)?.name ?? null)
-          }}
-        >
-          <option value="">Walk-in (no record)</option>
-          {all.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.phone ? ` · ${c.phone}` : ''}
-            </option>
-          ))}
-        </select>
+        <PartyPicker
+          kind="customer"
+          label="Customer"
+          allowNone
+          noneLabel="Walk-in (no record)"
+          placeholder="Walk-in (no record)"
+          value={selectedId ? { id: selectedId, name: selectedName ?? '', phone: null } : null}
+          onSelect={(c) => onSelect(c?.id ?? null, c?.name ?? null)}
+        />
         <p className="mt-2 text-xs text-muted-foreground">
           Needed for credit, warranty and returns.
         </p>
@@ -79,10 +75,7 @@ export function CustomerPanel({
       <NewCustomerDialog
         open={open}
         onOpenChange={setOpen}
-        onCreated={(c) => {
-          setCreated((prev) => [c, ...prev])
-          onSelect(c.id, c.name)
-        }}
+        onCreated={(c) => onSelect(c.id, c.name)}
       />
     </Card>
   )

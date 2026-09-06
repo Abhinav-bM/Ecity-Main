@@ -11,6 +11,7 @@ async function createProduct(page: Page, name: string, category: string, price: 
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
   await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: category })
   await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill(price)
+  await page.getByRole('textbox', { name: 'HSN code', exact: true }).fill('8517')
   await page.getByRole('button', { name: 'Create product' }).click()
   await expect(page).toHaveURL(/\/products$/)
 }
@@ -30,7 +31,13 @@ async function purchase(page: Page, opts: {
   await expect(page).toHaveURL(/\/suppliers$/)
 
   await page.goto('/purchases/new')
-  await page.getByRole('combobox', { name: 'Supplier', exact: true }).selectOption({ label: opts.supplier })
+  await page.getByRole('combobox', { name: 'Supplier', exact: true }).click()
+  await page.getByPlaceholder('Name, phone, email or GST').fill(opts.supplier)
+  await page
+    .getByTestId('supplier-picker-list')
+    .getByRole('option', { name: opts.supplier })
+    .first()
+    .click()
   await page.getByRole('combobox', { name: 'Line 1 product' }).click()
   await page.getByPlaceholder('Name, SKU or barcode').fill(opts.product)
   await page.getByTestId('product-picker-list').getByRole('option', { name: new RegExp(opts.product) }).first().click()
@@ -335,7 +342,6 @@ test.describe('the bill, after it is saved', () => {
     await page.getByRole('button', { name: 'Add to bill' }).click()
 
     // Created and attached in one step - the half-built bill survives.
-    await expect(page.getByRole('combobox', { name: 'Customer' })).toHaveValue(/\d+/)
     await expect(page.getByRole('combobox', { name: 'Customer' })).toContainText(customerName)
   })
 
@@ -364,6 +370,160 @@ test.describe('the bill, after it is saved', () => {
 
     // Stock drops now; the daily import fills in the real invoice later.
     await expect(page.getByText('SOLD_PENDING_IMPORT')).toBeVisible()
+  })
+})
+
+test.describe('customer history (FR-6.7)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('shows what a customer bought, their spend and what they owe', async ({ page }) => {
+    const id = unique()
+    const name = `E2E Hist Cable ${id}`
+    const buyer = `E2E Hist Buyer ${id}`
+    await createProduct(page, name, 'Cables', '500')
+    await purchase(page, {
+      supplier: `E2E HistSup ${id}`,
+      product: name,
+      quantity: '4',
+      cost: '200',
+    })
+
+    await page.goto('/customers/new')
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(buyer)
+    await page.getByRole('textbox', { name: 'Phone', exact: true }).fill(`97${id}`)
+    await page.getByRole('button', { name: 'Create customer' }).click()
+    await expect(page).toHaveURL(/\/customers$/)
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(name)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+    await page.getByRole('combobox', { name: 'Customer' }).click()
+    await page.getByPlaceholder('Name, phone, email or GST').fill(buyer)
+    await page
+      .getByTestId('customer-picker-list')
+      .getByRole('option', { name: buyer })
+      .first()
+      .click()
+    await page.getByRole('button', { name: /^\+ Cash$/ }).click()
+    await page.getByRole('button', { name: /^Save bill/ }).click()
+    await expect(page).toHaveURL(/\/sales\/\d+$/)
+    const invoiceNumber = (await page.getByRole('heading', { level: 1 }).textContent())?.trim() ?? ''
+
+    await page.goto('/customers')
+    await page.getByRole('searchbox').first().fill(buyer)
+    await page.keyboard.press('Enter')
+    await page.getByRole('link', { name: buyer }).first().click()
+    await expect(page).toHaveURL(/\/customers\/\d+$/)
+
+    // History leads, because that is what you open a customer to find out.
+    await expect(page.getByRole('tab', { name: 'History' })).toHaveAttribute(
+      'data-state',
+      'active',
+    )
+    await expect(page.getByText('Total spend')).toBeVisible()
+    await expect(page.getByRole('link', { name: invoiceNumber })).toBeVisible()
+    // Paid in full, so nothing is outstanding.
+    await expect(page.getByText('Outstanding')).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('a customer who has bought nothing says so instead of showing an empty table', async ({
+    page,
+  }) => {
+    const id = unique()
+    const buyer = `E2E Quiet Buyer ${id}`
+    await page.goto('/customers/new')
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(buyer)
+    await page.getByRole('button', { name: 'Create customer' }).click()
+    await expect(page).toHaveURL(/\/customers$/)
+
+    await page.getByRole('searchbox').first().fill(buyer)
+    await page.keyboard.press('Enter')
+    await page.getByRole('link', { name: buyer }).first().click()
+    await expect(page.getByText('Nothing bought yet.')).toBeVisible()
+  })
+
+  test('the details tab still edits the customer', async ({ page }) => {
+    const id = unique()
+    const buyer = `E2E Edit Buyer ${id}`
+    await page.goto('/customers/new')
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(buyer)
+    await page.getByRole('button', { name: 'Create customer' }).click()
+    await expect(page).toHaveURL(/\/customers$/)
+
+    await page.getByRole('searchbox').first().fill(buyer)
+    await page.keyboard.press('Enter')
+    await page.getByRole('link', { name: buyer }).first().click()
+    await page.getByRole('tab', { name: 'Details' }).click()
+    await page.getByRole('combobox', { name: 'GST state' }).selectOption('32')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page).toHaveURL(/\/customers$/)
+  })
+})
+
+test.describe('the tax invoice is statutory (OQ-4)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('an intra-state sale shows CGST and SGST separately, not one GST line', async ({ page }) => {
+    const id = unique()
+    const name = `E2E Gst Cable ${id}`
+    await createProduct(page, name, 'Cables', '1000')
+    await purchase(page, {
+      supplier: `E2E GstSup ${id}`,
+      product: name,
+      quantity: '4',
+      cost: '400',
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(name)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+    await page.getByRole('button', { name: /^\+ Cash$/ }).click()
+    await page.getByRole('button', { name: /^Save bill/ }).click()
+    await expect(page).toHaveURL(/\/sales\/\d+$/)
+
+    const invoice = page.locator('#invoice')
+    await expect(invoice).toContainText(/tax invoice/i)
+    await expect(invoice).toContainText('Place of supply')
+    await expect(invoice).toContainText(/CGST/)
+    await expect(invoice).toContainText(/SGST/)
+    // A single combined "GST 18%" line is exactly what OQ-4 ruled out.
+    await expect(invoice.getByText(/^GST \d/)).toHaveCount(0)
+
+    await expect(invoice).toContainText('HSN summary')
+    await expect(invoice).toContainText('8517')
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('the PDF of a statutory invoice still renders', async ({ page }) => {
+    const id = unique()
+    const name = `E2E GstPdf Cable ${id}`
+    await createProduct(page, name, 'Cables', '600')
+    await purchase(page, {
+      supplier: `E2E GstPdfSup ${id}`,
+      product: name,
+      quantity: '2',
+      cost: '200',
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(name)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+    await page.getByRole('button', { name: /^\+ Cash$/ }).click()
+    await page.getByRole('button', { name: /^Save bill/ }).click()
+    await expect(page).toHaveURL(/\/sales\/\d+$/)
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('link', { name: 'Download PDF' }).click(),
+    ])
+    const fs = await import('node:fs/promises')
+    const head = (await fs.readFile(await download.path())).subarray(0, 5).toString('latin1')
+    expect(head).toBe('%PDF-')
   })
 })
 

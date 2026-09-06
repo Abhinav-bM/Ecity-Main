@@ -60,10 +60,30 @@ const s = StyleSheet.create({
     paddingVertical: 4,
   },
   cItem: { flex: 1, paddingRight: 6 },
-  cQty: { width: 34, textAlign: 'right' },
-  cPrice: { width: 62, textAlign: 'right' },
-  cTax: { width: 58, textAlign: 'right' },
-  cAmount: { width: 70, textAlign: 'right' },
+  cHsn: { width: 46, textAlign: 'right' },
+  cQty: { width: 30, textAlign: 'right' },
+  cPrice: { width: 58, textAlign: 'right' },
+  cTax: { width: 54, textAlign: 'right' },
+  cAmount: { width: 66, textAlign: 'right' },
+  hsnHead: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#111827',
+    paddingVertical: 3,
+    marginTop: 16,
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7.5,
+  },
+  hsnRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingVertical: 3,
+    fontSize: 7.5,
+  },
+  hCode: { width: 60 },
+  hCell: { flex: 1, textAlign: 'right' },
   totals: { marginTop: 12, marginLeft: 'auto', width: 210 },
   totalLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 },
   grand: {
@@ -96,9 +116,13 @@ const s = StyleSheet.create({
  * printed copy and the downloaded copy can never disagree about a figure.
  */
 export function InvoiceDocument({ data }: { data: InvoiceData }) {
-  const taxByRate = new Map<number, bigint>()
+  const taxByRate = new Map<number, { cgst: bigint; sgst: bigint; igst: bigint }>()
   for (const i of data.items) {
-    taxByRate.set(i.taxRateBasisPoints, (taxByRate.get(i.taxRateBasisPoints) ?? 0n) + i.taxPaise)
+    const b = taxByRate.get(i.taxRateBasisPoints) ?? { cgst: 0n, sgst: 0n, igst: 0n }
+    b.cgst += i.cgstPaise
+    b.sgst += i.sgstPaise
+    b.igst += i.igstPaise
+    taxByRate.set(i.taxRateBasisPoints, b)
   }
   const due = data.totalPaise - data.paidPaise
 
@@ -106,6 +130,7 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
     <Document title={`Invoice ${data.invoiceNumber}`} author={data.business.name}>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
+          <Text style={{ fontSize: 7.5, color: '#6b7280', letterSpacing: 1 }}>TAX INVOICE</Text>
           <Text style={s.shopName}>{data.business.name}</Text>
           {data.business.addressLine1 ? <Text>{data.business.addressLine1}</Text> : null}
           <Text style={s.muted}>
@@ -117,6 +142,12 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
           <Text style={[s.muted, { marginTop: 3 }]}>
             {data.branch.name} ({data.branch.code})  |  All amounts in INR
           </Text>
+          {data.gst.placeOfSupplyCode ? (
+            <Text style={s.muted}>
+              Place of supply: {data.gst.placeOfSupplyCode}
+              {data.gst.placeOfSupplyName ? ` ${data.gst.placeOfSupplyName}` : ''}
+            </Text>
+          ) : null}
         </View>
 
         <View style={s.metaRow}>
@@ -135,6 +166,7 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
 
         <View style={s.tableHead} fixed>
           <Text style={s.cItem}>ITEM</Text>
+          <Text style={s.cHsn}>HSN</Text>
           <Text style={s.cQty}>QTY</Text>
           <Text style={s.cPrice}>PRICE</Text>
           <Text style={s.cTax}>TAX</Text>
@@ -155,6 +187,7 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
                 </Text>
               ) : null}
             </View>
+            <Text style={s.cHsn}>{i.hsnCodeSnapshot ?? '-'}</Text>
             <Text style={s.cQty}>{i.quantity}</Text>
             <Text style={s.cPrice}>{money(i.unitPricePaise)}</Text>
             <Text style={s.cTax}>{money(i.taxPaise)}</Text>
@@ -173,14 +206,28 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
               <Text>-{money(data.discountPaise)}</Text>
             </View>
           ) : null}
+          {/* Intra-state must show CGST and SGST separately; inter-state is IGST. */}
           {[...taxByRate.entries()]
             .sort((a, b) => a[0] - b[0])
-            .map(([bp, tax]) => (
-              <View key={bp} style={s.totalLine}>
-                <Text style={s.muted}>GST {bp / 100}%</Text>
-                <Text>{money(tax)}</Text>
-              </View>
-            ))}
+            .map(([bp, t]) =>
+              data.gst.isInterState ? (
+                <View key={bp} style={s.totalLine}>
+                  <Text style={s.muted}>IGST {bp / 100}%</Text>
+                  <Text>{money(t.igst)}</Text>
+                </View>
+              ) : (
+                <View key={bp}>
+                  <View style={s.totalLine}>
+                    <Text style={s.muted}>CGST {bp / 200}%</Text>
+                    <Text>{money(t.cgst)}</Text>
+                  </View>
+                  <View style={s.totalLine}>
+                    <Text style={s.muted}>SGST {bp / 200}%</Text>
+                    <Text>{money(t.sgst)}</Text>
+                  </View>
+                </View>
+              ),
+            )}
           <View style={s.grand}>
             <Text>Total</Text>
             <Text>{money(data.totalPaise)}</Text>
@@ -201,6 +248,41 @@ export function InvoiceDocument({ data }: { data: InvoiceData }) {
             </View>
           ) : null}
         </View>
+
+        {data.gst.hsnSummary.length > 0 ? (
+          <View wrap={false}>
+            <View style={s.hsnHead}>
+              <Text style={s.hCode}>HSN</Text>
+              <Text style={s.hCell}>QTY</Text>
+              <Text style={s.hCell}>TAXABLE</Text>
+              {data.gst.isInterState ? (
+                <Text style={s.hCell}>IGST</Text>
+              ) : (
+                <>
+                  <Text style={s.hCell}>CGST</Text>
+                  <Text style={s.hCell}>SGST</Text>
+                </>
+              )}
+              <Text style={s.hCell}>TOTAL TAX</Text>
+            </View>
+            {data.gst.hsnSummary.map((r) => (
+              <View key={`${r.hsnCode}-${r.rateBasisPoints}`} style={s.hsnRow}>
+                <Text style={[s.hCode, s.mono]}>{r.hsnCode}</Text>
+                <Text style={s.hCell}>{r.quantity}</Text>
+                <Text style={s.hCell}>{money(r.taxablePaise)}</Text>
+                {data.gst.isInterState ? (
+                  <Text style={s.hCell}>{money(r.igstPaise)}</Text>
+                ) : (
+                  <>
+                    <Text style={s.hCell}>{money(r.cgstPaise)}</Text>
+                    <Text style={s.hCell}>{money(r.sgstPaise)}</Text>
+                  </>
+                )}
+                <Text style={s.hCell}>{money(r.taxPaise)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <Text style={s.footer} fixed>
           {data.pricesIncludedTax ? 'Prices include GST.' : 'GST added as shown.'} Thank you.

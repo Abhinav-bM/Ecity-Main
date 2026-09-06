@@ -6,6 +6,7 @@ import { createCategory, createProduct } from '@/server/services/product.service
 import { createParty } from '@/server/services/party.service'
 import { createDevice } from '@/server/services/device.service'
 import { increaseStock, getStock } from '@/server/services/stock.service'
+import { getInvoiceData } from '@/server/services/invoice'
 import { createSale, getSale, listSales } from '@/server/services/sale.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
@@ -319,6 +320,132 @@ suite('M4 sales and billing (database-backed)', () => {
 
       const all = await listSales(actor, { search: first.invoiceNumber, page: 1, pageSize: 10 })
       expect(all.total, 'only one bill may exist').toBe(1)
+    })
+  })
+
+  describe('statutory GST (OQ-4)', () => {
+    it('splits an intra-state sale into CGST and SGST that add back to the tax', async () => {
+      // The branch and the walk-in customer are both in Kerala.
+      await db
+        .update(schema.branch)
+        .set({ stateCode: '32' })
+        .where(eq(schema.branch.id, branchA))
+
+      const { id } = await createSale(actor, ctx, {
+        branchId: branchA,
+        lines: [
+          { productId: cableProductId, quantity: 1, unitPricePaise: rs(1000), taxRateId: gst18Id },
+        ],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(1000) }],
+      })
+
+      const detail = await getSale(actor, id)
+      expect(detail.sale.isInterState).toBe(false)
+      expect(detail.sale.placeOfSupplyCode).toBe('32')
+      expect(detail.sale.supplyStateCode).toBe('32')
+      expect(detail.sale.cgstPaise + detail.sale.sgstPaise).toBe(detail.sale.taxPaise)
+      expect(detail.sale.igstPaise).toBe(0n)
+
+      // The lines must agree with the header, or the invoice contradicts itself.
+      const lineCgst = detail.items.reduce((sum, i) => sum + i.cgstPaise, 0n)
+      const lineSgst = detail.items.reduce((sum, i) => sum + i.sgstPaise, 0n)
+      expect(lineCgst).toBe(detail.sale.cgstPaise)
+      expect(lineSgst).toBe(detail.sale.sgstPaise)
+    })
+
+    it('bills IGST when the customer is registered in another state', async () => {
+      await db
+        .update(schema.branch)
+        .set({ stateCode: '32' })
+        .where(eq(schema.branch.id, branchA))
+      await db
+        .update(schema.customer)
+        .set({ stateCode: '29' })
+        .where(eq(schema.customer.id, customerId))
+
+      const { id } = await createSale(actor, ctx, {
+        branchId: branchA,
+        customerId,
+        lines: [
+          { productId: cableProductId, quantity: 1, unitPricePaise: rs(1000), taxRateId: gst18Id },
+        ],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(1000) }],
+      })
+
+      const detail = await getSale(actor, id)
+      expect(detail.sale.isInterState).toBe(true)
+      expect(detail.sale.placeOfSupplyCode).toBe('29')
+      expect(detail.sale.igstPaise).toBe(detail.sale.taxPaise)
+      expect(detail.sale.cgstPaise).toBe(0n)
+      expect(detail.sale.sgstPaise).toBe(0n)
+
+      // Reset so later tests are not surprised by an inter-state customer.
+      await db
+        .update(schema.customer)
+        .set({ stateCode: null })
+        .where(eq(schema.customer.id, customerId))
+    })
+
+    it('derives the state from the GSTIN when no code was set', async () => {
+      await db
+        .update(schema.branch)
+        .set({ stateCode: null, gstin: '32AAAAA0000A1Z5' })
+        .where(eq(schema.branch.id, branchA))
+
+      const { id } = await createSale(actor, ctx, {
+        branchId: branchA,
+        lines: [
+          { productId: cableProductId, quantity: 1, unitPricePaise: rs(500), taxRateId: gst18Id },
+        ],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(500) }],
+      })
+      expect((await getSale(actor, id)).sale.supplyStateCode).toBe('32')
+    })
+
+    it('snapshots the HSN code so a later correction cannot rewrite an invoice', async () => {
+      await db
+        .update(schema.product)
+        .set({ hsnCode: '8544' })
+        .where(eq(schema.product.id, cableProductId))
+
+      const { id } = await createSale(actor, ctx, {
+        branchId: branchA,
+        lines: [
+          { productId: cableProductId, quantity: 2, unitPricePaise: rs(100), taxRateId: gst18Id },
+        ],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(200) }],
+      })
+      expect((await getSale(actor, id)).items[0]!.hsnCodeSnapshot).toBe('8544')
+
+      await db
+        .update(schema.product)
+        .set({ hsnCode: '9999' })
+        .where(eq(schema.product.id, cableProductId))
+      // The issued invoice keeps the code it was printed with.
+      expect((await getSale(actor, id)).items[0]!.hsnCodeSnapshot).toBe('8544')
+    })
+
+    it('the invoice payload carries an HSN summary that matches the lines', async () => {
+      await db
+        .update(schema.product)
+        .set({ hsnCode: '8544' })
+        .where(eq(schema.product.id, cableProductId))
+
+      const { id } = await createSale(actor, ctx, {
+        branchId: branchA,
+        lines: [
+          { productId: cableProductId, quantity: 3, unitPricePaise: rs(100), taxRateId: gst18Id },
+        ],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(300) }],
+      })
+
+      const invoice = await getInvoiceData(actor, id)
+      expect(invoice.gst.hsnSummary).toHaveLength(1)
+      const row = invoice.gst.hsnSummary[0]!
+      expect(row.hsnCode).toBe('8544')
+      expect(row.quantity).toBe(3)
+      expect(row.taxablePaise).toBe(invoice.taxablePaise)
+      expect(row.cgstPaise + row.sgstPaise + row.igstPaise).toBe(invoice.taxPaise)
     })
   })
 

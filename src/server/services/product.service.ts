@@ -99,6 +99,8 @@ export type ProductInput = {
   model?: string
   sku?: string
   barcode?: string
+  /** HSN/SAC, printed on every statutory invoice (PRD OQ-4). */
+  hsnCode?: string
   description?: string
   defaultPurchasePricePaise?: bigint | null
   defaultSellingPricePaise?: bigint | null
@@ -145,6 +147,7 @@ export async function createProduct(actor: AuthUser, ctx: AuditContext, input: P
         model: input.model?.trim() || null,
         sku,
         barcode: input.barcode?.trim() || null,
+        hsnCode: input.hsnCode?.trim() || null,
         description: input.description?.trim() || null,
         defaultPurchasePricePaise: input.defaultPurchasePricePaise ?? null,
         defaultSellingPricePaise: input.defaultSellingPricePaise ?? null,
@@ -197,6 +200,7 @@ export async function updateProduct(
       model: input.model?.trim() || null,
       sku,
       barcode: input.barcode?.trim() || null,
+      hsnCode: input.hsnCode?.trim() || null,
       description: input.description?.trim() || null,
       defaultPurchasePricePaise: input.defaultPurchasePricePaise ?? null,
       defaultSellingPricePaise: input.defaultSellingPricePaise ?? null,

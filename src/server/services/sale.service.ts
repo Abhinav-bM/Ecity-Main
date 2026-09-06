@@ -17,6 +17,12 @@ import { writeAudit, type AuditContext } from '@/server/db/audit'
 import { AppError, conflict, notFound } from '@/server/http'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
 import { computeBill, computeLine } from '@/lib/tax'
+import {
+  isInterState,
+  normaliseStateCode,
+  placeOfSupply,
+  stateCodeFromGstin,
+} from '@/lib/gst'
 import { assertBranchAcceptsTransactions } from './branch.service'
 import { assertPartySelectable } from './party.service'
 import { decreaseStock, setDeviceStatus } from './stock.service'
@@ -116,18 +122,64 @@ export async function createSale(
 
   const settings = (
     await db
-      .select({ pricesIncludeTax: business.pricesIncludeTax })
+      .select({
+        pricesIncludeTax: business.pricesIncludeTax,
+        stateCode: business.stateCode,
+        gstin: business.gstin,
+      })
       .from(business)
       .where(eq(business.id, actor.businessId))
       .limit(1)
   )[0]
   const pricesIncludeTax = settings?.pricesIncludeTax ?? true
 
+  /**
+   * Where this supply is taxed (PRD OQ-4).
+   *
+   * An explicit state code wins; otherwise it comes from the GSTIN, whose
+   * first two digits are the state. That keeps rows created before the field
+   * existed working without a backfill.
+   */
+  const branchRow = (
+    await db
+      .select({ stateCode: branch.stateCode, gstin: branch.gstin })
+      .from(branch)
+      .where(and(eq(branch.id, input.branchId), eq(branch.businessId, actor.businessId)))
+      .limit(1)
+  )[0]
+  const supplyStateCode =
+    normaliseStateCode(branchRow?.stateCode) ??
+    stateCodeFromGstin(branchRow?.gstin) ??
+    normaliseStateCode(settings?.stateCode) ??
+    stateCodeFromGstin(settings?.gstin)
+
+  const customerRow = input.customerId
+    ? (
+        await db
+          .select({ stateCode: customer.stateCode, gstin: customer.gstin })
+          .from(customer)
+          .where(
+            and(eq(customer.id, input.customerId), eq(customer.businessId, actor.businessId)),
+          )
+          .limit(1)
+      )[0]
+    : undefined
+  const customerStateCode =
+    normaliseStateCode(customerRow?.stateCode) ?? stateCodeFromGstin(customerRow?.gstin)
+
+  const placeOfSupplyCode = placeOfSupply(supplyStateCode, customerStateCode)
+  const interState = isInterState(supplyStateCode, placeOfSupplyCode)
+
   return db.transaction(async (tx) => {
     // Resolve products, devices and tax rates in one go.
     const productIds = [...new Set(input.lines.map((l) => l.productId))]
     const products = await tx
-      .select({ id: product.id, name: product.name, isSerialised: product.isSerialised })
+      .select({
+        id: product.id,
+        name: product.name,
+        isSerialised: product.isSerialised,
+        hsnCode: product.hsnCode,
+      })
       .from(product)
       .where(and(eq(product.businessId, actor.businessId), inArray(product.id, productIds)))
     const productById = new Map(products.map((p) => [p.id, p]))
@@ -202,6 +254,7 @@ export async function createSale(
 
     const totals = computeBill(
       prepared.map((x) => ({
+        hsnCode: x.product.hsnCode,
         unitPricePaise: x.line.unitPricePaise,
         quantity: x.line.quantity,
         discountPaise: x.line.discountPaise,
@@ -209,6 +262,7 @@ export async function createSale(
       })),
       pricesIncludeTax,
       input.billDiscountPaise ?? 0n,
+      interState,
     )
 
     const paid = input.payments.reduce((sum, p) => sum + p.amountPaise, 0n)
@@ -246,6 +300,12 @@ export async function createSale(
           taxablePaise: totals.taxablePaise,
           taxPaise: totals.taxPaise,
           totalPaise: totals.totalPaise,
+          cgstPaise: totals.cgstPaise,
+          sgstPaise: totals.sgstPaise,
+          igstPaise: totals.igstPaise,
+          placeOfSupplyCode,
+          supplyStateCode,
+          isInterState: interState,
           pricesIncludedTax: pricesIncludeTax,
           idempotencyKey: input.idempotencyKey ?? null,
           notes: input.notes?.trim() || null,
@@ -263,6 +323,7 @@ export async function createSale(
           taxRateBasisPoints: bp,
         },
         pricesIncludeTax,
+        interState,
       )
 
       await tx.insert(saleItem).values({
@@ -272,6 +333,7 @@ export async function createSale(
         description: p.name,
         // Snapshots, so a reprint reads as it did on the day.
         identifierSnapshot: device?.identifier ?? null,
+        hsnCodeSnapshot: p.hsnCode,
         mainTypeSnapshot: device?.mainType ?? null,
         isNewCutSnapshot: device?.isNewCut ?? false,
         quantity: line.quantity,
@@ -281,6 +343,9 @@ export async function createSale(
         taxRateBasisPoints: bp,
         taxablePaise: computed.taxablePaise,
         taxPaise: computed.taxPaise,
+        cgstPaise: computed.cgstPaise,
+        sgstPaise: computed.sgstPaise,
+        igstPaise: computed.igstPaise,
         lineTotalPaise: computed.totalPaise,
       })
 
@@ -552,4 +617,55 @@ export async function markSoldExternally(
     entityId: deviceId,
     summary: `Marked ${device.identifier ?? `#${deviceId}`} sold in the other system`,
   })
+}
+
+/**
+ * PRD FR-6.7 - what one customer has bought, and what they still owe.
+ *
+ * Deliberately branch-blind: the PRD asks for total spend *across branches*,
+ * and a customer who buys at two shops is still one customer. Access is
+ * already gated by `customer.view`.
+ */
+export async function getCustomerHistory(actor: AuthUser, customerId: number) {
+  const paidExpr = sql<string>`coalesce((
+    select sum(${salePayment.amountPaise}) from ${salePayment}
+    where ${salePayment.saleId} = ${sale.id}
+  ), 0)`
+
+  const rows = await db
+    .select({
+      id: sale.id,
+      invoiceNumber: sale.invoiceNumber,
+      soldAt: sale.soldAt,
+      status: sale.status,
+      totalPaise: sale.totalPaise,
+      paidPaise: paidExpr,
+      branchName: branch.name,
+      itemCount: sql<number>`(
+        select count(*)::int from ${saleItem} where ${saleItem.saleId} = ${sale.id}
+      )`,
+    })
+    .from(sale)
+    .innerJoin(branch, eq(branch.id, sale.branchId))
+    .where(and(eq(sale.businessId, actor.businessId), eq(sale.customerId, customerId)))
+    .orderBy(desc(sale.soldAt), desc(sale.id))
+
+  // A voided bill is history, not money: it must show, but it must not count
+  // towards spend or dues.
+  const counted = rows.filter((r) => r.status !== 'VOIDED')
+  const totalSpentPaise = counted.reduce((sum, r) => sum + r.totalPaise, 0n)
+  const totalPaidPaise = counted.reduce((sum, r) => sum + BigInt(r.paidPaise), 0n)
+
+  return {
+    sales: rows.map((r) => ({
+      ...r,
+      paidPaise: BigInt(r.paidPaise),
+      paymentStatus: salePaymentStatus(r.totalPaise, BigInt(r.paidPaise)),
+    })),
+    totalSpentPaise,
+    totalPaidPaise,
+    outstandingPaise: totalSpentPaise - totalPaidPaise,
+    saleCount: counted.length,
+    lastPurchaseAt: counted[0]?.soldAt ?? null,
+  }
 }

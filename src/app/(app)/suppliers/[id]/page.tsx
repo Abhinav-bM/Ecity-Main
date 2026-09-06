@@ -80,6 +80,7 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
                 state: party.state ?? '',
                 pincode: party.pincode ?? '',
                 gstin: party.gstin ?? '',
+                stateCode: party.stateCode ?? '',
                 notes: party.notes ?? '',
               }}
             />

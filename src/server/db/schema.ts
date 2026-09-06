@@ -160,6 +160,8 @@ export const business = pgTable('business', {
   state: text('state'),
   pincode: text('pincode'),
   gstin: text('gstin'),
+  /** Two-digit GST state code; the first two digits of the GSTIN. */
+  stateCode: text('state_code'),
   /** ISO 4217. Single currency per business (PRD OQ-8 assumed answered: single). */
   currency: text('currency').notNull().default('INR'),
   timezone: text('timezone').notNull().default('Asia/Kolkata'),
@@ -206,6 +208,8 @@ export const branch = pgTable(
     ),
     email: text('email'),
     gstin: text('gstin'),
+    /** Two-digit GST state code. A branch in another state bills inter-state. */
+    stateCode: text('state_code'),
     /** PRD FR-26.3. Null means "use the business prefix". */
     invoicePrefix: text('invoice_prefix'),
     openedOn: timestamp('opened_on', { withTimezone: true }),
@@ -496,6 +500,8 @@ export const customer = pgTable(
     state: text('state'),
     pincode: text('pincode'),
     gstin: text('gstin'),
+    /** Two-digit GST state code; governs place of supply on their invoices. */
+    stateCode: text('state_code'),
     notes: text('notes'),
     status: partyStatusEnum('status').notNull().default('ACTIVE'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -529,6 +535,8 @@ export const supplier = pgTable(
     state: text('state'),
     pincode: text('pincode'),
     gstin: text('gstin'),
+    /** Two-digit GST state code; needed for input credit on purchases. */
+    stateCode: text('state_code'),
     photoUrl: text('photo_url'),
     notes: text('notes'),
     status: partyStatusEnum('status').notNull().default('ACTIVE'),
@@ -642,6 +650,8 @@ export const product = pgTable(
     model: text('model'),
     sku: text('sku'),
     barcode: text('barcode'),
+    /** HSN (goods) or SAC (services). Printed on every statutory invoice. */
+    hsnCode: text('hsn_code'),
     description: text('description'),
     imageUrl: text('image_url'),
     /** Money is bigint paise, always (docs/03 §4.1). */
@@ -1105,6 +1115,23 @@ export const sale = pgTable(
     totalPaise: bigint('total_paise', { mode: 'bigint' }).notNull().default(sql`0`),
 
     /**
+     * The statutory split (PRD OQ-4, resolved: compliant invoices required).
+     * Intra-state supply splits the tax into CGST + SGST; inter-state puts it
+     * all in IGST. Stored rather than derived because an invoice is a legal
+     * document and must reprint identically years later, even if the branch
+     * or the customer later moves state.
+     */
+    cgstPaise: bigint('cgst_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    sgstPaise: bigint('sgst_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    igstPaise: bigint('igst_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+
+    /** GST state code the supply is taxed in, snapshotted at sale time. */
+    placeOfSupplyCode: text('place_of_supply_code'),
+    /** The branch's own state code at sale time. */
+    supplyStateCode: text('supply_state_code'),
+    isInterState: boolean('is_inter_state').notNull().default(false),
+
+    /**
      * Whether prices on this bill were tax-inclusive, captured at the time.
      * The business setting can change later; a reprinted invoice must still
      * show the arithmetic that was used.
@@ -1156,6 +1183,9 @@ export const saleItem = pgTable(
      */
     description: text('description'),
     identifierSnapshot: text('identifier_snapshot'),
+    /** HSN/SAC at sale time. A product's code can be corrected later; the
+     *  invoice already issued must keep the one it was printed with. */
+    hsnCodeSnapshot: text('hsn_code_snapshot'),
     mainTypeSnapshot: mainTypeEnum('main_type_snapshot'),
     isNewCutSnapshot: boolean('is_new_cut_snapshot').notNull().default(false),
 
@@ -1166,6 +1196,10 @@ export const saleItem = pgTable(
     taxRateBasisPoints: integer('tax_rate_basis_points').notNull().default(0),
     taxablePaise: bigint('taxable_paise', { mode: 'bigint' }).notNull(),
     taxPaise: bigint('tax_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    /** The statutory split of this line's tax. cgst + sgst + igst == tax. */
+    cgstPaise: bigint('cgst_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    sgstPaise: bigint('sgst_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    igstPaise: bigint('igst_paise', { mode: 'bigint' }).notNull().default(sql`0`),
     lineTotalPaise: bigint('line_total_paise', { mode: 'bigint' }).notNull(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

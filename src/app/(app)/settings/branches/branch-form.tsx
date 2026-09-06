@@ -12,6 +12,7 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { StateCodeSelect } from '@/components/state-code-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 
@@ -137,6 +138,14 @@ export function BranchForm({
             </Field>
             <Field id="gstin" label="GST number" error={errors.gstin?.message}>
               <Input id="gstin" className="uppercase" {...register('gstin')} />
+            </Field>
+            <Field
+              id="stateCode"
+              label="GST state"
+              error={errors.stateCode?.message}
+              hint="A branch in another state bills inter-state (IGST)"
+            >
+              <StateCodeSelect id="stateCode" {...register('stateCode')} />
             </Field>
             <div className="hidden sm:block" />
             <Field id="addressLine1" label="Address line 1" className="sm:col-span-2" error={errors.addressLine1?.message}>

@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { listParties } from '@/server/services/party.service'
 import { listPaymentMethods, listTaxRates } from '@/server/services/business.service'
 import { listAccessibleBranches } from '@/server/services/branch.service'
 import { BillingScreen } from './billing-screen'
@@ -31,8 +30,9 @@ export default async function BillingPage() {
     )
   }
 
-  const [customers, methods, rates] = await Promise.all([
-    listParties(session.user, 'customer', { page: 1, pageSize: 500 }),
+  // Customers are no longer prefetched: the picker searches the server, so a
+  // shop past 500 customers can still find the one at the counter.
+  const [methods, rates] = await Promise.all([
     listPaymentMethods(session.user),
     listTaxRates(session.user),
   ])
@@ -41,7 +41,6 @@ export default async function BillingPage() {
     <BillingScreen
       branchId={branchId}
       branchName={branches.find((b) => b.id === branchId)?.name ?? 'Branch'}
-      customers={customers.rows.map((c) => ({ id: c.id, name: c.name, phone: c.phone }))}
       paymentMethods={methods.filter((m) => m.isActive).map((m) => ({ id: m.id, name: m.name }))}
       defaultTaxRateId={rates.find((r) => r.isDefault)?.id ?? null}
       taxRates={rates.map((r) => ({ id: r.id, rateBasisPoints: r.rateBasisPoints }))}

@@ -147,6 +147,15 @@ export function ProductForm({
             <Field id="sku" label="SKU" error={errors.sku?.message} hint="Unique across the business">
               <Input id="sku" className="uppercase" {...register('sku')} />
             </Field>
+            <Field
+              id="hsnCode"
+              label="HSN code"
+              error={errors.hsnCode?.message}
+              hint="Printed on every tax invoice. 8517 for phones, 8544 for cables."
+            >
+              <Input id="hsnCode" inputMode="numeric" {...register('hsnCode')} />
+            </Field>
+
             <Field id="barcode" label="Barcode" error={errors.barcode?.message}>
               <Input id="barcode" {...register('barcode')} />
             </Field>

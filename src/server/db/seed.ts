@@ -60,7 +60,14 @@ async function main() {
     (
       await db
         .insert(business)
-        .values({ name: 'ECITY Mobiles', currency: 'INR', timezone: 'Asia/Kolkata' })
+        .values({
+          name: 'ECITY Mobiles',
+          currency: 'INR',
+          timezone: 'Asia/Kolkata',
+          // A registered shop, so invoices carry a real place of supply.
+          gstin: '32AAAAA0000A1Z5',
+          stateCode: '32',
+        })
         .returning()
     )[0]!
   console.log(`  business: ${biz.name} (#${biz.id})`)
@@ -111,7 +118,12 @@ async function main() {
       .limit(1)
     const b =
       existing[0] ??
-      (await db.insert(branch).values({ businessId: biz.id, code, name }).returning())[0]!
+      (
+        await db
+          .insert(branch)
+          .values({ businessId: biz.id, code, name, stateCode: '32' })
+          .returning()
+      )[0]!
     branchIds[code] = b.id
     console.log(`  branch: ${code} (#${b.id})`)
   }

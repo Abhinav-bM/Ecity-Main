@@ -35,6 +35,7 @@ export default async function EditBranchPage({ params }: { params: Promise<{ id:
         state: branch.state ?? '',
         pincode: branch.pincode ?? '',
         gstin: branch.gstin ?? '',
+        stateCode: branch.stateCode ?? '',
         invoicePrefix: branch.invoicePrefix ?? '',
         managerUserId: branch.managerUserId,
         notes: branch.notes ?? '',

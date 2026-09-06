@@ -35,6 +35,14 @@ async function createProduct(page: Page, name: string, categoryLabel: string) {
   await expect(page).toHaveURL(/\/products$/)
 }
 
+/** The supplier field is a searchable picker, not a capped <select>. */
+async function pickSupplier(page: Page, name: string) {
+  await page.getByRole('combobox', { name: 'Supplier', exact: true }).click()
+  // The picker lists a first page until you search — same as a real user.
+  await page.getByPlaceholder('Name, phone, email or GST').fill(name)
+  await page.getByTestId('supplier-picker-list').getByRole('option', { name }).first().click()
+}
+
 test.describe('recording a purchase', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page, USERS.admin)
@@ -85,9 +93,7 @@ test.describe('recording a purchase', () => {
     await createProduct(page, `E2E Phone ${id}`, 'Mobiles (IMEI)')
 
     await page.goto('/purchases/new')
-    await page
-      .getByRole('combobox', { name: 'Supplier', exact: true })
-      .selectOption({ label: `E2E Supplier ${id}` })
+    await pickSupplier(page, `E2E Supplier ${id}`)
     await pickProduct(page, `E2E Phone ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
@@ -118,9 +124,7 @@ test.describe('recording a purchase', () => {
     await createProduct(page, `E2E MismatchPhone ${id}`, 'Mobiles (IMEI)')
 
     await page.goto('/purchases/new')
-    await page
-      .getByRole('combobox', { name: 'Supplier', exact: true })
-      .selectOption({ label: `E2E Mismatch ${id}` })
+    await pickSupplier(page, `E2E Mismatch ${id}`)
     await pickProduct(page, `E2E MismatchPhone ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('3')
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(imei(10))
@@ -183,9 +187,7 @@ test.describe('supplier money', () => {
     await createProduct(page, `E2E PayCable ${id}`, 'Cables')
 
     await page.goto('/purchases/new')
-    await page
-      .getByRole('combobox', { name: 'Supplier', exact: true })
-      .selectOption({ label: `E2E Payable ${id}` })
+    await pickSupplier(page, `E2E Payable ${id}`)
     await pickProduct(page, `E2E PayCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
@@ -214,9 +216,7 @@ test.describe('supplier money', () => {
     const one = imei(20)
 
     await page.goto('/purchases/new')
-    await page
-      .getByRole('combobox', { name: 'Supplier', exact: true })
-      .selectOption({ label: `E2E Reverse ${id}` })
+    await pickSupplier(page, `E2E Reverse ${id}`)
     await pickProduct(page, `E2E RevPhone ${id}`)
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('5000')
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(one)
