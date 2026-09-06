@@ -73,7 +73,13 @@ jobs:
           script: |
             set -euo pipefail
             cd /home/ecity/app
-            docker compose pull
+            # --profile tools is essential. The migrate service is behind a
+            # profile so that "up" does not start it, but a plain "pull" then
+            # skips it too - leaving an OLD migration image on the server. It
+            # runs, finds nothing new in its own bundled files, exits 0, and
+            # the deploy goes green while the schema stays behind. The app
+            # then queries a column that does not exist.
+            docker compose --profile tools pull
 
             # Migrations run to completion before anything new serves traffic.
             # No "|| true": a failed migration must stop the deploy, not leave
