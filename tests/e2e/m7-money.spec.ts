@@ -125,6 +125,55 @@ test.describe('expenses', () => {
 
 })
 
+test.describe('an expense on its own page', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  /** FR-10.2 — the receipt belongs with the expense it explains. */
+  test('opens from the list and offers a receipt upload', async ({ page }) => {
+    const note = `E2E Receipt ${unique()}`
+    await recordExpense(page, '900', note)
+
+    await page
+      .locator('[data-testid="expense-row"]:visible')
+      .filter({ hasText: note })
+      .getByRole('link')
+      .first()
+      .click()
+    await expect(page).toHaveURL(/\/expenses\/\d+$/)
+    await expect(page.getByText(note)).toBeVisible()
+    await expect(page.getByText(/receipt or bill for this expense/i)).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  })
+})
+
+test.describe('an account on its own page', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  /** FR-12.3 — the movements behind the balance. */
+  test('shows the running ledger', async ({ page }) => {
+    const name = `E2E Ledger ${unique()}`
+    await page.goto('/accounts')
+    await page.getByRole('button', { name: 'Add account' }).click()
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(name)
+    await page.getByRole('textbox', { name: 'Opening balance (₹)', exact: true }).fill('7000')
+    await page.getByRole('button', { name: 'Add account' }).last().click()
+
+    await page
+      .locator('[data-testid="account-row"]:visible')
+      .filter({ hasText: name })
+      .getByRole('link')
+      .first()
+      .click()
+    await expect(page).toHaveURL(/\/accounts\/\d+$/)
+    await expect(page.getByTestId('account-balance')).toContainText('7,000.00')
+    await expectNoHorizontalOverflow(page)
+  })
+})
+
 test.describe('the cash drawer', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page, USERS.admin)
@@ -206,6 +255,8 @@ test.describe('closing the day', () => {
     await recordExpense(page, '100', `E2E Close ${unique()}`)
 
     await page.goto('/closing')
+    // FR-13.1. Invoices and units sold, not just a money figure.
+    await expect(page.getByText(/\d+ invoices · \d+ items/)).toBeVisible()
     const expected = await page.getByTestId('closing-expected').innerText()
     const expectedRupees = parseRupees(expected)
     // A day the seed left in deficit cannot be counted short of, and counted

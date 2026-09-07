@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -72,7 +73,12 @@ export default async function AccountsPage() {
                 <CardContent className="space-y-1.5 py-3 text-sm">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-medium">{a.name}</p>
+                      <Link
+                        href={`/accounts/${a.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {a.name}
+                      </Link>
                       <p className="text-xs text-muted-foreground">
                         {a.type} · {a.branchName ?? 'All branches'}
                       </p>
@@ -109,7 +115,12 @@ export default async function AccountsPage() {
                 {accounts.map((a) => (
                   <TableRow key={a.id} data-testid="account-row">
                     <TableCell>
-                      {a.name}
+                      <Link
+                        href={`/accounts/${a.id}`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {a.name}
+                      </Link>
                       {!a.isActive ? (
                         <Badge variant="secondary" className="ml-1.5">
                           Inactive

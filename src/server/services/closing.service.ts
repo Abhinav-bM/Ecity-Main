@@ -9,6 +9,7 @@ import {
   paymentMethod,
   refund,
   sale,
+  saleItem,
   salePayment,
   salesReturn,
   supplierPayment,
@@ -99,8 +100,18 @@ export async function daySummary(
 
   const { from, to } = dayRange(businessDate)
 
-  const [sales, methodRows, returns, collections, refunds, supplierPaid, expenses, drawer, closing] =
-    await Promise.all([
+  const [
+    sales,
+    methodRows,
+    returns,
+    collections,
+    refunds,
+    supplierPaid,
+    items,
+    expenses,
+    drawer,
+    closing,
+  ] = await Promise.all([
       db
         .select({
           invoices: sql<string>`count(*)`,
@@ -184,6 +195,24 @@ export async function daySummary(
           ),
         ),
 
+      /*
+       * FR-13.1. Units sold, not lines - two of the same cable is two. Its own
+       * query rather than a join onto the sale aggregate above, which would
+       * multiply each bill's total by its number of lines.
+       */
+      db
+        .select({ units: sql<string>`coalesce(sum(${saleItem.quantity}), 0)` })
+        .from(saleItem)
+        .innerJoin(sale, eq(sale.id, saleItem.saleId))
+        .where(
+          and(
+            eq(sale.branchId, branchId),
+            gte(sale.soldAt, from),
+            lt(sale.soldAt, to),
+            sql`${sale.status} <> 'VOIDED'`,
+          ),
+        ),
+
       expenseTotalsFor(branchId, businessDate),
 
       db
@@ -225,7 +254,7 @@ export async function daySummary(
     branchName: branchRow.name,
     businessDate,
     invoiceCount: Number(sales[0]?.invoices ?? 0),
-    itemCount: 0,
+    itemCount: Number(items[0]?.units ?? 0),
     salesPaise,
     returnsPaise: BigInt(returns[0]?.total ?? '0'),
     // What was billed but not taken at the counter is credit given today.
@@ -322,6 +351,7 @@ export async function closeDay(
            */
           summary: {
             invoiceCount: summary.invoiceCount,
+            itemCount: summary.itemCount,
             salesPaise: summary.salesPaise.toString(),
             returnsPaise: summary.returnsPaise.toString(),
             creditIssuedPaise: summary.creditIssuedPaise.toString(),

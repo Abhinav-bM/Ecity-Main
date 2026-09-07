@@ -934,6 +934,9 @@ come back and check it moved the right way and by the right amount.
       paid, description and reference
 - [ ] Choosing a non-cash method offers an **account**; choosing cash does not
 - [ ] It appears in the list, newest first, with who recorded it
+- [ ] Click the category → the expense opens on its own page
+- [ ] **Attach a receipt** — a photo or PDF — and it shows on the expense
+- [ ] A voided expense offers no upload
 - [ ] **Total spent** is over everything in the filter, not just this page
 - [ ] **Void** one → it asks why, and refuses an empty reason
 - [ ] After voiding, the money is back in the drawer and the expense is gone
@@ -945,6 +948,9 @@ come back and check it moved the right way and by the right amount.
 - [ ] **Add account** for a bank and one for UPI, with an opening balance
 - [ ] An account can belong to one branch or to **all branches**
 - [ ] **Transfer** between them → both balances move, by the same amount
+- [ ] Click an account name → its **ledger**: every movement, newest first,
+      with a running balance you can prove the total from
+- [ ] The two legs of the transfer appear, one in each account
 - [ ] **Reconcile** one, entering a statement balance ₹500 *below* the books
 - [ ] The balance does **not** change to match. The ₹500 shows as
       **unreconciled**. *A real difference wants an explanation, not an
@@ -954,6 +960,8 @@ come back and check it moved the right way and by the right amount.
 
 - [ ] **Daily closing** shows sales, credit given, collected, returns and
       refunds, what each payment method took, and the expenses by category
+- [ ] It shows **invoices and items**. Sell three of one thing on one bill →
+      one invoice, three items
 - [ ] Type a counted amount **₹200 below** expected → it says **₹200 short**
       as you type, before you commit to anything
 - [ ] Close the day → the shortage is recorded with the branch, your name and
@@ -1010,8 +1018,6 @@ come back and check it moved the right way and by the right amount.
 
 ## What M7 does not do
 
-- **No receipt photo on an expense yet** — the attachment plumbing exists from
-  M1 but the expense form does not use it
 - **No cash counting by denomination**; one counted total per day
 - **Legacy sales are not in the expected figure.** They take cash into the same
   physical till, so until M12 imports that day's file, expected cash is short

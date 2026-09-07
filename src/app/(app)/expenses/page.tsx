@@ -81,7 +81,12 @@ export default async function ExpensesPage({
                 <CardContent className="space-y-1.5 py-3 text-sm">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-medium">{e.categoryName}</p>
+                      <Link
+                        href={`/expenses/${e.id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {e.categoryName}
+                      </Link>
                       <p className="text-xs text-muted-foreground">
                         {e.businessDate} · {e.branchName} · {e.methodName}
                       </p>
@@ -121,7 +126,12 @@ export default async function ExpensesPage({
                   <TableRow key={e.id} data-testid="expense-row">
                     <TableCell className="whitespace-nowrap">{e.businessDate}</TableCell>
                     <TableCell>
-                      {e.categoryName}
+                      <Link
+                        href={`/expenses/${e.id}`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {e.categoryName}
+                      </Link>
                       {e.description ? (
                         <span className="block text-xs text-muted-foreground">{e.description}</span>
                       ) : null}

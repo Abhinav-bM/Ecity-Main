@@ -376,6 +376,8 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - **Reconciling an account records the statement; it does not move money.** If the books and the statement disagree, that difference is real and wants an explanation — an automatic adjustment would erase the only evidence that something was wrong. Correcting it is a visible `ADJUSTMENT` in the ledger.
 - **A transfer writes both legs together.** One transaction, one `transfer_group`, so money cannot leave one account without reaching the other.
 - **Carried in — correcting a purchase.** Built as specified: supplier bill number, date and notes only. The dialog says why the costs are absent.
+- **An expense has its own page, because FR-10.2 wants a receipt on it.** The attachment plumbing came from M1; this is where it earns its place — the bill that explains a payment belongs with the payment, not in a folder.
+- **An account has its own page too.** FR-12.3 asks for movements and a running balance, and a derived balance nobody can see the workings of is just a number to argue with.
 
 **Done when.**
 - A day with cash sales, a UPI sale, a credit collection, a refund, an expense and a supplier payment produces the correct expected cash, and entering a counted amount ₹200 short shows a ₹200 shortage attributed to that branch, user and timestamp.

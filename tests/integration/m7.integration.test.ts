@@ -9,7 +9,12 @@ import { createSale, getSale } from '@/server/services/sale.service'
 import { recordCustomerPayment } from '@/server/services/customer-payment.service'
 import { recordSupplierPayment } from '@/server/services/supplier-payment.service'
 import { createReturn } from '@/server/services/return.service'
-import { createExpense, listExpenses, voidExpense } from '@/server/services/expense.service'
+import {
+  createExpense,
+  getExpense,
+  listExpenses,
+  voidExpense,
+} from '@/server/services/expense.service'
 import {
   businessDateFor,
   expectedCashPaise,
@@ -17,6 +22,7 @@ import {
   listAccounts,
 } from '@/server/services/cash.service'
 import { createAccount, reconcile, transfer } from '@/server/services/account.service'
+import { accountLedger } from '@/server/services/cash.service'
 import { closeDay, daySummary, listClosings, voidClosing } from '@/server/services/closing.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
@@ -269,6 +275,20 @@ suite('M7 cash drawer, expenses, accounts and daily closing (database-backed)', 
       expect(live.rows.some((e) => e.id === id)).toBe(false)
     })
 
+    it('can be opened on its own, which is where the receipt lives', async () => {
+      const { id } = await createExpense(actor, ctx, {
+        branchId: branchA,
+        categoryId: rentCategoryId,
+        paymentMethodId: cashMethodId,
+        amountPaise: rs(1200),
+        description: 'September rent',
+      })
+      const one = await getExpense(actor, id)
+      expect(one.amountPaise).toBe(rs(1200))
+      expect(one.description).toBe('September rent')
+      expect(one.categoryName).toBe('Rent')
+    })
+
     it('refuses a void without a reason', async () => {
       const { id } = await createExpense(actor, ctx, {
         branchId: branchA,
@@ -301,6 +321,29 @@ suite('M7 cash drawer, expenses, accounts and daily closing (database-backed)', 
       const accounts = await listAccounts(actor)
       expect(accounts.find((a) => a.id === from.id)?.balancePaise).toBe(rs(38000))
       expect(accounts.find((a) => a.id === to.id)?.balancePaise).toBe(rs(12000))
+    })
+
+    it('the ledger shows both legs of a transfer, newest first', async () => {
+      const from = await createAccount(actor, ctx, {
+        name: `M7 Ledger A ${stamp}`,
+        type: 'BANK',
+        openingBalancePaise: rs(9000),
+      })
+      const to = await createAccount(actor, ctx, { name: `M7 Ledger B ${stamp}`, type: 'UPI' })
+      await transfer(actor, ctx, {
+        fromAccountId: from.id,
+        toAccountId: to.id,
+        amountPaise: rs(3000),
+      })
+
+      const out = await accountLedger(actor, from.id, { page: 1, pageSize: 25 })
+      expect(out.account.balancePaise).toBe(rs(6000))
+      expect(out.rows[0]!.movement).toBe('TRANSFER_OUT')
+      expect(out.rows[0]!.amountPaise).toBe(-rs(3000))
+
+      const into = await accountLedger(actor, to.id, { page: 1, pageSize: 25 })
+      expect(into.rows[0]!.movement).toBe('TRANSFER_IN')
+      expect(into.rows[0]!.amountPaise).toBe(rs(3000))
     })
 
     it('refuses a transfer to the same account', async () => {
@@ -363,6 +406,23 @@ suite('M7 cash drawer, expenses, accounts and daily closing (database-backed)', 
       expect(closed.closing?.countedCashPaise).toBe(rs(4800))
       expect(closed.closing?.expectedCashPaise).toBe(rs(5000))
       expect(closed.drawerStatus).toBe('CLOSED')
+    })
+
+    it('counts the units sold, not just the invoices (FR-13.1)', async () => {
+      const before = await daySummary(actor, branchA, today)
+      await increaseStock(
+        { businessId },
+        { productId: cableProductId, branchId: branchA, quantity: 3, movement: 'PURCHASE' },
+      )
+      await createSale(actor, ctx, {
+        branchId: branchA,
+        lines: [{ productId: cableProductId, quantity: 3, unitPricePaise: rs(200) }],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(600) }],
+      })
+      const after = await daySummary(actor, branchA, today)
+      // One more invoice, but three more items - a quantity of three is three.
+      expect(after.invoiceCount).toBe(before.invoiceCount + 1)
+      expect(after.itemCount).toBe(before.itemCount + 3)
     })
 
     it('refuses to close the same day twice', async () => {

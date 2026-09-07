@@ -20,6 +20,8 @@ export const ATTACHABLE = [
   'product',
   // PRD FR-5.13 - supplier bills, photos and PDFs against a purchase.
   'purchase',
+  // PRD FR-10.2 - the receipt for an expense.
+  'expense',
 ] as const
 export type Attachable = (typeof ATTACHABLE)[number]
 

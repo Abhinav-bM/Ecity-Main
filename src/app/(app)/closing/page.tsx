@@ -85,7 +85,9 @@ export default async function ClosingPage({
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Sales</p>
           <p className="tabular text-xl font-semibold">{formatMoney(day.salesPaise)}</p>
-          <p className="text-xs text-muted-foreground">{day.invoiceCount} invoices</p>
+          <p className="text-xs text-muted-foreground">
+            {day.invoiceCount} invoices · {day.itemCount} items
+          </p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Credit given</p>

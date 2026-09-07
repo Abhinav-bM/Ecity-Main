@@ -242,6 +242,41 @@ export async function voidExpense(
 
 /* ------------------------------------------------------------ reading --- */
 
+/** One expense, for its own page (PRD FR-10.2 — the receipt lives there). */
+export async function getExpense(actor: AuthUser, id: number) {
+  const row = (
+    await db
+      .select({
+        id: expense.id,
+        branchId: expense.branchId,
+        amountPaise: expense.amountPaise,
+        businessDate: expense.businessDate,
+        description: expense.description,
+        reference: expense.reference,
+        postedAfterClose: expense.postedAfterClose,
+        voidedAt: expense.voidedAt,
+        voidReason: expense.voidReason,
+        categoryName: expenseCategory.name,
+        methodName: paymentMethod.name,
+        branchName: branch.name,
+        recordedBy: appUser.name,
+      })
+      .from(expense)
+      .innerJoin(expenseCategory, eq(expenseCategory.id, expense.categoryId))
+      .innerJoin(paymentMethod, eq(paymentMethod.id, expense.paymentMethodId))
+      .innerJoin(branch, eq(branch.id, expense.branchId))
+      .leftJoin(appUser, eq(appUser.id, expense.createdBy))
+      .where(and(eq(expense.id, id), eq(expense.businessId, actor.businessId)))
+      .limit(1)
+  )[0]
+  if (!row) throw notFound('Expense')
+
+  const scope = branchScope(actor, null)
+  if (scope !== null && !scope.includes(row.branchId)) throw notFound('Expense')
+
+  return row
+}
+
 export type ExpenseFilters = {
   branchId?: number
   categoryId?: number
