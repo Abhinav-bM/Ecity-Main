@@ -481,3 +481,128 @@ export async function mainTypeSummary(actor: AuthUser, branchId?: number | null)
     .groupBy(deviceUnit.mainType, deviceUnit.isNewCut)
     .orderBy(asc(deviceUnit.mainType))
 }
+
+/**
+ * Correct a device after it was created (M6, raised during M5).
+ *
+ * Before this there was no way to fix a device at all, which meant a wrong
+ * main type was permanent - and main type decides whether a handset reaches
+ * the till, so one keystroke could hide sellable stock for good.
+ *
+ * Identifiers are deliberately not editable. Changing an IMEI is not a
+ * correction, it is a different handset; the uniqueness and history rules
+ * exist precisely to stop that.
+ */
+export type DeviceUpdateInput = {
+  mainType?: MainType
+  isNewCut?: boolean
+  newCutNotes?: string | null
+  variant?: string | null
+  ram?: string | null
+  storage?: string | null
+  colour?: string | null
+  batteryHealthPercent?: number | null
+  purchasePricePaise?: bigint | null
+  sellingPricePaise?: bigint | null
+  taxRateId?: number | null
+  supplierId?: number | null
+  warrantyMonths?: number | null
+  salesChannel?: 'ECITY' | 'EXTERNAL' | 'BOTH'
+  notes?: string | null
+}
+
+export async function updateDevice(
+  actor: AuthUser,
+  ctx: AuditContext,
+  id: number,
+  input: DeviceUpdateInput,
+): Promise<void> {
+  const before = (
+    await db
+      .select()
+      .from(deviceUnit)
+      .where(and(eq(deviceUnit.id, id), eq(deviceUnit.businessId, actor.businessId)))
+      .limit(1)
+  )[0]
+  if (!before) throw notFound('Device')
+
+  // A sold or voided unit is history. Correcting it would rewrite what an
+  // issued invoice says about a handset somebody already owns.
+  if (['SOLD', 'SOLD_PENDING_IMPORT', 'VOIDED'].includes(before.status)) {
+    throw conflict(
+      `${before.primaryIdentifier ?? 'This device'} is ${before.status} and can no longer be edited.`,
+    )
+  }
+
+  const next = {
+    mainType: input.mainType ?? before.mainType,
+    isNewCut: input.isNewCut ?? before.isNewCut,
+  }
+  // The same rule the create form enforces: NEW CUT belongs to GLOBAL alone.
+  assertClassificationValid(next)
+
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  const set: Record<string, unknown> = { updatedAt: new Date(), updatedBy: actor.id }
+  const fields = [
+    'mainType', 'isNewCut', 'newCutNotes', 'variant', 'ram', 'storage', 'colour',
+    'batteryHealthPercent', 'purchasePricePaise', 'sellingPricePaise', 'taxRateId',
+    'supplierId', 'warrantyMonths', 'salesChannel', 'notes',
+  ] as const
+
+  for (const field of fields) {
+    const value = input[field]
+    if (value === undefined) continue
+    const from = (before as Record<string, unknown>)[field]
+    const to = typeof value === 'string' ? value.trim() || null : value
+    if (String(from) === String(to)) continue
+    /*
+     * Recorded as strings. Money is bigint paise, and both the audit `changes`
+     * column and the device_event payload are JSON - which cannot hold a
+     * bigint at all. A string keeps the exact value; a number would not.
+     */
+    changes[field] = {
+      from: typeof from === 'bigint' ? from.toString() : from,
+      to: typeof to === 'bigint' ? to.toString() : to,
+    }
+    set[field] = to
+  }
+
+  if (Object.keys(changes).length === 0) return
+
+  await db.transaction(async (tx) => {
+    await tx.update(deviceUnit).set(set).where(eq(deviceUnit.id, id))
+
+    /*
+     * A device_event as well as an audit entry, so the M9 timeline shows the
+     * correction as part of the handset's history rather than the record
+     * silently changing underneath it.
+     */
+    await appendDeviceEvent(
+      {
+        businessId: actor.businessId,
+        actorId: actor.id,
+        refType: 'device_edit',
+        refId: id,
+      },
+      {
+        deviceId: id,
+        eventType: 'RECLASSIFIED',
+        branchId: before.currentBranchId,
+        payload: changes,
+      },
+      tx,
+    )
+
+    await writeAudit(
+      ctx,
+      {
+        action: 'UPDATE',
+        entityType: 'device_unit',
+        entityId: id,
+        summary: `Corrected ${before.primaryIdentifier ?? `#${id}`}: ${Object.keys(changes).join(', ')}`,
+        changes,
+      },
+      tx,
+    )
+  })
+}

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Pagination } from '@/components/pagination'
+import { DuesSearch } from './dues-search'
 import { Card } from '@/components/ui/card'
 import {
   Table,
@@ -32,7 +33,7 @@ export default async function SupplierOutstandingPage({
 
   const p = await searchParams
   const page = Math.max(1, Number(p.page ?? '1') || 1)
-  const dues = await supplierOutstanding(session.user, page, PAGE_SIZE)
+  const dues = await supplierOutstanding(session.user, page, PAGE_SIZE, p.search)
   const rows = dues.rows
   // Owed across every supplier, not just the ones on this page.
   const totalOwed = dues.totalOwedPaise > 0n ? dues.totalOwedPaise : 0n
@@ -46,6 +47,8 @@ export default async function SupplierOutstandingPage({
           stored figure.
         </p>
       </div>
+
+      <DuesSearch search={p.search ?? ''} />
 
       <Card className="p-4">
         <p className="text-xs text-muted-foreground">Total owed</p>

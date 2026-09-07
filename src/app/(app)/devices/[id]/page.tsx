@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DeviceStatusBadge, MainTypeBadge } from '@/components/main-type-badge'
 import { formatDateTime } from '@/lib/utils'
@@ -61,6 +62,11 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
         <DeviceStatusBadge status={device.status} />
         {device.salesChannel === 'EXTERNAL' ? (
           <Badge variant="outline">Billed in the other system</Badge>
+        ) : null}
+        {hasPermission(session.user, 'device.edit') ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/devices/${device.id}/edit`}>Edit</Link>
+          </Button>
         ) : null}
         {device.salesChannel !== 'ECITY' &&
         device.status === 'IN_STOCK' &&

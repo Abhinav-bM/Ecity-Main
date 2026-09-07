@@ -47,7 +47,14 @@ export default async function SalePage({ params }: { params: Promise<{ id: strin
             {detail.sale.invoiceNumber}
           </h1>
         </div>
-        <Badge variant={PAY_VARIANT[detail.paymentStatus]}>{detail.paymentStatus}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={PAY_VARIANT[detail.paymentStatus]}>{detail.paymentStatus}</Badge>
+          {detail.sale.status === 'COMPLETED' && hasPermission(session.user, 'return.create') ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/returns/new?saleId=${id}`}>Take a return</Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/*

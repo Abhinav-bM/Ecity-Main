@@ -96,6 +96,7 @@ export async function supplierOutstanding(
   actor: AuthUser,
   page = 1,
   pageSize = 25,
+  search?: string,
 ): Promise<{
   rows: SupplierOutstanding[]
   total: number
@@ -142,13 +143,25 @@ export async function supplierOutstanding(
     .sort((a, b) => Number(b.balancePaise - a.balancePaise))
 
   // Owed in total across every supplier, not just this page.
+  const term = search?.trim().toLowerCase()
+  const filtered = term
+    ? all.filter(
+        (r) =>
+          r.supplierName.toLowerCase().includes(term) ||
+          (r.company ?? '').toLowerCase().includes(term) ||
+          (r.phone ?? '').includes(term),
+      )
+    : all
+
+  // Owed in total across every supplier, whatever is being searched for - the
+  // headline figure is what the business owes, not what is on screen.
   const totalOwedPaise = all.reduce((sum, r) => sum + r.balancePaise, 0n)
   const safePage = Math.max(1, page)
   const start = (safePage - 1) * pageSize
 
   return {
-    rows: all.slice(start, start + pageSize),
-    total: all.length,
+    rows: filtered.slice(start, start + pageSize),
+    total: filtered.length,
     page: safePage,
     pageSize,
     totalOwedPaise,

@@ -306,6 +306,13 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - Trade-in devices are created as new device units in the receiving branch with the correct main type and GLOBAL/NEW CUT information, and their own `device_event` chain begins.
 - Main type and NEW CUT survive the whole return path unchanged.
 
+*Built as:*
+- **Condition is a separate field from main type.** FR-8.3 wants grading into Available / Used / Damaged / Repair Required, and FR-8.4 wants main type preserved. Overloading `mainType` with condition would fail the acceptance test outright: a returned GLOBAL + NEW CUT handset graded "used" must still read GLOBAL. So `device_unit.inspection_grade` is its own column. Condition and classification are different facts about the same handset, and changing the classification is the separate, audited device edit.
+- **The status transition table already enforced the rule.** M2 wrote `SOLD → RETURNED` and `RETURNED → IN_STOCK | DAMAGED | REPAIR | LOST`, so a returned handset physically cannot reach sellable without passing through inspection. M6 only had to use it.
+- **A refund and the customer ledger move in opposite directions.** Returning goods always reduces what the customer owes by the value returned; paying the money out adds it back, because they received it. Doing only the first while also handing over cash is the classic returns bug and the shop pays twice. Both directions are tested.
+- **`sale_item.device_id` stopped being unique.** M4 made it unique so a handset could not be billed twice, which was right until returns existed — a resold device is legitimately a second sale line. Double-selling is still prevented by the conditional `expectedStatus = IN_STOCK` update, which is transactional and covered by M4's two-tills test.
+- **A trade-in is not a discount.** The invoice shows the full price of what was sold and GST is charged on that; the agreed value settles part of the bill, exactly like a payment. Putting it in the tax calculation would understate the GST due.
+
 **Done when.**
 - A returned GLOBAL + NEW CUT device still reads as GLOBAL + NEW CUT after return and reclassification.
 - A returned device is not sellable until an authorised user classifies it Available.

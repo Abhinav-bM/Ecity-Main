@@ -194,6 +194,10 @@ test.describe('supplier money', () => {
 
     // It shows on the dues report.
     await page.goto('/purchases/supplier-dues')
+    // The list is paginated by amount owed, so search rather than assuming
+    // this supplier is in the first page.
+    await page.getByRole('searchbox', { name: 'Search suppliers' }).fill(`E2E Payable ${id}`)
+    await page.getByRole('searchbox', { name: 'Search suppliers' }).press('Enter')
     await expect(page.getByText(`E2E Payable ${id}`).and(page.locator(':visible')).first()).toBeVisible()
 
     // Pay it from the supplier's history tab.

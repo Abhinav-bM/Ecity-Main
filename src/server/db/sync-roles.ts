@@ -1,7 +1,10 @@
+// Needed when run by hand from a shell. In Docker the environment comes from
+// env_file, which is why the deploy never noticed this was missing.
+import 'dotenv/config'
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@/server/db'
-import { business, role, rolePermission } from '@/server/db/schema'
-import { SYSTEM_ROLES } from '@/lib/permissions'
+import { business, permission, role, rolePermission } from '@/server/db/schema'
+import { PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions'
 
 /**
  * Bring every business's system roles in line with the code.
@@ -15,6 +18,27 @@ import { SYSTEM_ROLES } from '@/lib/permissions'
  * is theirs, and is left exactly as it is.
  */
 export async function syncSystemRoles(): Promise<void> {
+  /*
+   * The permission catalogue first. role_permission has a foreign key to it,
+   * so granting a code that is not catalogued fails - and that is exactly the
+   * case this function exists for: a module that adds a permission. Without
+   * this the deploy step fell over on the first such module.
+   */
+  for (const [code, meta] of Object.entries(PERMISSIONS)) {
+    await db
+      .insert(permission)
+      .values({
+        code,
+        group: meta.group,
+        label: meta.label,
+        description: 'description' in meta ? (meta.description as string) : null,
+      })
+      .onConflictDoUpdate({
+        target: permission.code,
+        set: { group: meta.group, label: meta.label },
+      })
+  }
+
   const businesses = await db.select({ id: business.id, name: business.name }).from(business)
 
   for (const b of businesses) {

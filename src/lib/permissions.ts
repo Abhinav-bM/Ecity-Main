@@ -59,6 +59,11 @@ export const PERMISSIONS = {
     label: 'Reverse a purchase',
     description: 'Undoes stock and the supplier debt. Blocked once any unit has moved on.',
   },
+  'return.view': { group: 'Sales', label: 'View returns' },
+  'return.create': { group: 'Sales', label: 'Take a return' },
+  'return.inspect': { group: 'Sales', label: 'Classify a returned device' },
+  'return.refund': { group: 'Sales', label: 'Refund money on a return' },
+  'device.edit': { group: 'Inventory', label: 'Correct a device after it is created' },
   'customer_payment.view': { group: 'Sales', label: 'View customer dues and receipts' },
   'customer_payment.manage': { group: 'Sales', label: 'Collect customer payments' },
   'customer_payment.void': { group: 'Sales', label: 'Void a customer receipt' },
@@ -118,6 +123,11 @@ export const SYSTEM_ROLES = {
       'sale.view',
       'sale.create',
       'sale.discount',
+      'return.view',
+      'return.create',
+      'return.inspect',
+      'return.refund',
+      'device.edit',
       'customer_payment.view',
       'customer_payment.manage',
       'customer_payment.void',
@@ -146,6 +156,13 @@ export const SYSTEM_ROLES = {
        */
       'customer_payment.view',
       'customer_payment.manage',
+      /*
+       * The counter takes returns, but three decisions are not theirs:
+       * releasing a handset back to sellable (return.inspect), handing money
+       * back (return.refund), and correcting a device record (device.edit).
+       */
+      'return.view',
+      'return.create',
     ],
   },
 } as const satisfies Record<

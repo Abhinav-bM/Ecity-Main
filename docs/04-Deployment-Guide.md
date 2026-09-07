@@ -539,6 +539,73 @@ Disk filling up is the single most common way a small VPS falls over. Old Docker
 
 ---
 
+## 8b. Upgrading the server to a bigger plan
+
+Do this **after the shop closes**. Not for the reboot — for the twenty minutes
+between taking the snapshot and switching over, during which anything billed
+would be written to the old machine and then thrown away. Closing time removes
+that risk completely.
+
+**On Lightsail there is no in-place resize.** You snapshot, create a larger
+instance from the snapshot, and move the static IP across. DigitalOcean and
+Vultr can resize a running instance in place; Lightsail cannot, and it will not
+let you go back *down* to a smaller plan afterwards. Attach a static IP on day
+one, or the new instance comes up on a different address and DNS breaks.
+
+The snapshot is the whole disk — Docker, the compose file, `.env`, the Caddy
+config and the database volume. Nothing is reinstalled and no deploy is needed;
+the application does not know it moved.
+
+**1. Record what should be there, and take a dump as a fallback**
+
+```bash
+cd ~/app
+docker compose exec -T db pg_dump -U ecity -Fc ecity > ~/pre-upgrade.dump
+docker compose exec -T db psql -U ecity -d ecity -c \
+  "select (select count(*) from sale) as sales,
+          (select count(*) from device_unit) as devices,
+          (select count(*) from customer_ledger_entry) as ledger;"
+```
+
+Write those three numbers down.
+
+**2. Stop everything, so the snapshot catches a closed database**
+
+```bash
+docker compose down
+```
+
+A snapshot of a *running* instance is crash-consistent — the equivalent of
+pulling the power cord. Postgres replays its write-ahead log and usually
+recovers, but "usually" is the wrong standard for a sales ledger. Stopped, it
+flushes and closes properly.
+
+**3. Snapshot, create the larger instance, move the static IP**
+
+All three in the provider console.
+
+**4. Start it and check the numbers match**
+
+```bash
+cd ~/app && docker compose up -d
+docker compose exec -T db psql -U ecity -d ecity -c \
+  "select (select count(*) from sale) as sales,
+          (select count(*) from device_unit) as devices,
+          (select count(*) from customer_ledger_entry) as ledger;"
+curl -s https://YOUR_HOST/api/health
+```
+
+The three counts must match step 1 **exactly**, and health must report
+`"schema":"current"`.
+
+**5. Only then delete the old instance**
+
+Until you do, you have two ways back: the old machine, still intact, and
+`pre-upgrade.dump`. Keep both until the shop has traded a full day on the new
+one.
+
+---
+
 ## 9. Runbook
 
 Common operations, for when you need them and cannot remember.

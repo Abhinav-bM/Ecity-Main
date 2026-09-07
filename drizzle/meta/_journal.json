@@ -113,6 +113,20 @@
       "when": 1788704971454,
       "tag": "0015_new_stock_channel_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788722321476,
+      "tag": "0016_m6_returns_tradein",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788722743269,
+      "tag": "0017_m6_device_resellable",
+      "breakpoints": true
     }
   ]
 }

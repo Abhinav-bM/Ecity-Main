@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   HandCoins,
+  Undo2,
   AlertTriangle,
   Boxes,
   Building2,
@@ -58,6 +59,7 @@ const NAV: NavGroup[] = [
         icon: HandCoins,
         permission: 'customer_payment.view',
       },
+      { href: '/returns', label: 'Returns', icon: Undo2, permission: 'return.view' },
     ],
   },
   {

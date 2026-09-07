@@ -47,6 +47,12 @@ type CartState = {
   branchId: number | null
   customerId: number | null
   customerName: string | null
+  /**
+   * PRD FR-9.2. A trade-in accepted against this bill. Held here rather than
+   * in a second store so a reload recovers the whole counter state at once -
+   * losing the trade-in but keeping the cart would be worse than losing both.
+   */
+  tradeIn: { id: number; deviceId: number; identifier: string; valuePaise: string } | null
   /** PRD FR-7.2. Only used when the bill leaves unpaid. */
   dueDate: string | null
   creditNotes: string
@@ -59,6 +65,7 @@ type CartState = {
   setBranch: (branchId: number | null) => void
   setCustomer: (id: number | null, name: string | null) => void
   setCredit: (dueDate: string | null, creditNotes: string) => void
+  setTradeIn: (tradeIn: CartState['tradeIn']) => void
   addLine: (line: Omit<CartLine, 'key'>) => { added: boolean; reason?: string }
   updateLine: (key: string, patch: Partial<CartLine>) => void
   removeLine: (key: string) => void
@@ -80,6 +87,7 @@ const empty = () => ({
   branchId: null,
   customerId: null,
   customerName: null,
+  tradeIn: null,
   dueDate: null,
   creditNotes: '',
   lines: [] as CartLine[],
@@ -96,6 +104,7 @@ export const useCart = create<CartState>()(
       setBranch: (branchId) => set({ branchId }),
       setCustomer: (customerId, customerName) => set({ customerId, customerName }),
       setCredit: (dueDate, creditNotes) => set({ dueDate, creditNotes }),
+      setTradeIn: (tradeIn) => set({ tradeIn }),
 
       addLine: (line) => {
         const state = get()

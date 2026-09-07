@@ -100,11 +100,32 @@ export function route<S extends ZodTypeAny | undefined = undefined>(
       })
 
       if (result instanceof Response) return result
-      return NextResponse.json(result ?? { ok: true })
+      return NextResponse.json(jsonSafe(result ?? { ok: true }))
     } catch (error) {
       return toResponse(error)
     }
   }
+}
+
+/**
+ * Make a value safe for JSON.
+ *
+ * Money is bigint paise everywhere (docs/03 §4.1), and JSON.stringify throws
+ * outright on a bigint - "Do not know how to serialize a BigInt". Every route
+ * returning a row with money in it would 500, and only when something first
+ * called it. Converting to a string here keeps the precision that made us
+ * choose bigint in the first place; a number would not.
+ */
+function jsonSafe(value: unknown): unknown {
+  if (typeof value === 'bigint') return value.toString()
+  if (Array.isArray(value)) return value.map(jsonSafe)
+  if (value instanceof Date) return value.toISOString()
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, jsonSafe(v)]),
+    )
+  }
+  return value
 }
 
 export function toResponse(error: unknown): Response {

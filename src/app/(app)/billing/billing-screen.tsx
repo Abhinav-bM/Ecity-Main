@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { MainTypeBadge } from '@/components/main-type-badge'
 import { BillSearch, type DeviceHit, type ProductHit } from './bill-search'
 import { CustomerPanel } from './customer-panel'
+import { TradeInPanel } from './trade-in-panel'
 import type { MainType } from '@/server/db/schema'
 
 export function BillingScreen({
@@ -89,7 +90,14 @@ export function BillingScreen({
   )
 
   const paid = cart.payments.reduce((sum, p) => sum + rupeesToPaise(Number(p.amount) || 0), 0n)
-  const due = totals.totalPaise - paid
+  /*
+   * PRD FR-9.2. A trade-in is not a discount on the bill - the invoice still
+   * shows the full price of what was sold, and GST is charged on that. It
+   * settles part of what is owed, exactly like a payment, so it belongs here
+   * and not in the tax calculation.
+   */
+  const tradeInPaise = cart.tradeIn ? BigInt(cart.tradeIn.valuePaise) : 0n
+  const due = totals.totalPaise - paid - tradeInPaise
 
   function addDevice(hit: DeviceHit) {
     const result = cart.addLine({
@@ -254,6 +262,13 @@ export function BillingScreen({
             onSelect={(id, name) => cart.setCustomer(id, name)}
           />
 
+          <TradeInPanel
+            branchId={branchId}
+            customerId={cart.customerId}
+            tradeIn={cart.tradeIn}
+            onChange={(t) => cart.setTradeIn(t)}
+          />
+
           {/*
             Credit terms appear only once the bill is actually short - asking
             for a due date on a cash sale is noise at a busy counter.
@@ -300,9 +315,32 @@ export function BillingScreen({
                 <dd className="tabular text-right">{formatMoney(totals.taxablePaise)}</dd>
                 <dt className="text-muted-foreground">Tax</dt>
                 <dd className="tabular text-right">{formatMoney(totals.taxPaise)}</dd>
-                <dt className="text-base font-medium">To pay</dt>
-                <dd className="tabular text-right text-base font-medium">
+                <dt className="font-medium">Bill total</dt>
+                <dd className="tabular text-right font-medium">
                   {formatMoney(totals.totalPaise)}
+                </dd>
+                {/*
+                  The bill total stays the full price - the invoice and its GST
+                  are for what was actually sold. The trade-in settles part of
+                  it, like a payment does.
+                */}
+                {tradeInPaise > 0n ? (
+                  <>
+                    <dt className="text-muted-foreground">Trade-in</dt>
+                    <dd className="tabular text-right">−{formatMoney(tradeInPaise)}</dd>
+                  </>
+                ) : null}
+                {paid > 0n ? (
+                  <>
+                    <dt className="text-muted-foreground">Paid</dt>
+                    <dd className="tabular text-right">−{formatMoney(paid)}</dd>
+                  </>
+                ) : null}
+                <dt className="text-base font-medium">
+                  {due > 0n ? 'Still to pay' : 'Settled'}
+                </dt>
+                <dd className="tabular text-right text-base font-medium">
+                  {formatMoney(due > 0n ? due : 0n)}
                 </dd>
               </dl>
             </CardContent>

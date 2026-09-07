@@ -98,6 +98,28 @@ export const supplierLedgerEnum = pgEnum('supplier_ledger_entry_type', [
 ])
 
 /**
+ * PRD FR-8.3. The condition a returned device is graded at on inspection.
+ *
+ * Deliberately NOT the same field as main type. FR-8.4 requires main type and
+ * GLOBAL/NEW CUT to survive a return unchanged, so a returned GLOBAL handset
+ * graded "used" must still read GLOBAL afterwards. Condition and
+ * classification are different facts about the same device; changing the main
+ * type is a separate, deliberate edit.
+ */
+export const inspectionGradeEnum = pgEnum('inspection_grade', [
+  'AVAILABLE',
+  'USED',
+  'DAMAGED',
+  'REPAIR_REQUIRED',
+])
+
+/** PRD FR-8.1. What kind of return this is. */
+export const returnTypeEnum = pgEnum('return_type', ['FULL', 'PARTIAL', 'EXCHANGE'])
+
+/** Where the money for a return went. */
+export const refundMethodEnum = pgEnum('refund_method', ['PAYMENT_METHOD', 'CUSTOMER_ACCOUNT'])
+
+/**
  * Customer ledger movements (PRD FR-7.4). Positive means the customer owes
  * more; negative means they owe less.
  */
@@ -799,6 +821,15 @@ export const deviceUnit = pgTable(
      */
     batteryHealthPercent: smallint('battery_health_percent'),
 
+    /**
+     * PRD FR-8.3. Set when a returned device is inspected. Independent of
+     * main type: a GLOBAL handset graded USED is still GLOBAL.
+     */
+    inspectionGrade: inspectionGradeEnum('inspection_grade'),
+    inspectedAt: timestamp('inspected_at', { withTimezone: true }),
+    inspectedBy: bigint('inspected_by', { mode: 'number' }),
+    inspectionNotes: text('inspection_notes'),
+
     /** PRD §5.1. is_new_cut is valid ONLY when mainType is GLOBAL. */
     mainType: mainTypeEnum('main_type').notNull(),
     isNewCut: boolean('is_new_cut').notNull().default(false),
@@ -1244,7 +1275,18 @@ export const saleItem = pgTable(
   (t) => [
     index('sale_item_sale_idx').on(t.saleId),
     index('sale_item_product_idx').on(t.productId),
-    uniqueIndex('sale_item_device_uq').on(t.deviceId),
+    /*
+     * Deliberately an ordinary index, not unique. M4 made it unique so a
+     * handset could not be billed twice - but M6 lets a device be returned,
+     * inspected and sold again, which is a second sale line for the same
+     * device and entirely legitimate.
+     *
+     * Double-selling is prevented where it actually matters: createSale moves
+     * the device with a conditional update on expectedStatus = IN_STOCK, so a
+     * second till changes no rows and is refused. That is transactional and
+     * covered by M4's "two tills cannot sell the same handset" test.
+     */
+    index('sale_item_device_idx').on(t.deviceId),
   ],
 )
 
@@ -1402,5 +1444,168 @@ export const customerPaymentAllocation = pgTable(
   (t) => [
     index('customer_allocation_payment_idx').on(t.paymentId),
     index('customer_allocation_sale_idx').on(t.saleId),
+  ],
+)
+
+/* =================================================== M6 — returns & trade-in ===
+
+   Goods coming back, and old phones coming in. The rule that shapes these
+   tables: a returned handset is never immediately sellable again. It lands in
+   RETURNED and only an authorised inspection can release it (PRD FR-8.2).
+   ========================================================================== */
+
+/** PRD FR-8.1. One return against one sale; full, partial or exchange. */
+export const salesReturn = pgTable(
+  'sales_return',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    saleId: bigint('sale_id', { mode: 'number' })
+      .notNull()
+      .references(() => sale.id),
+    /** Where the goods came back to — need not be where they were sold. */
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    customerId: bigint('customer_id', { mode: 'number' }).references(() => customer.id),
+    /** Gapless per-branch series, same machinery as invoices and receipts. */
+    returnNumber: text('return_number').notNull(),
+    returnType: returnTypeEnum('return_type').notNull(),
+    returnedAt: timestamp('returned_at', { withTimezone: true }).notNull().defaultNow(),
+    reason: text('reason'),
+
+    /** What the returned goods were worth, and what was actually given back. */
+    subtotalPaise: bigint('subtotal_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    taxPaise: bigint('tax_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    totalPaise: bigint('total_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    /**
+     * A restocking fee or deduction. Kept separate from the line figures so
+     * the invoice arithmetic still reconciles and the deduction is visible.
+     */
+    deductionPaise: bigint('deduction_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    refundedPaise: bigint('refunded_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+
+    notes: text('notes'),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('sales_return_sale_idx').on(t.saleId),
+    index('sales_return_customer_idx').on(t.customerId, t.returnedAt),
+    index('sales_return_branch_idx').on(t.branchId, t.returnedAt),
+    uniqueIndex('sales_return_number_uq').on(t.businessId, t.returnNumber),
+  ],
+)
+
+/** One line of a return, pointing at the sale line it reverses. */
+export const returnItem = pgTable(
+  'return_item',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    returnId: bigint('return_id', { mode: 'number' })
+      .notNull()
+      .references(() => salesReturn.id, { onDelete: 'cascade' }),
+    /** The line being returned. A partial return names only some of them. */
+    saleItemId: bigint('sale_item_id', { mode: 'number' })
+      .notNull()
+      .references(() => saleItem.id),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => product.id),
+    /** Present for a serialised line: the exact handset coming back. */
+    deviceId: bigint('device_id', { mode: 'number' }).references(() => deviceUnit.id),
+    description: text('description'),
+    identifierSnapshot: text('identifier_snapshot'),
+    quantity: integer('quantity').notNull(),
+    unitPricePaise: bigint('unit_price_paise', { mode: 'bigint' }).notNull(),
+    taxPaise: bigint('tax_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    lineTotalPaise: bigint('line_total_paise', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('return_item_return_idx').on(t.returnId),
+    index('return_item_sale_item_idx').on(t.saleItemId),
+    index('return_item_device_idx').on(t.deviceId),
+  ],
+)
+
+/**
+ * PRD FR-8.5. Money going back to the customer.
+ *
+ * Either out through a payment method, or credited to the customer's account
+ * — which is the right answer when the sale itself was never paid for.
+ */
+export const refund = pgTable(
+  'refund',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    returnId: bigint('return_id', { mode: 'number' })
+      .notNull()
+      .references(() => salesReturn.id, { onDelete: 'cascade' }),
+    /** Where the money physically left from (PRD FR-8.5). */
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    method: refundMethodEnum('method').notNull(),
+    /** Null when the refund went to the customer's account rather than out. */
+    paymentMethodId: bigint('payment_method_id', { mode: 'number' }).references(
+      () => paymentMethod.id,
+    ),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    reference: text('reference'),
+    refundedAt: timestamp('refunded_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('refund_return_idx').on(t.returnId),
+    index('refund_branch_idx').on(t.branchId, t.refundedAt),
+  ],
+)
+
+/**
+ * PRD FR-9.1 – FR-9.3. An old phone taken in against a new sale.
+ *
+ * The handset itself becomes a normal device unit in the receiving branch with
+ * its own event chain, so from that moment it behaves like any other stock.
+ * This row records the deal: what it was valued at, what was agreed, and which
+ * sale it was set against.
+ */
+export const tradeIn = pgTable(
+  'trade_in',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** The sale the trade-in was applied to. Null while still being quoted. */
+    saleId: bigint('sale_id', { mode: 'number' }).references(() => sale.id),
+    /** The device unit created for the handset taken in. */
+    deviceId: bigint('device_id', { mode: 'number' }).references(() => deviceUnit.id),
+    customerId: bigint('customer_id', { mode: 'number' }).references(() => customer.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+
+    /** What the shop thought it was worth, and what was actually agreed. */
+    estimatedValuePaise: bigint('estimated_value_paise', { mode: 'bigint' }),
+    agreedValuePaise: bigint('agreed_value_paise', { mode: 'bigint' }).notNull(),
+    conditionNotes: text('condition_notes'),
+
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('trade_in_sale_idx').on(t.saleId),
+    index('trade_in_customer_idx').on(t.customerId, t.acceptedAt),
+    index('trade_in_branch_idx').on(t.branchId, t.acceptedAt),
   ],
 )

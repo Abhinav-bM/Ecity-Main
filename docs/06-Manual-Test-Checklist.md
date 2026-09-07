@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 232 unit and integration tests, 467
+Automated tests cover the mechanics — 261 unit and integration tests, 507
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -721,6 +721,117 @@ This is the one that matters. Pick any customer with dues:
   the day is not yet reconciled
 - **No statements by email or WhatsApp** — M13
 - **No interest, credit limits or dunning letters** — not in v1 at all
+
+---
+
+# M6 — Returns, Exchange & Trade-In
+
+**Delivers.** PRD FR-8.1 – FR-8.5, FR-9.1 – FR-9.3, plus correcting a device.
+
+Goods come back and old phones come in. The rule underneath everything here:
+**a returned handset is never immediately sellable again.**
+
+**Before you start.** You need a completed sale with a handset on it and
+another with an accessory. Sign in as **admin** unless a step says otherwise.
+
+## 1. Taking a return (FR-8.1)
+
+- [ ] **Sell → Returns → Take a return** offers one search box
+- [ ] Find a bill by its **invoice number**
+- [ ] Find the same bill by **customer name**
+- [ ] Find it by the **IMEI** of a handset on it
+- [ ] Opening a sale and pressing **Take a return** gets you to the same place
+- [ ] Only lines with something left to return are offered
+- [ ] Returning 2 of 5 gives back exactly two fifths of that line
+- [ ] Asking for more than remains is refused, and says how many are left
+- [ ] Return 3 of 4, then try to return 2 more → refused, 1 left
+- [ ] A whole bill returned at once is marked **FULL**; part of one is **PARTIAL**
+- [ ] Goods can be returned to a **different branch** than they were sold at
+
+## 2. A returned handset is not sellable (FR-8.2)
+
+This is the one most likely to be got wrong. Test it properly.
+
+- [ ] Return a handset → it appears in **Returns → Inspection queue**
+- [ ] Search that IMEI at the till → **nothing comes up**
+- [ ] The device page shows status **RETURNED**
+- [ ] An accessory behaves differently: it goes straight back into branch stock
+      and can be sold again immediately
+
+## 3. Inspection (FR-8.3)
+
+- [ ] **Inspect** offers Available, Used, Damaged, Repair required
+- [ ] Grading **Available** → the handset leaves the queue and reaches the till
+- [ ] Grading **Used** → also sellable, and the condition is recorded
+- [ ] Grading **Damaged** → status DAMAGED, still not sellable
+- [ ] Grading **Repair required** → status REPAIR, still not sellable
+- [ ] Notes typed during inspection appear on the device
+- [ ] Inspecting something that is not awaiting inspection is refused
+- [ ] Signed in as **staff**: the queue is visible but there is **no Inspect
+      button** — releasing stock for sale is not the counter's decision
+
+## 4. Classification survives the whole path (FR-8.4)
+
+The acceptance test for this module. Do it exactly.
+
+- [ ] Buy a handset as **GLOBAL** with **NEW CUT** ticked
+- [ ] Sell it, then return it
+- [ ] In the inspection queue it still shows **GLOBAL**
+- [ ] Grade it **Used**
+- [ ] On the device page it **still reads GLOBAL and NEW CUT**, with condition
+      Used recorded separately
+
+Condition and classification are different facts. Grading a handset's
+condition must never rewrite what kind of device it is.
+
+## 5. The money (FR-8.5)
+
+- [ ] Refund to a **payment method** — money goes back out
+- [ ] Refund to the **customer's account** — no cash moves, they owe less
+- [ ] A walk-in cannot have their account credited; it is refused
+- [ ] A **deduction** (restocking fee) reduces what is handed back
+- [ ] **The one that matters:** a customer who paid in full, returned the goods
+      and got cash back ends with a **zero balance** — not in credit. Check
+      Customers → their Statement
+- [ ] Returning against an **unpaid** bill just reduces what they owe
+
+## 6. Trade-in (FR-9.1 – FR-9.3)
+
+On the billing screen, with something in the cart:
+
+- [ ] **Trade-in → Add** takes IMEI, type, storage, colour, battery, condition
+      notes, estimated value and agreed value
+- [ ] Accepting it adds the old handset to **this branch's stock** immediately
+- [ ] Its device page shows the type you chose, including GLOBAL/NEW CUT
+- [ ] Its history starts with a **PURCHASED** event
+- [ ] Its purchase price is the **agreed value**
+- [ ] It is marked as sold here, never the other billing system
+- [ ] On the bill: **Bill total** stays the full price, and the trade-in shows
+      as a deduction against what is still to pay
+- [ ] Save the bill → the difference is what the customer owed
+- [ ] The invoice still shows the full price and full GST — a trade-in is not
+      a discount
+
+## 7. Correcting a device
+
+- [ ] A device page shows **Edit** for admin and manager
+- [ ] Signed in as **staff** there is no Edit button
+- [ ] Change the **main type** and save
+- [ ] The device history shows a **RECLASSIFIED** entry with what changed —
+      corrections are recorded, not silent
+- [ ] Change **Billed in** from the other system to ECITY → that handset now
+      appears at the till. *This is the fix for NEW stock that was invisible*
+- [ ] NEW CUT on anything that is not GLOBAL is refused
+- [ ] A **sold** device cannot be edited — an issued invoice describes it
+- [ ] The IMEI is shown but not editable
+
+## What M6 deliberately does **not** include
+
+- **No voiding a return.** Take a new sale if goods go back out
+- **No repair workflow** — REPAIR is a status, not a job card
+- **No automatic valuation** of trade-ins; the shop decides the number
+- **No returns against the other billing system's sales** — those bills do not
+  exist here until M12 imports them
 
 ## Housekeeping
 
