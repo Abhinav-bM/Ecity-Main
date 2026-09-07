@@ -21,7 +21,7 @@ import {
 } from '@/server/services/customer-payment.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { clearCustomerCredit, databaseAvailable, withAppendOnlySuspended } from './setup'
+import { clearCustomerCredit, clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -106,6 +106,7 @@ suite('M5 customer credit and collections (database-backed)', () => {
     // Cleaned explicitly rather than swallowed with a catch: a teardown that
     // silently fails leaves the development database filling up with tenants.
     await withAppendOnlySuspended(async () => {
+      await clearMoney(businessId)
       await clearCustomerCredit(businessId)
       await db.execute(`delete from sale_payment where sale_id in
         (select id from sale where business_id = ${businessId})`)

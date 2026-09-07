@@ -134,6 +134,20 @@
       "when": 1788786270077,
       "tag": "0018_m6_gst_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788790599091,
+      "tag": "0019_m7_money",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788791010962,
+      "tag": "0020_m7_drop_user_fks",
+      "breakpoints": true
     }
   ]
 }

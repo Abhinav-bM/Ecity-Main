@@ -19,6 +19,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { getPurchase } from '@/server/services/purchase.service'
 import { listAttachments } from '@/server/services/attachment.service'
 import { ReverseButton } from './reverse-button'
+import { EditPurchaseMeta } from './edit-meta'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,10 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
   const files = await listAttachments(session.user, 'purchase', id)
   const canReverse =
     hasPermission(session.user, 'purchase.reverse') && detail.purchase.status === 'CONFIRMED'
+  // Carried in from M5: a typo in a supplier bill number had no fix once a
+  // unit from the purchase had sold, because reversal is refused by then.
+  const canEditMeta =
+    hasPermission(session.user, 'purchase.edit') && detail.purchase.status !== 'REVERSED'
 
   const owing = detail.purchase.totalPaise - detail.paidPaise
 
@@ -64,6 +69,14 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
           ) : (
             <Badge variant={PAY_VARIANT[detail.paymentStatus]}>{detail.paymentStatus}</Badge>
           )}
+          {canEditMeta ? (
+            <EditPurchaseMeta
+              purchaseId={id}
+              supplierInvoiceNumber={detail.purchase.supplierInvoiceNumber}
+              purchaseDate={detail.purchase.purchaseDate.toISOString().slice(0, 10)}
+              notes={detail.purchase.notes}
+            />
+          ) : null}
           {canReverse ? <ReverseButton purchaseId={id} /> : null}
         </div>
       </div>

@@ -21,6 +21,7 @@ import {
   bigserial,
   bigint,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -133,6 +134,25 @@ export const customerLedgerEnum = pgEnum('customer_ledger_entry_type', [
 
 /** Which system bills this device (PRD FR-38.1). NEW defaults to EXTERNAL. */
 export const salesChannelEnum = pgEnum('sales_channel', ['ECITY', 'EXTERNAL', 'BOTH'])
+
+/** M7. What kind of account holds money outside the till (PRD FR-12.1). */
+export const accountTypeEnum = pgEnum('account_type', ['BANK', 'UPI', 'CARD', 'WALLET', 'OTHER'])
+
+/** M7. Why money moved through the drawer or an account (PRD FR-11.2, FR-12.3). */
+export const moneyMovementEnum = pgEnum('money_movement', [
+  'OPENING',
+  'SALE',
+  'CUSTOMER_PAYMENT',
+  'REFUND',
+  'EXPENSE',
+  'SUPPLIER_PAYMENT',
+  'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'ADJUSTMENT',
+])
+
+/** M7. A drawer day is open until it is counted and signed off (PRD FR-11.1). */
+export const drawerStatusEnum = pgEnum('drawer_status', ['OPEN', 'CLOSED'])
 
 /** Where a record came from (PRD FR-38.4). */
 export const recordSourceEnum = pgEnum('record_source', ['ECITY', 'LEGACY'])
@@ -1634,5 +1654,274 @@ export const tradeIn = pgTable(
     index('trade_in_sale_idx').on(t.saleId),
     index('trade_in_customer_idx').on(t.customerId, t.acceptedAt),
     index('trade_in_branch_idx').on(t.branchId, t.acceptedAt),
+  ],
+)
+
+/* ============================================================ M7 money === */
+
+/**
+ * A bank, UPI or card account (PRD FR-12.1, FR-12.2).
+ *
+ * Money that is not physically in a till lives here. An account may belong to
+ * one branch or be shared across the business, which is what `branch_id` being
+ * nullable means - null is "the whole business".
+ *
+ * The balance is NOT a column. It is the sum of `account_transaction`
+ * (docs/03 §4.2), so it can always be proved from the movements.
+ */
+export const account = pgTable(
+  'account',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** Null means the account is shared by every branch (FR-12.2). */
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+    name: text('name').notNull(),
+    type: accountTypeEnum('type').notNull(),
+    accountNumber: text('account_number'),
+    bankName: text('bank_name'),
+    ifsc: text('ifsc'),
+    upiId: text('upi_id'),
+    /** What the account held on the day it was added to the system. */
+    openingBalancePaise: bigint('opening_balance_paise', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    /**
+     * FR-12.4. The last statement balance the owner confirmed, and when. The
+     * gap between this and the derived balance is what reconciliation shows.
+     */
+    reconciledBalancePaise: bigint('reconciled_balance_paise', { mode: 'bigint' }),
+    reconciledAt: timestamp('reconciled_at', { withTimezone: true }),
+    reconciledBy: bigint('reconciled_by', { mode: 'number' }),
+    isActive: boolean('is_active').notNull().default(true),
+    sortOrder: smallint('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('account_business_name_uq').on(t.businessId, t.name),
+    index('account_branch_idx').on(t.branchId),
+  ],
+)
+
+/**
+ * Every movement through an account (PRD FR-12.3). Append-only.
+ *
+ * Signed: positive is money in, negative is money out. One transfer writes two
+ * rows linked by `transfer_group`, so both sides always move together and a
+ * half-finished transfer cannot exist.
+ */
+export const accountTransaction = pgTable(
+  'account_transaction',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    accountId: bigint('account_id', { mode: 'number' })
+      .notNull()
+      .references(() => account.id),
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+    movement: moneyMovementEnum('movement').notNull(),
+    /** Positive in, negative out. Always paise (docs/03 §4.1). */
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    /** The business day this belongs to, which is not always today's date. */
+    businessDate: date('business_date').notNull(),
+    refType: text('ref_type'),
+    refId: bigint('ref_id', { mode: 'number' }),
+    /** Both legs of one transfer share this. */
+    transferGroup: text('transfer_group'),
+    note: text('note'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('account_txn_account_idx').on(t.accountId, t.businessDate),
+    index('account_txn_business_idx').on(t.businessId, t.businessDate),
+    index('account_txn_ref_idx').on(t.refType, t.refId),
+    index('account_txn_transfer_idx').on(t.transferGroup),
+  ],
+)
+
+/**
+ * One cash drawer per branch per business day (PRD FR-11.1).
+ *
+ * Opened on the first cash movement of the day rather than by anyone pressing
+ * a button, so a counter that starts selling has a drawer whether or not
+ * someone remembered to open one.
+ */
+export const cashDrawerDay = pgTable(
+  'cash_drawer_day',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    businessDate: date('business_date').notNull(),
+    /**
+     * FR-11.3. Carried from the previous day's COUNTED cash, not its expected
+     * cash - the drawer starts with what is actually in it.
+     */
+    openingPaise: bigint('opening_paise', { mode: 'bigint' }).notNull().default(sql`0`),
+    status: drawerStatusEnum('status').notNull().default('OPEN'),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('cash_drawer_day_uq').on(t.branchId, t.businessDate),
+    index('cash_drawer_day_business_idx').on(t.businessId, t.businessDate),
+  ],
+)
+
+/**
+ * Every rupee in or out of a till (PRD FR-11.2). Append-only.
+ *
+ * Signed, like `account_transaction`: positive in, negative out. Expected cash
+ * is the opening balance plus the sum of these (FR-11.3) - never a stored
+ * counter, so it cannot drift from the movements it claims to summarise.
+ */
+export const cashMovement = pgTable(
+  'cash_movement',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    drawerDayId: bigint('drawer_day_id', { mode: 'number' })
+      .notNull()
+      .references(() => cashDrawerDay.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    movement: moneyMovementEnum('movement').notNull(),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    refType: text('ref_type'),
+    refId: bigint('ref_id', { mode: 'number' }),
+    note: text('note'),
+    /**
+     * PRD OQ-5. True when this landed in a day that was already closed. The
+     * closing keeps the figures it was signed with; this flag is what makes
+     * the difference between them visible instead of silent.
+     */
+    postedAfterClose: boolean('posted_after_close').notNull().default(false),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('cash_movement_day_idx').on(t.drawerDayId),
+    index('cash_movement_branch_idx').on(t.branchId, t.occurredAt),
+    index('cash_movement_ref_idx').on(t.refType, t.refId),
+  ],
+)
+
+/** Shop running costs (PRD FR-10.1 – FR-10.3). */
+export const expense = pgTable(
+  'expense',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    categoryId: bigint('category_id', { mode: 'number' })
+      .notNull()
+      .references(() => expenseCategory.id),
+    /** How it was paid. A cash method hits the drawer, anything else an account. */
+    paymentMethodId: bigint('payment_method_id', { mode: 'number' })
+      .notNull()
+      .references(() => paymentMethod.id),
+    /** Set when the money left an account rather than the till. */
+    accountId: bigint('account_id', { mode: 'number' }).references(() => account.id),
+    amountPaise: bigint('amount_paise', { mode: 'bigint' }).notNull(),
+    businessDate: date('business_date').notNull(),
+    description: text('description'),
+    reference: text('reference'),
+    /** OQ-5. Recorded into a day that had already been closed. */
+    postedAfterClose: boolean('posted_after_close').notNull().default(false),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedBy: bigint('voided_by', { mode: 'number' }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('expense_branch_date_idx').on(t.branchId, t.businessDate),
+    index('expense_business_date_idx').on(t.businessId, t.businessDate),
+    index('expense_category_idx').on(t.categoryId),
+  ],
+)
+
+/**
+ * The end of a day for one branch (PRD FR-13.1 – FR-13.5).
+ *
+ * The figures here are STAMPED, not derived (PRD OQ-5, docs/03 §4.9). A
+ * closing is a person counting the money and signing that it matched; if a
+ * later correction could rewrite it, the signature would mean nothing and a
+ * till shortage could be hidden by adjusting an earlier day. Reports recompute
+ * from the movements and so do reflect corrections - the two are meant to
+ * differ, and `corrected_after_close` is how that is surfaced.
+ */
+export const dailyClosing = pgTable(
+  'daily_closing',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    businessDate: date('business_date').notNull(),
+
+    /** FR-13.2. Cash, as it stood when the drawer was counted. */
+    expectedCashPaise: bigint('expected_cash_paise', { mode: 'bigint' }).notNull(),
+    countedCashPaise: bigint('counted_cash_paise', { mode: 'bigint' }).notNull(),
+    /** Counted less expected. Negative is a shortage (FR-11.4). */
+    cashDifferencePaise: bigint('cash_difference_paise', { mode: 'bigint' }).notNull(),
+
+    /**
+     * FR-13.1, FR-13.2. The rest of the day as signed off: sales, returns,
+     * credit, and expected vs counted for every non-cash method. Held as JSON
+     * because it is a frozen statement, never queried across days - the live
+     * reports recompute from the movements instead.
+     */
+    summary: jsonb('summary').notNull().default(sql`'{}'::jsonb`),
+
+    notes: text('notes'),
+    /**
+     * FR-38 / M12. Legacy sales drop cash into the same physical till, so the
+     * expected figure is incomplete until that day's file is imported. The
+     * gate is wired in M12; this records that someone closed anyway and why.
+     */
+    externalFeedImported: boolean('external_feed_imported').notNull().default(false),
+    overrideReason: text('override_reason'),
+
+    closedAt: timestamp('closed_at', { withTimezone: true }).notNull().defaultNow(),
+    closedBy: bigint('closed_by', { mode: 'number' }),
+
+    /** OQ-5. Voided so the day could be reopened - never edited in place. */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedBy: bigint('voided_by', { mode: 'number' }),
+    voidReason: text('void_reason'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // One live closing per branch per day. A voided one does not occupy the
+    // slot, so a day closed too early can be reopened and closed again.
+    uniqueIndex('daily_closing_live_uq')
+      .on(t.branchId, t.businessDate)
+      .where(sql`voided_at is null`),
+    index('daily_closing_business_idx').on(t.businessId, t.businessDate),
   ],
 )

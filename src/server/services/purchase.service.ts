@@ -10,7 +10,7 @@ import {
   supplier,
   type MainType,
 } from '@/server/db/schema'
-import { writeAudit, type AuditContext } from '@/server/db/audit'
+import { diff, writeAudit, type AuditContext } from '@/server/db/audit'
 import { AppError, conflict, notFound } from '@/server/http'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
 import { assertBranchAcceptsTransactions } from './branch.service'
@@ -553,4 +553,61 @@ export async function listPurchases(actor: AuthUser, filters: PurchaseFilters) {
     page: filters.page,
     pageSize: filters.pageSize,
   }
+}
+
+/**
+ * Correct a purchase's metadata (carried into M7 from M5).
+ *
+ * A confirmed purchase can be reversed but not edited, so a typo in a supplier
+ * invoice number had no fix once a unit from it had sold - reversal is refused
+ * at that point, and the shop was left with a wrong number on the record it
+ * reconciles the supplier's account against.
+ *
+ * Only the metadata moves. Lines, quantities and costs stay uneditable: a
+ * confirmed purchase has already moved stock, created device units and posted
+ * to the supplier ledger, so editing a cost afterwards would leave the ledger
+ * disagreeing with the stock and nothing to reconcile against. Reversal
+ * already handles that case honestly.
+ */
+export async function updatePurchaseMeta(
+  actor: AuthUser,
+  ctx: AuditContext,
+  id: number,
+  input: { supplierInvoiceNumber?: string | null; purchaseDate?: Date; notes?: string | null },
+): Promise<void> {
+  const before = (
+    await db
+      .select()
+      .from(purchase)
+      .where(and(eq(purchase.id, id), eq(purchase.businessId, actor.businessId)))
+      .limit(1)
+  )[0]
+  if (!before) throw notFound('Purchase')
+
+  const scope = branchScope(actor, null)
+  if (scope !== null && !scope.includes(before.branchId)) throw notFound('Purchase')
+
+  if (before.status === 'REVERSED') {
+    throw conflict('A reversed purchase is a closed record and is not edited.')
+  }
+
+  const values = {
+    supplierInvoiceNumber:
+      input.supplierInvoiceNumber === undefined
+        ? before.supplierInvoiceNumber
+        : input.supplierInvoiceNumber?.trim() || null,
+    purchaseDate: input.purchaseDate ?? before.purchaseDate,
+    notes: input.notes === undefined ? before.notes : input.notes?.trim() || null,
+    updatedAt: new Date(),
+  }
+
+  await db.update(purchase).set(values).where(eq(purchase.id, id))
+
+  await writeAudit(ctx, {
+    action: 'UPDATE',
+    entityType: 'purchase',
+    entityId: id,
+    summary: `Corrected purchase ${before.purchaseNumber ?? id}`,
+    changes: diff(before, values),
+  })
 }

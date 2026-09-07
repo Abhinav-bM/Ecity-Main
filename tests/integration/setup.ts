@@ -26,6 +26,8 @@ const APPEND_ONLY_TABLES = [
   'stock_ledger',
   'supplier_ledger_entry',
   'customer_ledger_entry',
+  'cash_movement',
+  'account_transaction',
   'audit_log',
 ] as const
 
@@ -65,4 +67,20 @@ export async function clearCustomerCredit(businessId: number) {
     (select id from customer_payment where business_id = ${businessId})`)
   await db.execute(`delete from customer_payment where business_id = ${businessId}`)
   await db.execute(`delete from customer_ledger_entry where business_id = ${businessId}`)
+}
+
+/**
+ * Remove one tenant's M7 money rows.
+ *
+ * `cash_drawer_day` and the two money ledgers hang off branch and business, so
+ * a test that billed anything cannot drop its branches until these go. Both
+ * ledgers are append-only, so this must run inside `withAppendOnlySuspended`.
+ */
+export async function clearMoney(businessId: number) {
+  await db.execute(`delete from cash_movement where business_id = ${businessId}`)
+  await db.execute(`delete from account_transaction where business_id = ${businessId}`)
+  await db.execute(`delete from expense where business_id = ${businessId}`)
+  await db.execute(`delete from daily_closing where business_id = ${businessId}`)
+  await db.execute(`delete from cash_drawer_day where business_id = ${businessId}`)
+  await db.execute(`delete from account where business_id = ${businessId}`)
 }

@@ -24,7 +24,7 @@ import { getStock, setDeviceStatus } from '@/server/services/stock.service'
 import { listDevices } from '@/server/services/device.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { databaseAvailable, withAppendOnlySuspended } from './setup'
+import { clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -89,6 +89,7 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
   afterAll(async () => {
     if (!available) return
     await withAppendOnlySuspended(async () => {
+      await clearMoney(businessId)
       const devices = await db
         .select({ id: schema.deviceUnit.id })
         .from(schema.deviceUnit)

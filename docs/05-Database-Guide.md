@@ -288,6 +288,9 @@ into `ecity-#` and appears to hang — type `;` and press Enter.
 | `port 5432 already in use` | Two Postgres installs running | Stop one, or change the port in `.env` |
 | `column … contains null values` | Added `NOT NULL` to a populated table | See §5.4 |
 | `audit_log is append-only` | Something tried to UPDATE/DELETE audit rows | Working as intended — never edit the audit log |
+| `cash_movement is append-only` | Something tried to rewrite a till movement | Working as intended — post a correcting movement instead |
+| `account_transaction is append-only` | Something tried to rewrite an account movement | Working as intended — post a correcting transaction |
+| `violates foreign key … cash_drawer_day` | Deleting a branch that has traded | Money rows reference the branch. Deactivate the branch rather than deleting it |
 
 ---
 
@@ -301,8 +304,15 @@ into `ecity-#` and appears to hang — type `;` and press Enter.
 4. **Back up before anything risky**, even locally (§5.6). It is 5 seconds.
 5. **Money is `bigint` paise.** Never `numeric`, never `real`, never a float.
 6. **Never hard-delete business records.** Documents move to Cancelled,
-   Voided or Reversed. The audit log is append-only and enforced by a trigger.
-7. **`docker compose down -v` deletes the database.** Laptop only.
+   Voided or Reversed. Six tables are append-only and enforced by triggers:
+   `audit_log`, `device_event`, `stock_ledger`, `supplier_ledger_entry`,
+   `customer_ledger_entry`, `cash_movement` and `account_transaction`. Every
+   balance in the system is a sum over one of them, so rewriting a row would
+   quietly change a figure someone has already reconciled against.
+7. **A daily closing is never rewritten** (PRD OQ-5). Its expected, counted and
+   difference are what a person signed for. A correction is a new entry in the
+   day, and the two are meant to differ — that gap is the evidence.
+8. **`docker compose down -v` deletes the database.** Laptop only.
 
 ---
 

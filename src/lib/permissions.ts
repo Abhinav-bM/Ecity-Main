@@ -80,6 +80,41 @@ export const PERMISSIONS = {
     label: 'Create and edit devices (IMEI)',
     description: 'Registering handsets outside a purchase. Most devices arrive via M3.',
   },
+
+  // --- M7 money, cash drawer and daily closing ---
+  'expense.view': { group: 'Money', label: 'View expenses' },
+  'expense.manage': { group: 'Money', label: 'Record expenses' },
+  'expense.void': {
+    group: 'Money',
+    label: 'Void an expense',
+    description: 'An expense is never edited or deleted — it is voided, and that is recorded.',
+  },
+  'cash.view': { group: 'Money', label: 'View the cash drawer' },
+  'account.view': { group: 'Money', label: 'View bank and UPI accounts' },
+  'account.manage': {
+    group: 'Money',
+    label: 'Create accounts, transfer and reconcile',
+    description: 'Adding accounts, moving money between them, and confirming a statement balance.',
+  },
+  'closing.view': { group: 'Money', label: 'View daily closings' },
+  'closing.create': { group: 'Money', label: 'Close the day' },
+  'closing.correct': {
+    group: 'Money',
+    label: 'Post into a day that is already closed',
+    description:
+      'PRD OQ-5. The closing itself is never rewritten — the correction is a new entry, and the difference from the signed figures stays visible.',
+  },
+  'closing.void': {
+    group: 'Money',
+    label: 'Void a closing and reopen the day',
+    description:
+      'For a day closed too early. Refused once a later day for that branch has been closed.',
+  },
+  'purchase.edit': {
+    group: 'Purchases',
+    label: 'Correct a purchase’s invoice number, date or notes',
+    description: 'Lines, quantities and costs stay uneditable — reversal handles those.',
+  },
 } as const satisfies Record<string, { group: string; label: string; description?: string }>
 
 export type PermissionCode = keyof typeof PERMISSIONS
@@ -133,6 +168,15 @@ export const SYSTEM_ROLES = {
       'customer_payment.void',
       'supplier_payment.view',
       'supplier_payment.manage',
+      'purchase.edit',
+      'expense.view',
+      'expense.manage',
+      'expense.void',
+      'cash.view',
+      'account.view',
+      'account.manage',
+      'closing.view',
+      'closing.create',
     ],
   },
   STAFF: {
@@ -163,6 +207,15 @@ export const SYSTEM_ROLES = {
        */
       'return.view',
       'return.create',
+      /*
+       * Staff see the drawer they are responsible for, and the expenses that
+       * explain it - but they do not RECORD one. Letting the person who counts
+       * the till also book money out of it is how a shortage gets papered over
+       * ("I spent it on transport"), which is the same reasoning that keeps a
+       * closed day uneditable (PRD OQ-5).
+       */
+      'expense.view',
+      'cash.view',
     ],
   },
 } as const satisfies Record<

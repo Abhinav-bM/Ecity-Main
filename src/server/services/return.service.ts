@@ -20,6 +20,7 @@ import { increaseStock, setDeviceStatus } from './stock.service'
 import { nextDocumentNumber } from './sequence.service'
 import { postCustomerLedgerEntry, saleReceivedPaise } from './customer-ledger.service'
 import { assertBranchAcceptsTransactions } from './branch.service'
+import { postByPaymentMethod } from './cash.service'
 
 /**
  * Returns and refunds (PRD FR-8.1 – FR-8.5).
@@ -332,6 +333,22 @@ export async function createReturn(
         createdBy: actor.id,
       })
       refunded = payable
+
+      // M7 FR-11.2. Money handed back in cash leaves the till.
+      if (input.refund.method === 'PAYMENT_METHOD') {
+        await postByPaymentMethod(tx, {
+          businessId: actor.businessId,
+          branchId: input.branchId,
+          paymentMethodId: input.refund.paymentMethodId!,
+          movement: 'REFUND',
+          amountPaise: -payable,
+          refType: 'sales_return',
+          refId: created.id,
+          note: returnNumber,
+          occurredAt: returnedAt,
+          actorId: actor.id,
+        })
+      }
 
       await tx
         .update(salesReturn)

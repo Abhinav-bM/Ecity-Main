@@ -363,12 +363,27 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - **Legacy sales take cash into the same physical drawer.** Expected cash is therefore wrong until M12's daily file is imported. Build the closing screen so it can be gated on "today's external feed imported", with an authorised override that records a reason. Wire the gate itself in M12; leave the hook here.
 - Opening balance of the next day carries from the previous day's actual count.
 
+*Built as:*
+- **The drawer opens itself.** A branch's day is created on its first cash movement, not by anyone pressing a button. A counter that starts selling has a drawer whether or not someone remembered to open one — which is the difference between a reconciliation that works and one that is missing the first hour of trade.
+- **One place decides cash from non-cash.** `postByPaymentMethod` reads the `affects_cash_drawer` flag M1 set, so cash goes to the till and everything else to an account. Two callers cannot route the same method differently.
+- **Expected cash is derived every time it is asked for.** Opening plus the sum of `cash_movement`, which is append-only with a database trigger. A stored counter would eventually disagree with the rows it claims to summarise, and a reconciliation that cannot be proved from its movements is worth nothing.
+- **The backfill was the real work.** M4 cash sales, M5 collections and supplier payments, M6 refunds and M7 expenses all post into the drawer. A till that only knew about some of the day's cash would reconcile to nothing, so this had to go back through every earlier module rather than start from today.
+- **A closing is stamped, never rewritten (OQ-5).** Expected, counted and difference are frozen at the moment someone signs off. A later correction is a new entry in that day, needs `closing.correct`, and is audited; the day's reports pick it up while the signed figures do not move, and the screen says so in as many words. Letting an owner edit a closed day was rejected because it is the straightforward way to hide a till shortage: come up short today, adjust yesterday, the difference disappears.
+- **Reopening exists for the mistake people actually make** — closing at six and then taking a sale at seven. `closing.void` reopens the day, audited with a reason, but is refused once a later day for that branch has been closed. The voided closing is kept: that a day was closed and reopened is part of the record.
+- **Tomorrow opens with what was counted, not what was expected.** The drawer starts with the cash physically in it, so a shortage does not silently repeat itself every morning.
+- **Staff do not record expenses.** They see the drawer and the expenses that explain it, but booking money out of the till they are counting is the same hole as an editable closing.
+- **An expense is voided, never deleted.** The row stays and the money is posted back, so the day it belongs to still tells the truth.
+- **Reconciling an account records the statement; it does not move money.** If the books and the statement disagree, that difference is real and wants an explanation — an automatic adjustment would erase the only evidence that something was wrong. Correcting it is a visible `ADJUSTMENT` in the ledger.
+- **A transfer writes both legs together.** One transaction, one `transfer_group`, so money cannot leave one account without reaching the other.
+- **Carried in — correcting a purchase.** Built as specified: supplier bill number, date and notes only. The dialog says why the costs are absent.
+
 **Done when.**
 - A day with cash sales, a UPI sale, a credit collection, a refund, an expense and a supplier payment produces the correct expected cash, and entering a counted amount ₹200 short shows a ₹200 shortage attributed to that branch, user and timestamp.
 - Two branches close independently and the consolidated reconciliation report adds up.
 - A staff user cannot alter a transaction inside a closed day; an Admin can, and it is audited.
+- A correction posted into a closed day leaves the signed expected, counted and difference untouched, and the day is marked as corrected after close.
 
-**Depends on.** M5. **Effort.** 2.5 weeks. *Blocked on PRD OQ-5.*
+**Depends on.** M5. **Effort.** 2.5 weeks. *OQ-5 answered — see the PRD.*
 
 ---
 

@@ -10,7 +10,7 @@ import { createSale, getSale } from '@/server/services/sale.service'
 import { updateBusiness } from '@/server/services/business.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { clearCustomerCredit, databaseAvailable, withAppendOnlySuspended } from './setup'
+import { clearCustomerCredit, clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -135,6 +135,7 @@ suite('GST toggle (database-backed)', () => {
         .from(schema.deviceUnit)
         .where(eq(schema.deviceUnit.businessId, businessId))
       const ids = devices.map((d) => d.id)
+      await clearMoney(businessId)
       await clearCustomerCredit(businessId)
       await db.execute(`delete from sale_payment where sale_id in
         (select id from sale where business_id = ${businessId})`)

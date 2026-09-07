@@ -18,7 +18,7 @@ import {
 import { acceptTradeIn, listTradeIns } from '@/server/services/trade-in.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { clearCustomerCredit, databaseAvailable, withAppendOnlySuspended } from './setup'
+import { clearCustomerCredit, clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -114,6 +114,7 @@ suite('M6 returns, exchange and trade-in (database-backed)', () => {
         (select id from sales_return where business_id = ${businessId})`)
       await db.execute(`delete from trade_in where business_id = ${businessId}`)
       await db.execute(`delete from sales_return where business_id = ${businessId}`)
+      await clearMoney(businessId)
       await clearCustomerCredit(businessId)
       await db.execute(`delete from sale_payment where sale_id in
         (select id from sale where business_id = ${businessId})`)

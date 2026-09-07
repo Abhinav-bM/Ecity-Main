@@ -15,6 +15,7 @@ import { branchScope, type AuthUser } from '@/server/auth/permissions'
 import { assertBranchAcceptsTransactions } from './branch.service'
 import { assertPartySelectable } from './party.service'
 import { nextDocumentNumber } from './sequence.service'
+import { postByPaymentMethod } from './cash.service'
 import {
   postCustomerLedgerEntry,
   saleReceivedPaise,
@@ -99,6 +100,23 @@ export async function recordCustomerPayment(
         })
         .returning()
     )[0]!
+
+    /*
+     * M7 FR-11.2. A customer clearing their tab in cash puts money in the
+     * till, so the drawer has to see it or the day will not reconcile.
+     */
+    await postByPaymentMethod(tx, {
+      businessId: actor.businessId,
+      branchId: input.branchId,
+      paymentMethodId: input.paymentMethodId,
+      movement: 'CUSTOMER_PAYMENT',
+      amountPaise: input.amountPaise,
+      refType: 'customer_payment',
+      refId: created.id,
+      note: receiptNumber,
+      occurredAt: created.receivedOn,
+      actorId: actor.id,
+    })
 
     const allocations = input.allocations?.length
       ? input.allocations

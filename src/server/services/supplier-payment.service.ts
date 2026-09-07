@@ -12,6 +12,7 @@ import type { AuthUser } from '@/server/auth/permissions'
 import { assertBranchAcceptsTransactions } from './branch.service'
 import { assertPartySelectable } from './party.service'
 import { postLedgerEntry, purchasePaidPaise } from './supplier-ledger.service'
+import { postByPaymentMethod } from './cash.service'
 
 /**
  * Paying a supplier (PRD FR-14.2).
@@ -75,6 +76,19 @@ export async function recordSupplierPayment(
         })
         .returning()
     )[0]!
+
+    // M7 FR-11.2. Paying a supplier in cash takes money out of the till.
+    await postByPaymentMethod(tx, {
+      businessId: actor.businessId,
+      branchId: input.branchId,
+      paymentMethodId: input.paymentMethodId,
+      movement: 'SUPPLIER_PAYMENT',
+      amountPaise: -input.amountPaise,
+      refType: 'supplier_payment',
+      refId: created.id,
+      occurredAt: created.paidOn,
+      actorId: actor.id,
+    })
 
     const allocations = input.allocations?.length
       ? input.allocations

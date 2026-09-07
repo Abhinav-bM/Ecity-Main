@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 271 unit and integration tests, 580
+Automated tests cover the mechanics — 289 unit and integration tests, 624
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -906,3 +906,114 @@ npm run db:migrate && npm run db:seed
 | Build / commit | |
 | Result | pass / fail |
 | Issues raised | |
+
+# M7 — Expenses, Cash Drawer, Accounts & Daily Closing
+
+Sign in as **admin** unless a step says otherwise. Work a whole day through in
+one sitting — the point of this module is that the day balances at the end.
+
+## 1. The drawer sees every rupee (FR-11.2)
+
+Open **Cash drawer** and note *Expected in the till*. After each step below,
+come back and check it moved the right way and by the right amount.
+
+- [ ] Bill something for **cash** → expected goes **up**
+- [ ] Bill something by **UPI** → expected does **not** move. *UPI never
+      touches the till*
+- [ ] Collect a customer's outstanding balance in **cash** → **up**
+- [ ] Record a **cash expense** → **down**
+- [ ] Pay a supplier in **cash** → **down**
+- [ ] Refund a return in **cash** → **down**
+- [ ] Every one of those appears as its own line under the total, with a time
+- [ ] Switch branch → the other branch's till is a separate figure. *One
+      branch's takings must never appear in another's*
+
+## 2. Expenses (FR-10.1 – FR-10.3)
+
+- [ ] **Record an expense** takes branch, category, amount, date, how it was
+      paid, description and reference
+- [ ] Choosing a non-cash method offers an **account**; choosing cash does not
+- [ ] It appears in the list, newest first, with who recorded it
+- [ ] **Total spent** is over everything in the filter, not just this page
+- [ ] **Void** one → it asks why, and refuses an empty reason
+- [ ] After voiding, the money is back in the drawer and the expense is gone
+      from the live list. *It is voided, not deleted — tick "include voided"
+      and it is still there with its reason*
+
+## 3. Accounts (FR-12.1 – FR-12.4)
+
+- [ ] **Add account** for a bank and one for UPI, with an opening balance
+- [ ] An account can belong to one branch or to **all branches**
+- [ ] **Transfer** between them → both balances move, by the same amount
+- [ ] **Reconcile** one, entering a statement balance ₹500 *below* the books
+- [ ] The balance does **not** change to match. The ₹500 shows as
+      **unreconciled**. *A real difference wants an explanation, not an
+      automatic adjustment*
+
+## 4. Closing the day (FR-13.1 – FR-13.4)
+
+- [ ] **Daily closing** shows sales, credit given, collected, returns and
+      refunds, what each payment method took, and the expenses by category
+- [ ] Type a counted amount **₹200 below** expected → it says **₹200 short**
+      as you type, before you commit to anything
+- [ ] Close the day → the shortage is recorded with the branch, your name and
+      the time
+- [ ] The drawer for that day now reads **CLOSED**
+
+## 5. A closed day is never rewritten (OQ-5) — *the important one*
+
+- [ ] Signed in as **staff**, try to record an expense dated into the closed
+      day → refused
+- [ ] As **admin**, record one → allowed, and the movement is tagged
+      **After close**
+- [ ] Go back to the closing screen. It says **this day was corrected after it
+      was closed**, and shows both figures: what was signed, and what the
+      movements now come to
+- [ ] The signed **expected, counted and difference are unchanged**. *This is
+      the whole decision. If a closing could be edited, coming up short today
+      and adjusting yesterday would make the difference disappear*
+
+## 6. Reopening a day
+
+- [ ] On a closed day, **Reopen this day** → asks why, and refuses an empty
+      reason
+- [ ] It reopens, and the day can be closed again
+- [ ] Close a **later** day for the same branch, then try to reopen the earlier
+      one → **refused**, and it tells you to post a correction instead
+- [ ] **Closing history** shows the reopened day marked **Reopened**. *The
+      voided closing is kept — that a day was closed and reopened is part of
+      the record*
+
+## 7. Two branches (FR-13.5)
+
+- [ ] Close each branch's day separately
+- [ ] **All branches** shows both side by side and the consolidated totals add
+      up
+- [ ] A branch that has not closed still appears, marked **Open**, with what it
+      should have
+
+## 8. Tomorrow starts from what was counted
+
+- [ ] Close a day counting ₹100 **less** than expected
+- [ ] Open the next day's drawer → its **opening** is what you counted, not
+      what was expected. *The drawer starts with the cash actually in it, so a
+      shortage does not repeat itself every morning*
+
+## 9. Correcting a purchase (carried in from M5)
+
+- [ ] A purchase page shows **Correct details** for admin and manager
+- [ ] It offers the **supplier bill number, date and notes** — and nothing else
+- [ ] There is **no** way to change a line, quantity or cost. *Stock has moved
+      and the supplier ledger has been posted; reversal is the honest tool*
+- [ ] Save a corrected bill number → it shows on the purchase
+- [ ] Signed in as **staff**, there is no Correct details button
+
+## What M7 does not do
+
+- **No receipt photo on an expense yet** — the attachment plumbing exists from
+  M1 but the expense form does not use it
+- **No cash counting by denomination**; one counted total per day
+- **Legacy sales are not in the expected figure.** They take cash into the same
+  physical till, so until M12 imports that day's file, expected cash is short
+  by whatever the other system took. The closing screen is built to be gated on
+  that import, with a recorded override — the gate is wired in M12

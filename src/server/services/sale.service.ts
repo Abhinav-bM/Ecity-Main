@@ -30,6 +30,7 @@ import {
   stateCodeFromGstin,
 } from '@/lib/gst'
 import { assertBranchAcceptsTransactions } from './branch.service'
+import { postByPaymentMethod } from './cash.service'
 import { assertPartySelectable } from './party.service'
 import { decreaseStock, setDeviceStatus } from './stock.service'
 import { nextDocumentNumber } from './sequence.service'
@@ -487,6 +488,22 @@ export async function createSale(
         paymentMethodId: p.paymentMethodId,
         amountPaise: p.amountPaise,
         reference: p.reference?.trim() || null,
+      })
+      /*
+       * M7 FR-11.2. Cash taken at the counter goes into the branch's drawer;
+       * anything else to its account. A drawer that only knew about some of
+       * the day's cash would reconcile to nothing.
+       */
+      await postByPaymentMethod(tx, {
+        businessId: actor.businessId,
+        branchId: input.branchId,
+        paymentMethodId: p.paymentMethodId,
+        movement: 'SALE',
+        amountPaise: p.amountPaise,
+        refType: 'sale',
+        refId: created.id,
+        note: invoiceNumber,
+        occurredAt: soldAt,
       })
     }
 
