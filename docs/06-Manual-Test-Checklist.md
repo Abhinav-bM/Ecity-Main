@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 289 unit and integration tests, 624
+Automated tests cover the mechanics — 321 unit and integration tests, 676
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -1023,3 +1023,130 @@ come back and check it moved the right way and by the right amount.
   physical till, so until M12 imports that day's file, expected cash is short
   by whatever the other system took. The closing screen is built to be gated on
   that import, with a recorded override — the gate is wired in M12
+
+# M8 — Branch Transfers & Stock Adjustments
+
+You need two branches with stock. Sign in as **admin** unless a step says
+otherwise.
+
+## 1. Requesting (FR-3.6)
+
+- [ ] **Transfers → Request a transfer**
+- [ ] Picking a *From* branch shows only what **that branch actually holds** —
+      handsets in stock and accessories with a count
+- [ ] Changing the *From* branch clears what you had added. *Those items were
+      on the other branch's shelf*
+- [ ] A handset adds as one line with its IMEI; an accessory lets you type a
+      quantity, capped at what is on hand
+- [ ] Save → it appears as **REQUESTED**
+- [ ] Nothing has moved yet: the handset is still sellable at the sending
+      branch
+
+## 2. Approving and sending
+
+- [ ] The transfer list has **Waiting for approval** and **To receive** — the
+      approval queue and the receiving screen, one click away
+- [ ] The transfer offers **Approve**, then **Dispatch** — not both at once
+- [ ] Signed in as **staff**, a requested transfer offers no Approve button.
+      *Sending stock out of a branch is a manager's decision*
+- [ ] As a manager assigned to the **receiving** branch only, the transfer
+      offers no Approve or Dispatch — it says the other branch sends it
+- [ ] Once in transit, that same manager **can** receive it, and a manager at
+      the **sending** branch cannot. *Signing for a delivery is the receiving
+      branch's job — whoever packed the box cannot attest it arrived*
+- [ ] After **Dispatch** it reads **IN TRANSIT**
+
+## 3. In transit belongs to nobody — *the important one*
+
+- [ ] At the **sending** branch, search the IMEI at the till → **not offered**
+- [ ] Switch to the **receiving** branch and search it → **not offered**
+- [ ] The accessory count at the sending branch has **gone down** by what was
+      sent
+- [ ] The receiving branch's count has **not gone up** yet. *It is in a van.
+      If it were sellable at both ends it would be sold twice*
+
+## 4. Receiving (FR-3.7)
+
+- [ ] The receiving screen offers a **scan box**, focused and ready
+- [ ] Nothing is ticked to begin with. *A box you scan into is safer than one
+      you untick — a handset the scanner misses shows as short instead of
+      passing quietly*
+- [ ] Scan (or type and press Enter) each IMEI → its line ticks
+- [ ] A handset that will not scan can still be ticked by hand
+- [ ] **Receive in full** → the transfer reads **RECEIVED**
+- [ ] The exact IMEI is now at the receiving branch and sellable there
+- [ ] Its device history shows **TRANSFERRED OUT** and **TRANSFERRED IN**, each
+      naming **both branches** and the date. *Not one branch with the other
+      hidden in the detail — M9's timeline reads these directly*
+- [ ] Its **main type and NEW CUT are unchanged**. *A journey is not a
+      reclassification*
+- [ ] The accessory count at the receiving branch has gone up
+
+## 5. Something did not arrive
+
+- [ ] Send another handset and, on receipt, **untick** it
+- [ ] A warning appears explaining it will be marked lost, and asks what
+      happened
+- [ ] After receiving, the transfer is flagged **Short on receipt** with your
+      note
+- [ ] The handset reads **LOST**, not still in transit. *It left one branch and
+      reached no other — it has to be accounted for, not stranded*
+- [ ] Try a partly received accessory line: send 5, receive 3 → only **3**
+      arrive and the transfer is flagged short
+
+## 5b. Something arrived that should not have
+
+- [ ] On a receiving screen, scan an IMEI that is **not on the transfer**
+- [ ] It is listed as unexpected, with a warning, and can be removed if you
+      mis-scanned
+- [ ] Receive → the transfer is flagged, and the stray IMEI is named in the
+      discrepancy note
+- [ ] That handset has **not** been moved to this branch. *Recording it is
+      right; moving it would be inventing a transfer nobody authorised*
+
+## 6. Cancelling
+
+- [ ] Cancel a **requested** transfer → nothing moves anywhere
+- [ ] Cancel one **in transit** → it asks why, and refuses an empty reason
+- [ ] The handset is back at the **sending** branch and sellable again
+- [ ] Its history shows the return **without** claiming it came from the other
+      branch. *It never got there*
+- [ ] Accessory stock is back at the sending branch too
+- [ ] A **received** transfer offers no Cancel. *A completed movement is
+      corrected by transferring back, not by rewinding it*
+
+## 7. Adjustments (FR-28.1 – FR-28.3)
+
+- [ ] **Adjustments → Adjust stock** asks first whether it is an accessory
+      count or one handset
+- [ ] For an accessory: pick it, type what you **actually counted**, and the
+      change is shown as you type
+- [ ] Entering the number the system already has is refused. *There is nothing
+      to correct*
+- [ ] Save with reason **Miscount** → the count changes and the entry shows
+      `10 → 7` with who and when
+- [ ] For a handset: **Miscount is not offered** — only Damage and Loss, and it
+      explains that a wrong record is a device correction instead
+- [ ] Adjust a handset as **Damage** → it leaves sellable stock and the till no
+      longer offers it
+- [ ] The adjustment lists the handset's **main type and NEW CUT as they were
+      at the time**
+- [ ] Click an adjustment → it opens on its own page
+- [ ] **Attach evidence** — a photo of the damage or the count sheet
+- [ ] The page says an adjustment is never edited, and that a wrong one is
+      corrected by a second
+- [ ] Signed in as **staff**, there is no Adjust stock button
+
+## 8. Navigation
+
+- [ ] **Transfers** and **Adjustments** appear under Inventory
+- [ ] The transfer list filters by stage — **Requested** is the approval queue,
+      **In transit** is the receiving one
+
+## What M8 does not do
+
+- **No printed transfer note** to travel with the goods
+- **No partial dispatch**; a transfer goes in one movement or not at all
+- **No printed barcode labels**; a scanner types the IMEI into the scan box
+  like a keyboard, which is how these scanners work anyway
+- **No transfer between businesses**, only between branches of one

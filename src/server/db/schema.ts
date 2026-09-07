@@ -154,6 +154,28 @@ export const moneyMovementEnum = pgEnum('money_movement', [
 /** M7. A drawer day is open until it is counted and signed off (PRD FR-11.1). */
 export const drawerStatusEnum = pgEnum('drawer_status', ['OPEN', 'CLOSED'])
 
+/**
+ * M8. The transfer lifecycle (PRD FR-3.6).
+ *
+ * Enforced server-side by a transition table, like the device lifecycle - the
+ * states exist so stock cannot be in two branches at once, or in none.
+ */
+export const transferStatusEnum = pgEnum('transfer_status', [
+  'REQUESTED',
+  'APPROVED',
+  'IN_TRANSIT',
+  'RECEIVED',
+  'CANCELLED',
+])
+
+/** M8. Why stock was corrected (PRD FR-28.3). */
+export const adjustmentReasonEnum = pgEnum('adjustment_reason', [
+  'DAMAGE',
+  'LOSS',
+  'MISCOUNT',
+  'DATA_ENTRY_ERROR',
+])
+
 /** Where a record came from (PRD FR-38.4). */
 export const recordSourceEnum = pgEnum('record_source', ['ECITY', 'LEGACY'])
 
@@ -1923,5 +1945,146 @@ export const dailyClosing = pgTable(
       .on(t.branchId, t.businessDate)
       .where(sql`voided_at is null`),
     index('daily_closing_business_idx').on(t.businessId, t.businessDate),
+  ],
+)
+
+/* ======================================================= M8 transfers === */
+
+/**
+ * Stock moving between branches (PRD FR-3.6, FR-3.7).
+ *
+ * The states are the point: while a transfer is in transit the stock belongs
+ * to neither branch's sellable inventory. Anything less and the same handset
+ * is sellable at both ends of the journey.
+ */
+export const stockTransfer = pgTable(
+  'stock_transfer',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    transferNumber: text('transfer_number').notNull(),
+    fromBranchId: bigint('from_branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    toBranchId: bigint('to_branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    status: transferStatusEnum('status').notNull().default('REQUESTED'),
+    notes: text('notes'),
+
+    /*
+     * Who did what, and when. Kept as columns rather than derived from the
+     * audit log because the transfer screen shows them constantly, and a
+     * screen that has to read the audit log to render is a slow screen.
+     */
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    requestedBy: bigint('requested_by', { mode: 'number' }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    approvedBy: bigint('approved_by', { mode: 'number' }),
+    dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
+    dispatchedBy: bigint('dispatched_by', { mode: 'number' }),
+    receivedAt: timestamp('received_at', { withTimezone: true }),
+    receivedBy: bigint('received_by', { mode: 'number' }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: bigint('cancelled_by', { mode: 'number' }),
+    cancelReason: text('cancel_reason'),
+
+    /** Something did not arrive, or arrived that should not have. */
+    hasDiscrepancy: boolean('has_discrepancy').notNull().default(false),
+    discrepancyNotes: text('discrepancy_notes'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('stock_transfer_number_uq').on(t.businessId, t.transferNumber),
+    index('stock_transfer_from_idx').on(t.fromBranchId, t.status),
+    index('stock_transfer_to_idx').on(t.toBranchId, t.status),
+    index('stock_transfer_business_idx').on(t.businessId, t.requestedAt),
+  ],
+)
+
+/**
+ * What is on a transfer.
+ *
+ * A serialised line is one device and a quantity of one - FR-3.7 requires the
+ * exact IMEI to move, so a phone can never be transferred as "one handset".
+ * Accessories carry a quantity.
+ */
+export const transferItem = pgTable(
+  'transfer_item',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    transferId: bigint('transfer_id', { mode: 'number' })
+      .notNull()
+      .references(() => stockTransfer.id, { onDelete: 'cascade' }),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => product.id),
+    /** The exact handset (FR-3.7). Null for accessories. */
+    deviceId: bigint('device_id', { mode: 'number' }).references(() => deviceUnit.id),
+    quantity: integer('quantity').notNull(),
+    /** Filled in at the receiving end. Short of `quantity` is a discrepancy. */
+    receivedQuantity: integer('received_quantity').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('transfer_item_transfer_idx').on(t.transferId),
+    index('transfer_item_device_idx').on(t.deviceId),
+  ],
+)
+
+/**
+ * Correcting what is on the shelf against what the system thinks (FR-28.1 – FR-28.3).
+ *
+ * An adjustment is the honest record of a difference, not a way to make one
+ * disappear: it names the branch, the thing, the reason, the person and the
+ * moment, and it is never edited afterwards.
+ */
+export const stockAdjustment = pgTable(
+  'stock_adjustment',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    branchId: bigint('branch_id', { mode: 'number' })
+      .notNull()
+      .references(() => branch.id),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => product.id),
+    /** Set when the adjustment is about one handset rather than a count. */
+    deviceId: bigint('device_id', { mode: 'number' }).references(() => deviceUnit.id),
+
+    reason: adjustmentReasonEnum('reason').notNull(),
+    /** Signed, for accessories: negative is stock written off. */
+    quantityDelta: integer('quantity_delta').notNull().default(0),
+    quantityBefore: integer('quantity_before'),
+    quantityAfter: integer('quantity_after'),
+    /** For a device: where it ended up. */
+    deviceStatusBefore: deviceStatusEnum('device_status_before'),
+    deviceStatusAfter: deviceStatusEnum('device_status_after'),
+
+    /*
+     * FR-28.2. Snapshotted, not joined: the classification at the moment of
+     * the adjustment is part of what is being recorded, and a later correction
+     * to the device must not rewrite what this said at the time.
+     */
+    mainTypeSnapshot: mainTypeEnum('main_type_snapshot'),
+    isNewCutSnapshot: boolean('is_new_cut_snapshot').notNull().default(false),
+
+    notes: text('notes'),
+    adjustedAt: timestamp('adjusted_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('stock_adjustment_branch_idx').on(t.branchId, t.adjustedAt),
+    index('stock_adjustment_business_idx').on(t.businessId, t.adjustedAt),
+    index('stock_adjustment_device_idx').on(t.deviceId),
+    index('stock_adjustment_product_idx').on(t.productId),
   ],
 )

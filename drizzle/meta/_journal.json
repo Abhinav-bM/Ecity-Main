@@ -148,6 +148,13 @@
       "when": 1788791010962,
       "tag": "0020_m7_drop_user_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788793906055,
+      "tag": "0021_m8_transfers",
+      "breakpoints": true
     }
   ]
 }

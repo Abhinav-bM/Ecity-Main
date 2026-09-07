@@ -22,6 +22,8 @@ export const ATTACHABLE = [
   'purchase',
   // PRD FR-10.2 - the receipt for an expense.
   'expense',
+  // PRD M8 - evidence for a stock adjustment: a photo of the damage, a note.
+  'stock_adjustment',
 ] as const
 export type Attachable = (typeof ATTACHABLE)[number]
 

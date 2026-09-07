@@ -233,7 +233,17 @@ export async function setDeviceStatus(
     nextStatus: DeviceStatus
     eventType: EventType
     branchId?: number | null
+    /** Where the device now physically is. Moves `current_branch_id`. */
     toBranchId?: number | null
+    /*
+     * The JOURNEY being recorded, which is not the same thing as where the
+     * device ends up. On dispatch a handset stays owned by the sending branch
+     * while it is in transit, but the event still has to say where it is
+     * going - M8 FR-3.7 wants both branch ids on the event, and M9's IMEI
+     * timeline reads these columns rather than digging through the payload.
+     */
+    eventFromBranchId?: number | null
+    eventToBranchId?: number | null
     payload?: Record<string, unknown>
   },
   tx: DbOrTx = db,
@@ -273,7 +283,10 @@ export async function setDeviceStatus(
       deviceId: input.deviceId,
       eventType: input.eventType,
       branchId: input.branchId ?? row.branchId,
-      toBranchId: input.toBranchId ?? null,
+      fromBranchId: input.eventFromBranchId ?? null,
+      // Falls back to where the device moved, which is right for everything
+      // except a transfer in flight.
+      toBranchId: input.eventToBranchId ?? input.toBranchId ?? null,
       payload: { from: input.expectedStatus, to: input.nextStatus, ...input.payload },
     },
     tx,

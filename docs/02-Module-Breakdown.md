@@ -405,6 +405,25 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - Receipt moves the exact IMEI to the destination branch and writes `device_event: transferred_out` / `transferred_in` with both branch ids and the date.
 - Adjustments record branch, product or IMEI, main type, GLOBAL/NEW CUT, reason, user and timestamp, and require permission.
 
+*Built as:*
+- **M2 had already built most of it.** `IN_TRANSIT` was in the device status enum, `IN_STOCK → IN_TRANSIT → IN_STOCK` was in the transition table, and `TRANSFERRED_OUT` / `TRANSFERRED_IN` were in the event types. M8's job was to use them, not invent them.
+- **Dispatch is where stock stops being sellable; receipt is where it starts again.** Nothing is sellable in between — that is the whole module. A handset sellable at both ends of its journey gets sold twice, and the second customer finds out afterwards.
+- **The lifecycle is a transition table, not scattered `if`s** — the same shape as M2's device table, so it can be read and tested in one place. Skipping a step is refused: stock cannot leave before someone approved it.
+- **A handset cannot be on two open transfers at once.** Checked when the transfer is requested, because two open requests for one IMEI means the second fails at dispatch — later, and more confusingly.
+- **Cancelling in transit puts the goods back at the source.** They never reached the destination, so that is where they are.
+- **Something that did not arrive is marked LOST, not left in transit.** A handset stranded `IN_TRANSIT` on a closed transfer sits in a state nothing can move it out of; something that left one branch and reached no other has to be accounted for.
+- **The receiving screen scans, and starts with nothing ticked.** A box you scan into is safer than one you untick: if the scanner misses a handset the transfer reads short and someone goes looking, whereas starting ticked would let a missed scan pass as received. A handset that will not scan can still be ticked by hand. Accessories keep their sent quantity — there is nothing to scan.
+- **An IMEI that is not on the transfer is flagged and recorded, never acted on.** Something physically here that the system thinks is elsewhere is a real problem, but moving it automatically would be inventing a transfer nobody authorised. It goes onto the transfer's discrepancy note so a person finds out where it came from.
+- **An adjustment carries evidence** — a photo of the damage, or the count sheet — on its own page, using M1's attachment plumbing.
+- **A transfer event names both branches in its columns, not its payload.** `setDeviceStatus` had been overloading one field to mean two things — where the device now is, and where the event says it is going — so `device_event.from_branch_id` was never populated and a `TRANSFERRED_OUT` recorded the *sending* branch as its destination. The journey is now separate from the move: a dispatched handset stays with the sender while its event says where it is headed. M9's IMEI timeline reads these columns, so "moved from A to B" has to be answerable without parsing JSON.
+- **A cancelled transfer claims no journey.** The return event has no from-branch, because the handset never reached the destination and saying otherwise would put it somewhere it was never at. A handset lost in transit is the mirror image: a from-branch and no destination.
+- **The approval queue and the receiving screen are the list, filtered.** They are one click from the transfer list rather than two more pages that could drift apart from it.
+- **Each step belongs to one end of the journey.** Approving and dispatching are the sending branch's; signing for a delivery is the receiving branch's. A receipt is someone at the far end confirming the goods turned up — if the branch that packed the box could attest they arrived, the confirmation would be worth nothing. Enforced server-side and mirrored in the UI, which tells you whose step it is instead of offering a button that would be refused. A user who can see every branch is exempt: they are the owner, and there is nobody else to check them.
+- **An adjustment is never edited.** A wrong one is corrected by a second, so both stay visible — the same rule as every ledger.
+- **A handset can only be damaged or lost, never "miscounted".** A miscount is about a quantity; a wrong record about one handset is a device correction (M6's edit). The form says so rather than silently allowing a meaningless adjustment.
+- **The classification is snapshotted onto the adjustment** (FR-28.2), so a later reclassification cannot rewrite what it said at the time — the same principle as docs/03 §4.9.
+- **Adjustments write to the stock ledger**, so they show up in FR-21's movement report rather than only in their own list.
+
 **Done when.**
 - A device transferred A → B cannot be sold at A once dispatched, cannot be sold at B until received, and after receipt carries a movement history showing both branches with dates.
 - A cancelled in-transit transfer returns the devices to the source branch cleanly.

@@ -110,6 +110,24 @@ export const PERMISSIONS = {
     description:
       'For a day closed too early. Refused once a later day for that branch has been closed.',
   },
+  // --- M8 transfers and adjustments ---
+  'transfer.view': { group: 'Inventory', label: 'View branch transfers' },
+  'transfer.request': { group: 'Inventory', label: 'Request a transfer' },
+  'transfer.approve': {
+    group: 'Inventory',
+    label: 'Approve and dispatch a transfer',
+    description: 'Sending stock out of a branch is a manager’s decision.',
+  },
+  'transfer.receive': { group: 'Inventory', label: 'Receive a transfer' },
+  'transfer.cancel': { group: 'Inventory', label: 'Cancel a transfer before receipt' },
+  'adjustment.view': { group: 'Inventory', label: 'View stock adjustments' },
+  'adjustment.create': {
+    group: 'Inventory',
+    label: 'Adjust stock',
+    description:
+      'Correcting the system to match the shelf. Always recorded with a reason and never edited.',
+  },
+
   'purchase.edit': {
     group: 'Purchases',
     label: 'Correct a purchase’s invoice number, date or notes',
@@ -177,6 +195,13 @@ export const SYSTEM_ROLES = {
       'account.manage',
       'closing.view',
       'closing.create',
+      'transfer.view',
+      'transfer.request',
+      'transfer.approve',
+      'transfer.receive',
+      'transfer.cancel',
+      'adjustment.view',
+      'adjustment.create',
     ],
   },
   STAFF: {
@@ -216,6 +241,16 @@ export const SYSTEM_ROLES = {
        */
       'expense.view',
       'cash.view',
+      /*
+       * Staff ask for stock and take delivery of it - both are counter work.
+       * Approving a transfer out of a branch, cancelling one, and adjusting
+       * stock to match the shelf are decisions about what the shop owns, so
+       * they stay with a manager.
+       */
+      'transfer.view',
+      'transfer.request',
+      'transfer.receive',
+      'adjustment.view',
     ],
   },
 } as const satisfies Record<
