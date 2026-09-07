@@ -65,6 +65,16 @@ export type InvoiceData = {
     amountPaise: bigint;
     reference: string | null;
   }[];
+  /**
+   * PRD FR-9.2. Shown under the total as settlement, never as a discount - the
+   * goods were sold at the full price and GST is charged on that.
+   */
+  tradeIns: {
+    id: number;
+    deviceId: number | null;
+    agreedValuePaise: bigint;
+    identifier: string | null;
+  }[];
   subtotalPaise: bigint;
   discountPaise: bigint;
   taxablePaise: bigint;
@@ -284,6 +294,16 @@ export function Invoice({
             <dd className="tabular border-t pt-1 text-right font-medium">
               {formatMoney(data.totalPaise)}
             </dd>
+            {data.tradeIns.map((t) => (
+              <div key={t.id} className="col-span-2 grid grid-cols-2 gap-0.5">
+                <dt className="text-muted-foreground">
+                  Trade-in{t.identifier ? ` · ${t.identifier}` : ""}
+                </dt>
+                <dd className="tabular text-right">
+                  {formatMoney(t.agreedValuePaise)}
+                </dd>
+              </div>
+            ))}
             {data.payments.map((p) => (
               <div key={p.id} className="col-span-2 grid grid-cols-2 gap-0.5">
                 <dt className="text-muted-foreground">{p.methodName}</dt>

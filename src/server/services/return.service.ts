@@ -18,7 +18,7 @@ import { AppError, conflict, notFound } from '@/server/http'
 import { branchScope, type AuthUser } from '@/server/auth/permissions'
 import { increaseStock, setDeviceStatus } from './stock.service'
 import { nextDocumentNumber } from './sequence.service'
-import { postCustomerLedgerEntry } from './customer-ledger.service'
+import { postCustomerLedgerEntry, saleReceivedPaise } from './customer-ledger.service'
 import { assertBranchAcceptsTransactions } from './branch.service'
 
 /**
@@ -256,8 +256,42 @@ export async function createReturn(
       }
     }
 
+    /*
+     * A refund cannot hand back more than the bill was actually settled by.
+     *
+     * Without this, goods bought on credit and returned unpaid would pay out
+     * cash the shop never received - the customer keeps the debt AND takes the
+     * money. The reversal below still clears the full value off their account,
+     * so a part-paid bill returns the cash they gave and writes off the rest.
+     *
+     * "Settled by" is the shared expression, so cash at the counter, a later
+     * collection and a handset taken in part-exchange all count.
+     */
+    const settledOnSale = await saleReceivedPaise(saleRow.id, tx)
+    const refundedBefore = (
+      await tx
+        .select({ total: sql<string>`coalesce(sum(${refund.amountPaise}), 0)` })
+        .from(refund)
+        .innerJoin(salesReturn, eq(salesReturn.id, refund.returnId))
+        .where(eq(salesReturn.saleId, saleRow.id))
+    )[0]
+    const refundCap = settledOnSale - BigInt(refundedBefore?.total ?? '0')
+    /*
+     * The cap is on money leaving the shop. Crediting the customer's account
+     * is not a payout - it is the reversal already being posted below - so a
+     * credit note is never capped, only a refund through a payment method.
+     */
+    const payable =
+      input.refund?.method === 'PAYMENT_METHOD'
+        ? refundCap <= 0n
+          ? 0n
+          : refundable < refundCap
+            ? refundable
+            : refundCap
+        : refundable
+
     let refunded = 0n
-    if (input.refund && refundable > 0n) {
+    if (input.refund && payable > 0n) {
       if (input.refund.method === 'PAYMENT_METHOD') {
         if (!input.refund.paymentMethodId) {
           throw new AppError('Choose how the money is being given back.', 422, 'NO_METHOD')
@@ -292,12 +326,12 @@ export async function createReturn(
         method: input.refund.method,
         paymentMethodId:
           input.refund.method === 'PAYMENT_METHOD' ? input.refund.paymentMethodId! : null,
-        amountPaise: refundable,
+        amountPaise: payable,
         reference: input.refund.reference?.trim() || null,
         refundedAt: returnedAt,
         createdBy: actor.id,
       })
-      refunded = refundable
+      refunded = payable
 
       await tx
         .update(salesReturn)
@@ -459,7 +493,11 @@ export async function inspectDevice(
 }
 
 /** Handsets waiting to be graded — the inspection queue. */
-export async function inspectionQueue(actor: AuthUser, branchId?: number | null) {
+export async function inspectionQueue(
+  actor: AuthUser,
+  branchId?: number | null,
+  paging?: { page: number; pageSize: number },
+) {
   const conditions: SQL[] = [
     eq(deviceUnit.businessId, actor.businessId),
     eq(deviceUnit.status, 'RETURNED'),
@@ -469,7 +507,7 @@ export async function inspectionQueue(actor: AuthUser, branchId?: number | null)
     conditions.push(sql`${deviceUnit.currentBranchId} in ${scope.length ? scope : [-1]}`)
   }
 
-  return db
+  const rows = await db
     .select({
       id: deviceUnit.id,
       identifier: deviceUnit.primaryIdentifier,
@@ -486,7 +524,18 @@ export async function inspectionQueue(actor: AuthUser, branchId?: number | null)
     .innerJoin(product, eq(product.id, deviceUnit.productId))
     .leftJoin(branch, eq(branch.id, deviceUnit.currentBranchId))
     .where(and(...conditions))
+    // Oldest first: a queue is worked through, not browsed. Paged all the same,
+    // so a queue nobody has cleared for a month still renders.
     .orderBy(asc(deviceUnit.updatedAt))
+    .limit(paging ? paging.pageSize : 500)
+    .offset(paging ? (paging.page - 1) * paging.pageSize : 0)
+
+  const counted = await db
+    .select({ n: sql<string>`count(*)` })
+    .from(deviceUnit)
+    .where(and(...conditions))
+
+  return { rows, total: Number(counted[0]?.n ?? 0) }
 }
 
 /* ----------------------------------------------------------- reading --- */

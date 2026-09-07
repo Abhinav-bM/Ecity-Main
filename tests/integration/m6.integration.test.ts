@@ -159,9 +159,9 @@ suite('M6 returns, exchange and trade-in (database-backed)', () => {
       const { deviceId, saleId, saleItemId } = await sellPhone(2)
       await createReturn(actor, ctx, { saleId, branchId: branchA, lines: [{ saleItemId, quantity: 1 }] })
 
-      expect((await inspectionQueue(actor)).some((d) => d.id === deviceId)).toBe(true)
+      expect(((await inspectionQueue(actor)).rows).some((d) => d.id === deviceId)).toBe(true)
       await inspectDevice(actor, ctx, { deviceId, grade: 'AVAILABLE' })
-      expect((await inspectionQueue(actor)).some((d) => d.id === deviceId)).toBe(false)
+      expect(((await inspectionQueue(actor)).rows).some((d) => d.id === deviceId)).toBe(false)
     })
 
     it('cannot be sold again before it is graded', async () => {
@@ -432,6 +432,76 @@ suite('M6 returns, exchange and trade-in (database-backed)', () => {
     })
   })
 
+  describe('a refund cannot exceed what the bill was settled by', () => {
+    it('pays out nothing on goods bought on credit and never paid for', async () => {
+      const buyer = (await createParty(actor, ctx, 'customer', { name: `Credit ${stamp}` })).id
+      const sold = await createSale(actor, ctx, {
+        branchId: branchA,
+        customerId: buyer,
+        lines: [{ productId: cableProductId, quantity: 1, unitPricePaise: rs(500) }],
+        payments: [],
+      })
+      expect(await customerBalance(buyer)).toBe(rs(500))
+
+      const detail = await getSale(actor, sold.id)
+      const ret = await createReturn(actor, ctx, {
+        saleId: sold.id,
+        branchId: branchA,
+        lines: [{ saleItemId: detail.items[0]!.id, quantity: 1 }],
+        refund: { method: 'PAYMENT_METHOD', paymentMethodId: cashMethodId },
+      })
+
+      // They never handed over a rupee, so none goes back...
+      const full = await getReturn(actor, ret.id)
+      expect(full.refunds.reduce((s, r) => s + r.amountPaise, 0n)).toBe(0n)
+      // ...and the debt is cleared by the goods coming back.
+      expect(await customerBalance(buyer)).toBe(0n)
+    })
+
+    it('gives back what was paid and writes off the rest', async () => {
+      const buyer = (await createParty(actor, ctx, 'customer', { name: `Part ${stamp}` })).id
+      const sold = await createSale(actor, ctx, {
+        branchId: branchA,
+        customerId: buyer,
+        lines: [{ productId: cableProductId, quantity: 2, unitPricePaise: rs(500) }],
+        payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(400) }],
+      })
+
+      const detail = await getSale(actor, sold.id)
+      const ret = await createReturn(actor, ctx, {
+        saleId: sold.id,
+        branchId: branchA,
+        lines: [{ saleItemId: detail.items[0]!.id, quantity: 2 }],
+        refund: { method: 'PAYMENT_METHOD', paymentMethodId: cashMethodId },
+      })
+
+      const full = await getReturn(actor, ret.id)
+      expect(full.refunds.reduce((s, r) => s + r.amountPaise, 0n)).toBe(rs(400))
+      expect(await customerBalance(buyer)).toBe(0n)
+    })
+
+    it('still credits the whole value to the account when no money moves', async () => {
+      const buyer = (await createParty(actor, ctx, 'customer', { name: `Note ${stamp}` })).id
+      const sold = await createSale(actor, ctx, {
+        branchId: branchA,
+        customerId: buyer,
+        lines: [{ productId: cableProductId, quantity: 1, unitPricePaise: rs(500) }],
+        payments: [],
+      })
+      const detail = await getSale(actor, sold.id)
+      // A credit note is not a payout, so the cap must not touch it.
+      const ret = await createReturn(actor, ctx, {
+        saleId: sold.id,
+        branchId: branchA,
+        lines: [{ saleItemId: detail.items[0]!.id, quantity: 1 }],
+        refund: { method: 'CUSTOMER_ACCOUNT' },
+      })
+      const full = await getReturn(actor, ret.id)
+      expect(full.refunds.reduce((s, r) => s + r.amountPaise, 0n)).toBe(rs(500))
+      expect(await customerBalance(buyer)).toBe(0n)
+    })
+  })
+
   describe('trade-in (FR-9.1 – FR-9.3)', () => {
     it('creates a device in the receiving branch with its classification intact', async () => {
       const { id, deviceId } = await acceptTradeIn(actor, ctx, {
@@ -472,6 +542,9 @@ suite('M6 returns, exchange and trade-in (database-backed)', () => {
     })
 
     it('links the old device, the new sale and the difference paid', async () => {
+      // Its own customer, so the balance assertion below reads this exchange
+      // alone rather than everything the shared one has done.
+      const buyer = (await createParty(actor, ctx, 'customer', { name: `Swap ${stamp}` })).id
       // The customer trades in an old handset against a new one.
       const newDevice = await createDevice(actor, ctx, {
         productId: phoneProductId,
@@ -485,29 +558,98 @@ suite('M6 returns, exchange and trade-in (database-backed)', () => {
         branchId: branchA,
         mainType: 'USED',
         agreedValuePaise: rs(8000),
-        customerId,
+        customerId: buyer,
       })
 
       // New phone 25,000 less 8,000 traded in = 17,000 to pay.
       const sold = await createSale(actor, ctx, {
         branchId: branchA,
-        customerId,
+        customerId: buyer,
         lines: [
           { productId: phoneProductId, deviceId: newDevice.id, quantity: 1, unitPricePaise: rs(25000) },
         ],
         payments: [{ paymentMethodId: cashMethodId, amountPaise: rs(17000) }],
+        tradeInId: trade.id,
       })
-      await db.update(schema.tradeIn).set({ saleId: sold.id }).where(eq(schema.tradeIn.id, trade.id))
 
       const linked = (await listTradeIns(actor, sold.id))[0]!
       expect(linked.agreedValuePaise).toBe(rs(8000))
       expect(linked.deviceId).toBe(trade.deviceId)
       expect(linked.saleId).toBe(sold.id)
 
-      // The bill is 25,000; 17,000 was paid, so 8,000 is the trade-in's part.
+      /*
+       * The bill stays at the full 25,000 and GST is charged on all of it, but
+       * nothing is left owing: 17,000 in cash and 8,000 in kind settle it. The
+       * bug this guards against is the exchange leaving a receivable the
+       * customer already settled with the handset.
+       */
       const detail = await getSale(actor, sold.id)
       expect(detail.sale.totalPaise).toBe(rs(25000))
-      expect(detail.sale.totalPaise - detail.paidPaise).toBe(rs(8000))
+      expect(detail.paidPaise).toBe(rs(25000))
+      expect(detail.paymentStatus).toBe('PAID')
+      expect(detail.sale.dueDate).toBeNull()
+      expect(detail.tradeIns).toHaveLength(1)
+
+      // ...and the customer's account agrees. 25,000 owed, 25,000 cleared.
+      expect(await customerBalance(buyer)).toBe(0n)
+    })
+
+    it('refuses to put the same trade-in on a second bill', async () => {
+      const trade = await acceptTradeIn(actor, ctx, {
+        productId: phoneProductId,
+        identifiers: [imei(32)],
+        branchId: branchA,
+        mainType: 'USED',
+        agreedValuePaise: rs(5000),
+      })
+      const mk = async () => {
+        const d = await createDevice(actor, ctx, {
+          productId: phoneProductId,
+          identifiers: [imei(33 + Math.floor(Math.random() * 100000))],
+          mainType: 'USED',
+          branchId: branchA,
+        })
+        return createSale(actor, ctx, {
+          branchId: branchA,
+          customerId,
+          lines: [
+            { productId: phoneProductId, deviceId: d.id, quantity: 1, unitPricePaise: rs(5000) },
+          ],
+          payments: [],
+          tradeInId: trade.id,
+        })
+      }
+      await mk()
+      // Settling its value twice would hand the shop's money away.
+      await expect(mk()).rejects.toThrow(/already on another bill/i)
+    })
+
+    it('lets a walk-in exchange settle entirely with the handset', async () => {
+      const newDevice = await createDevice(actor, ctx, {
+        productId: phoneProductId,
+        identifiers: [imei(34)],
+        mainType: 'USED',
+        branchId: branchA,
+      })
+      const trade = await acceptTradeIn(actor, ctx, {
+        productId: phoneProductId,
+        identifiers: [imei(35)],
+        branchId: branchA,
+        mainType: 'USED',
+        agreedValuePaise: rs(9000),
+      })
+      // No customer, no cash - but nothing is owed either, so this is not
+      // credit and must be allowed.
+      const sold = await createSale(actor, ctx, {
+        branchId: branchA,
+        lines: [
+          { productId: phoneProductId, deviceId: newDevice.id, quantity: 1, unitPricePaise: rs(9000) },
+        ],
+        payments: [],
+        tradeInId: trade.id,
+      })
+      const detail = await getSale(actor, sold.id)
+      expect(detail.paymentStatus).toBe('PAID')
     })
   })
 

@@ -14,18 +14,30 @@ import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { inspectionQueue } from '@/server/services/return.service'
 import { formatDateShort } from '@/lib/utils'
+import { Pagination } from '@/components/pagination'
 import { InspectButton } from './inspect-button'
 
 export const dynamic = 'force-dynamic'
 
+const PAGE_SIZE = 25
+
 /** PRD FR-8.2, FR-8.3. Returned handsets waiting to be graded. */
-export default async function InspectionQueuePage() {
+export default async function InspectionQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   if (!hasPermission(session.user, 'return.view')) redirect('/dashboard')
 
   const canInspect = hasPermission(session.user, 'return.inspect')
-  const queue = await inspectionQueue(session.user, session.activeBranchId)
+  const p = await searchParams
+  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const { rows: queue, total } = await inspectionQueue(session.user, session.activeBranchId, {
+    page,
+    pageSize: PAGE_SIZE,
+  })
 
   return (
     <div className="space-y-4">
@@ -125,6 +137,15 @@ export default async function InspectionQueuePage() {
               </TableBody>
             </Table>
           </Card>
+
+          <Pagination
+            basePath="/returns/inspection"
+            params={p}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            noun="handsets"
+          />
         </>
       )}
 

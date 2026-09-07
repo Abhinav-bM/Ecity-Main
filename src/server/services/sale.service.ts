@@ -11,6 +11,7 @@ import {
   saleItem,
   salePayment,
   taxRate,
+  tradeIn,
   type MainType,
 } from '@/server/db/schema'
 import { writeAudit, type AuditContext } from '@/server/db/audit'
@@ -64,6 +65,11 @@ export type SaleInput = {
   creditNotes?: string
   /** From the browser, so a retry cannot bill the customer twice. */
   idempotencyKey?: string
+  /**
+   * PRD FR-9.2. A handset taken in part-exchange. Accepted first (it becomes a
+   * device unit in its own right), then attached to the bill it settles.
+   */
+  tradeInId?: number | null
 }
 
 /**
@@ -274,12 +280,54 @@ export async function createSale(
       interState,
     )
 
+    /*
+     * PRD FR-9.2. The handset taken in part-exchange. It is NOT a discount:
+     * the bill and its GST stay at the full selling price and the agreed value
+     * settles part of what is owed, exactly like a payment (docs/02 M6).
+     *
+     * Locked for the rest of the transaction so two tills cannot both put the
+     * same handset against a bill - that would settle its value twice and lose
+     * the shop the difference.
+     */
+    let tradedPaise = 0n
+    if (input.tradeInId) {
+      const locked = await tx.execute(
+        sql`select id, sale_id, branch_id, customer_id, agreed_value_paise
+            from trade_in
+            where id = ${input.tradeInId} and business_id = ${actor.businessId}
+            for update`,
+      )
+      const row = (locked as unknown as Record<string, unknown>[])[0]
+      if (!row) throw notFound('Trade-in')
+      if (row.sale_id != null) {
+        throw conflict('That trade-in is already on another bill.')
+      }
+      if (Number(row.branch_id) !== input.branchId) {
+        throw new AppError(
+          'The trade-in was taken in at a different branch.',
+          422,
+          'TRADE_IN_BRANCH',
+        )
+      }
+      const tradeCustomer = row.customer_id == null ? null : Number(row.customer_id)
+      if (tradeCustomer != null && tradeCustomer !== (input.customerId ?? null)) {
+        throw new AppError(
+          'The trade-in was taken from a different customer.',
+          422,
+          'TRADE_IN_CUSTOMER',
+        )
+      }
+      tradedPaise = BigInt(String(row.agreed_value_paise))
+    }
+
     const paid = input.payments.reduce((sum, p) => sum + p.amountPaise, 0n)
-    if (paid > totals.totalPaise) {
+    // What the bill has been settled by, cash and handset together.
+    const settled = paid + tradedPaise
+    if (settled > totals.totalPaise) {
       throw new AppError('Payment is more than the bill total.', 422, 'OVERPAID')
     }
     // Anything unpaid is credit, and credit needs someone to owe it (FR-7.2).
-    if (paid < totals.totalPaise && !input.customerId) {
+    if (settled < totals.totalPaise && !input.customerId) {
       throw new AppError(
         'An unpaid balance needs a customer — a walk-in cannot be given credit.',
         422,
@@ -326,8 +374,8 @@ export async function createSale(
           idempotencyKey: input.idempotencyKey ?? null,
           notes: input.notes?.trim() || null,
           // Only a bill that leaves unpaid carries credit terms.
-          dueDate: paid < totals.totalPaise ? (input.dueDate ?? defaultDueDate) : null,
-          creditNotes: paid < totals.totalPaise ? input.creditNotes?.trim() || null : null,
+          dueDate: settled < totals.totalPaise ? (input.dueDate ?? defaultDueDate) : null,
+          creditNotes: settled < totals.totalPaise ? input.creditNotes?.trim() || null : null,
           soldBy: actor.id,
         })
         .returning()
@@ -406,6 +454,15 @@ export async function createSale(
       }
     }
 
+    // FR-9.2. The link that makes an exchange one transaction: old device in,
+    // new device out, agreed value and difference paid, all on one bill.
+    if (input.tradeInId) {
+      await tx
+        .update(tradeIn)
+        .set({ saleId: created.id, customerId: input.customerId ?? null })
+        .where(eq(tradeIn.id, input.tradeInId))
+    }
+
     for (const p of input.payments) {
       if (p.amountPaise <= 0n) continue
       await tx.insert(salePayment).values({
@@ -447,6 +504,22 @@ export async function createSale(
           refType: 'sale',
           refId: created.id,
           note: `Paid at the counter on ${invoiceNumber}`,
+          actorId: actor.id,
+          occurredAt: soldAt,
+        })
+      }
+      // Settled in kind. Its own entry rather than folded into the cash line,
+      // so the statement shows the customer what actually cleared the bill.
+      if (tradedPaise > 0n) {
+        await postCustomerLedgerEntry(tx, {
+          businessId: actor.businessId,
+          customerId: input.customerId,
+          branchId: input.branchId,
+          entryType: 'PAYMENT',
+          amountPaise: -tradedPaise,
+          refType: 'sale',
+          refId: created.id,
+          note: `Trade-in against ${invoiceNumber}`,
           actorId: actor.id,
           occurredAt: soldAt,
         })
@@ -506,7 +579,7 @@ export async function getSale(actor: AuthUser, id: number) {
   const scope = branchScope(actor, null)
   if (scope !== null && !scope.includes(row.sale.branchId)) throw notFound('Sale')
 
-  const [items, payments, paid] = await Promise.all([
+  const [items, payments, tradeIns, paid] = await Promise.all([
     db.select().from(saleItem).where(eq(saleItem.saleId, id)).orderBy(asc(saleItem.id)),
     db
       .select({
@@ -518,6 +591,17 @@ export async function getSale(actor: AuthUser, id: number) {
       .from(salePayment)
       .innerJoin(paymentMethod, eq(paymentMethod.id, salePayment.paymentMethodId))
       .where(eq(salePayment.saleId, id)),
+    // FR-9.2. What was taken in part-exchange against this bill.
+    db
+      .select({
+        id: tradeIn.id,
+        deviceId: tradeIn.deviceId,
+        agreedValuePaise: tradeIn.agreedValuePaise,
+        identifier: deviceUnit.primaryIdentifier,
+      })
+      .from(tradeIn)
+      .leftJoin(deviceUnit, eq(deviceUnit.id, tradeIn.deviceId))
+      .where(eq(tradeIn.saleId, id)),
     salePaidPaise(id),
   ])
 
@@ -525,6 +609,7 @@ export async function getSale(actor: AuthUser, id: number) {
     ...row,
     items,
     payments,
+    tradeIns,
     paidPaise: paid,
     paymentStatus: salePaymentStatus(row.sale.totalPaise, paid),
     canSeeCost: hasPermission(actor, 'inventory.view_cost'),

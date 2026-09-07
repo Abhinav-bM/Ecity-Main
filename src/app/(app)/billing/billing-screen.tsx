@@ -161,6 +161,9 @@ export function BillingScreen({
         // Held in the store so a retry after a dropped connection returns the
         // same bill instead of charging twice.
         idempotencyKey: cart.idempotencyKey,
+        // FR-9.2. Sent as its own field, not as a discount: the bill and its
+        // GST stay at the full price and the agreed value settles part of it.
+        tradeInId: cart.tradeIn?.id ?? null,
         lines: cart.lines.map((l) => ({
           productId: l.productId,
           deviceId: l.deviceId,

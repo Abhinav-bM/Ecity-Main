@@ -9,6 +9,7 @@ import {
   paymentMethod,
   sale,
   salePayment,
+  tradeIn,
 } from '@/server/db/schema'
 import { branchScope, type AuthUser } from '@/server/auth/permissions'
 
@@ -110,6 +111,8 @@ export function saleReceivedSql() {
     + coalesce((select sum(cpa.amount_paise) from customer_payment_allocation cpa
                 join customer_payment cp on cp.id = cpa.payment_id
                 where cpa.sale_id = "sale"."id" and cp.voided_at is null), 0)
+    + coalesce((select sum(ti.agreed_value_paise) from trade_in ti
+                where ti.sale_id = "sale"."id"), 0)
   )`
 }
 
@@ -131,7 +134,22 @@ export async function saleReceivedPaise(saleId: number, tx: DbOrTx = db): Promis
       ),
     )
 
-  return BigInt(counter[0]?.total ?? '0') + BigInt(later[0]?.total ?? '0')
+  /*
+   * M6. A handset taken in part-exchange settles its agreed value exactly like
+   * a payment - it is not a discount, so the bill and its GST stay at the full
+   * price (docs/02 M6). Counting it here is what stops an exchange leaving a
+   * receivable the customer has already settled in kind.
+   */
+  const traded = await tx
+    .select({ total: sql<string>`coalesce(sum(${tradeIn.agreedValuePaise}), 0)` })
+    .from(tradeIn)
+    .where(eq(tradeIn.saleId, saleId))
+
+  return (
+    BigInt(counter[0]?.total ?? '0') +
+    BigInt(later[0]?.total ?? '0') +
+    BigInt(traded[0]?.total ?? '0')
+  )
 }
 
 /* ------------------------------------------------------------ the dues --- */

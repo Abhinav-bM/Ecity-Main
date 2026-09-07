@@ -31,6 +31,8 @@ const saleSchema = z.object({
   dueDate: z.coerce.date().optional(),
   creditNotes: z.string().trim().max(300).optional(),
   idempotencyKey: z.string().trim().max(64).optional(),
+  /** PRD FR-9.2. A handset accepted in part-exchange against this bill. */
+  tradeInId: z.coerce.number().int().positive().nullable().optional(),
 })
 
 const querySchema = z.object({
@@ -57,6 +59,7 @@ export const POST = route(
       dueDate: body.dueDate,
       creditNotes: body.creditNotes,
       idempotencyKey: body.idempotencyKey,
+      tradeInId: body.tradeInId ?? null,
       lines: body.lines.map((l) => ({
         productId: l.productId,
         deviceId: l.deviceId ?? null,

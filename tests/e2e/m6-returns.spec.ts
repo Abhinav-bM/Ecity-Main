@@ -218,6 +218,74 @@ test.describe('a returned handset is not sellable until graded (FR-8.2)', () => 
   })
 })
 
+test.describe('taking a phone in part-exchange', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  /*
+   * FR-9.2, the whole exchange in one bill. The regression this guards: the
+   * till showed the trade-in coming off the total but never sent it to the
+   * server, so the bill saved with a balance the customer had already settled
+   * with the handset - a receivable that would then be chased.
+   */
+  test('the old phone settles the bill and both ends are linked', async ({ page }) => {
+    const id = unique()
+    const selling = `E2E Swap New ${id}`
+    const taking = `E2E Swap Old ${id}`
+    const oldImei = imei(7)
+
+    await createProduct(page, selling, 'Mobiles (IMEI)', '20000')
+    await createProduct(page, taking, 'Mobiles (IMEI)', '8000')
+    await purchase(page, {
+      supplier: `E2E SwapSup ${id}`,
+      product: selling,
+      quantity: '1',
+      mainType: 'GLOBAL',
+      identifiers: [imei(6)],
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(selling)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+    // Priced at the till, as the counter does when the device carries no price.
+    await page.getByRole('textbox', { name: 'Price (₹)', exact: true }).fill('20000')
+
+    // Take the old handset in for the full 20,000, so cash never enters it.
+    await page.getByRole('button', { name: 'Add' }).first().click()
+    await page.getByRole('combobox', { name: 'Trade-in product' }).click()
+    await page.getByPlaceholder('Name, SKU or barcode').fill(taking)
+    await page
+      .getByTestId('product-picker-list')
+      .getByRole('option', { name: new RegExp(taking) })
+      .first()
+      .click()
+    await page.getByRole('textbox', { name: 'IMEI / serial', exact: true }).fill(oldImei)
+    await page.getByRole('textbox', { name: 'Agreed value (₹)', exact: true }).fill('20000')
+    await page.getByRole('button', { name: 'Accept trade-in' }).click()
+    await expect(page.getByText('20,000.00 allowed')).toBeVisible()
+
+    const saveBill = page.getByRole('button', { name: /^Save bill/ })
+    await saveBill.scrollIntoViewIfNeeded()
+    await saveBill.focus()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/\/sales\/\d+$/)
+
+    // Nothing owing, and no credit terms on a bill that was settled in full.
+    await expect(page.getByText('PAID')).toBeVisible()
+    await expect(page.getByText('Outstanding')).toHaveCount(0)
+    // The invoice shows it as settlement, under the full total.
+    await expect(page.getByText(new RegExp(`Trade-in.*${oldImei}`))).toBeVisible()
+
+    // And the old handset is stock at this branch with its own history.
+    await page.goto('/devices')
+    await page.getByRole('searchbox', { name: 'Search devices' }).fill(oldImei)
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('link', { name: new RegExp(oldImei) }).first()).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  })
+})
+
 test.describe('correcting a device', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page, USERS.admin)

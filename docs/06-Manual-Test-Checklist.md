@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 261 unit and integration tests, 507
+Automated tests cover the mechanics — 266 unit and integration tests, 564
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -810,7 +810,29 @@ On the billing screen, with something in the cart:
       as a deduction against what is still to pay
 - [ ] Save the bill → the difference is what the customer owed
 - [ ] The invoice still shows the full price and full GST — a trade-in is not
-      a discount
+      a discount, and the trade-in appears under the total as settlement,
+      beside the cash, with the old handset's IMEI
+- [ ] **Take one in for the full price of the phone and pay nothing.** The bill
+      saves, reads **PAID**, and shows no outstanding balance and no due date.
+      *A bill settled with the handset must not leave a receivable to chase*
+- [ ] Do the same for a **named customer**: their statement shows the sale, the
+      trade-in against it, and a balance of zero
+- [ ] The sale list and the customer dues screen both read that bill as PAID —
+      settlement is answered in one place, so they cannot disagree
+- [ ] Trading in with **no customer** on the bill is allowed when the handset
+      covers the whole total; it is refused only when something is left owing
+
+## 6b. Refunding no more than was taken
+
+- [ ] Sell on **credit** to a customer, pay nothing, then return the goods and
+      choose to refund to **Cash** → the refund is **₹0** and their balance
+      goes to zero. *They never paid, so nothing goes back out*
+- [ ] Sell ₹1,000, pay ₹400, return everything, refund to Cash → **₹400** goes
+      back and the remaining ₹600 comes off their account
+- [ ] Same unpaid credit sale, but refund to the **customer's account** → the
+      full value is credited. *A credit note is not money leaving the till*
+- [ ] Return the rest of a part-returned bill → the two refunds together never
+      exceed what was paid
 
 ## 7. Correcting a device
 

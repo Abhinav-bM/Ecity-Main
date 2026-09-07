@@ -45,6 +45,7 @@ export async function getInvoiceData(actor: AuthUser, saleId: number): Promise<I
       : null,
     items: detail.items,
     payments: detail.payments,
+    tradeIns: detail.tradeIns,
     subtotalPaise: detail.sale.subtotalPaise,
     discountPaise: detail.sale.discountPaise,
     taxablePaise: detail.sale.taxablePaise,
