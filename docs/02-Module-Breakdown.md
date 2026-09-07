@@ -33,24 +33,66 @@ Each module lists:
 | M9 | Global search & IMEI device history | 2.0 | M8 | Beta |
 | M10 | Dashboards & analytics | 3.0 | M7, M8 | v1.0 |
 | M11 | Reports, exports, imports & opening balances | 2.0 | M10 | v1.0 |
-| M12 | **External billing system integration (Excel feed)** | **3.5** | M7, M11 | v1.0 |
 | M13 | Notifications, alerts & warranty tracking | 1.5 | M7 | v1.0 |
 | M14 | Backup, data protection, hardening & go-live | 1.5 | all | v1.0 |
-| | **Total** | **~32.5 FTE weeks** | | |
+| | **Total** | **~29.0 FTE weeks** | | |
+| ~~M12~~ | ~~External billing system integration (Excel feed)~~ — **deferred, see §2.3** | ~~3.5~~ | M7, M11 | On request |
 
-Add roughly 15% for discovery, rework and the open questions in PRD §11 — plan for **36–38 weeks full time**, or about **8–9 months at 20 hours a week**.
+Add roughly 15% for discovery, rework and the open questions in PRD §11 — plan for **33–34 weeks full time**, or about **8 months at 20 hours a week**. M12 is not in that figure; building it later adds its 3.5 weeks.
 
 ### 2.1 Dependency shape
 
 ```
 M0 ─ M1 ─ M2 ─ M3 ─ M4 ─┬─ M5 ─┬─ M6
                         │      ├─ M7 ─┬─ M13
-                        └─ M8 ─┴──────┴─ M10 ─ M11 ─┬─ M12 ─ M14
-                             └─ M9                  │
-                                                    └─ (M12 needs M7 too)
+                        └─ M8 ─┴──────┴─ M10 ─ M11 ─ M14
+                             └─ M9
+
+  (M12, deferred, would slot in after M11 and before go-live)
 ```
 
 M6, M7 and M8 are independent of each other once M5 is done — if a second developer joins, that is the point to split.
+
+### 2.3 The two businesses are separate. M12 is deferred.
+
+**Decided 2026-09-07.** NEW handsets are bought, stocked and billed **entirely
+in the shop's other system**. ECITY handles **everything else** — USED, ER, ACT
+and GLOBAL. The two do not overlap, and nothing is imported between them.
+
+M12 existed to reconcile a shop running both systems over the *same* stock.
+That is not what is happening: the stock is split, not shared. So M12 is not
+being built for v1.0, and ships only if the shop later decides it wants NEW
+sales visible in here too.
+
+**What already enforces the split, and stays.** All of it came in earlier
+modules and none of it is removed:
+
+- `business.new_stock_sales_channel`, defaulting to **EXTERNAL** — the line
+  between the two businesses (OQ-11)
+- `device_unit.sales_channel` (`ECITY` | `EXTERNAL` | `BOTH`), defaulted from
+  that setting, overridable per device
+- The till refuses an `EXTERNAL` device at search time and again at save time:
+  *"This device is billed through the other system."* This is now a permanent
+  rule, not a stopgap — it is what stops the two businesses crossing
+- `SOLD_PENDING_IMPORT`, `source` (`ECITY` | `LEGACY`), and
+  `daily_closing.external_feed_imported` / `override_reason` (M7), all dormant
+
+**What this means for what ECITY reports.** ECITY is the used-and-refurb
+business, completely. Its stock, cash, dues, profit and analytics are the whole
+truth *about that business* — they are not, and are not meant to be, the whole
+truth about the shop. NEW is somewhere else and stays there.
+
+**The one thing to confirm operationally.** If NEW sales take cash into the
+**same physical drawer**, the counted cash at closing will include money ECITY
+never billed, and every day will read as an overage. Two ways out, both fine:
+keep a separate drawer for NEW, or record the NEW takings as a single cash
+movement so the day balances. Worth settling before go-live, because it turns
+the daily closing from a control into noise. Nothing in the code assumes either
+answer.
+
+**If the shop ever changes its mind**, M12's design is kept intact below and
+the hooks are already in the schema — it would start from that page rather than
+a blank one.
 
 ### 2.2 Rules that apply to every module
 
@@ -130,7 +172,7 @@ M6, M7 and M8 are independent of each other once M5 is done — if a second deve
 **Data model.**
 - `category`, `brand`, `product` (accessory or mobile model), `branch_stock` (product × branch: qty, min_qty)
 - `device_unit`: product_id, variant, ram, storage, colour, purchase_price, selling_price, tax, warranty, supplier_id, purchase_date, **main_type** (`NEW|USED|ER|ACT|GLOBAL`), **is_new_cut** + new-cut details, current_branch_id, status, `primary_imei` (cached for display only)
-- `sales_channel` on `device_unit`: `ECITY` | `EXTERNAL` | `BOTH`, defaulted from `main_type` (NEW → `EXTERNAL`) — needed by M12 so a device billed in the other system can never be sold here. Add it now; retrofitting it after M4 means revisiting the billing screen
+- `sales_channel` on `device_unit`: `ECITY` | `EXTERNAL` | `BOTH`, defaulted from the shop's `new_stock_sales_channel` setting — so a device belonging to the other business can never be sold here. Added now; retrofitting it after M4 means revisiting the billing screen. This is the line between the two businesses (§2.3), not a temporary guard
 - `source` on `device_unit`, `purchase` and `sale`: `ECITY` | `LEGACY` — where the record came from. One column, added now, saves a migration later
 - `device_identifier`: device_id, **value**, **type** (`IMEI` | `SERIAL`), slot, is_primary — **a device has one or more identifiers**. Never model these as `imei_1` / `imei_2` columns on the device; the whole point of the separate table is that a third identifier, or a laptop serial, costs nothing later
 - `category.identifierType`: `IMEI` | `SERIAL` | `NONE` — what a serialised category's units are identified by
@@ -225,8 +267,8 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Server work.**
 - Availability check and device lock at save: the exact device must be `In Stock` at the selling branch, and a conditional update prevents two tills selling the same IMEI.
-- **Channel check:** a device with `sales_channel = 'EXTERNAL'` is refused at search time and at save time, with the message *"This device is billed through the other system."* This is what makes M12 safe — it removes the possibility of the same phone being invoiced in both systems.
-- **Mark as sold externally**, a permissioned action setting `SOLD_PENDING_IMPORT`: stock drops now, and M12's upload completes the record with the real invoice. This is the fallback for `BOTH`-channel devices.
+- **Channel check:** a device with `sales_channel = 'EXTERNAL'` is refused at search time and at save time, with the message *"This device is billed through the other system."* NEW stock belongs to the other business entirely (§2.3), so this is a permanent rule rather than a stopgap — it is what keeps the two from crossing.
+- **Mark as sold externally**, a permissioned action setting `SOLD_PENDING_IMPORT`: stock drops now. The fallback for a `BOTH`-channel device — rare, since the two businesses are separated (§2.3). Stock ends up right; the other system's invoice number is not recorded here unless someone types it.
 - Tax computation honouring inclusive/exclusive configuration.
 
 *Built as:* **OQ-4 was answered "yes — statutory".** So the tax engine also splits every line into CGST/SGST (intra-state) or IGST (inter-state), and the invoice carries HSN/SAC per line, the place of supply, and an HSN-wise summary. Place of supply follows the customer's registered state and falls back to the branch's; where neither is known the sale stays intra-state rather than guessing IGST. The split is stored, not derived at print time, because a reprint years later must be identical even if the branch or customer has since moved state. CGST takes the floor of the halving and SGST the remainder, so the two always add back to exactly the tax charged.
@@ -360,7 +402,7 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - Every cash-affecting event from M4–M6 (cash sales, credit collections, refunds, expenses, supplier payments) posts a `cash_movement` into the branch's open drawer day. Backfill this into the earlier modules as part of this module's work.
 - `Expected Cash = Opening + Cash In − Cash Out`, derived from movements, not stored.
 - Closing a day freezes it; editing anything dated inside a closed day requires an explicit permission and is audited.
-- **Legacy sales take cash into the same physical drawer.** Expected cash is therefore wrong until M12's daily file is imported. Build the closing screen so it can be gated on "today's external feed imported", with an authorised override that records a reason. Wire the gate itself in M12; leave the hook here.
+- **Expected cash covers what ECITY billed, and only that.** The other business's sales are not in here (§2.3), so if both take cash into the *same physical drawer* the counted figure will exceed what ECITY expects, every day. Settle that operationally — a separate drawer, or one cash movement recording the other business's takings. The closing still carries `external_feed_imported` and `override_reason` from the original M12 design, unused, so a gate could be hung on them without a migration.
 - Opening balance of the next day carries from the previous day's actual count.
 
 *Built as:*
@@ -470,7 +512,7 @@ column plus a check constraint, the same shape as `is_new_cut`.
 **Server work.**
 - One analytics query layer with a consistent shape: date range, branch set, grouping, comparison period.
 - The mobile-type dimension is mandatory across product, inventory, profit and insights analytics: five main types reported separately, GLOBAL split into normal vs NEW CUT.
-- Every analytics query carries a **`source` filter** (ECITY / LEGACY / both, defaulting to both) so the owner can see the whole business, or just what each system did. Add the dimension now; M12 supplies the LEGACY rows.
+- Every analytics query carries a **`source` filter** (ECITY / LEGACY / both, defaulting to both). With the businesses separated (§2.3) every row is ECITY and these figures describe the used-and-refurb business only — not the shop as a whole. Keep the dimension; it costs nothing and is what a later merge would need.
 - Inventory movement `Opening → Purchases → Sales → Returns → Adjustments → Current` reconstructed from the stock ledger and device events.
 - Drill-down routing Business → Branch → Transaction → Product/IMEI, terminating in the M9 device history page.
 
@@ -515,7 +557,17 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 ---
 
-## M12 — External Billing System Integration (Excel Feed)
+## M12 — External Billing System Integration (Excel Feed) — DEFERRED
+
+> **Not being built for v1.0** (decided 2026-09-07, see §2.3). The two
+> businesses are separated: NEW stock lives entirely in the other system,
+> ECITY handles everything else, and nothing moves between them. This module
+> existed to reconcile two systems sharing the *same* stock, which is no longer
+> the arrangement.
+>
+> The design below is kept, unchanged and unstarted. The hooks it needs are
+> already in the schema, so if the shop ever wants NEW sales visible in here
+> too, the work starts from this page rather than a blank one.
 
 **Goal.** The shop keeps using its existing billing system for NEW items. This module makes that survivable: their Excel export becomes a controlled daily feed into ECITY, stock stays truthful, and the same IMEI can never be sold twice.
 
@@ -659,6 +711,6 @@ When the real file arrives, the work is: read the columns, fill in `legacy.mappi
 
 ## 3. Suggested First Two Weeks
 
-1. Answer PRD OQ-1, OQ-2, OQ-3, OQ-7, OQ-10 and OQ-11 with the shop owner, and **get one real Excel export from the existing billing system** — a single sample file unblocks 0.5 weeks of M12 and may change assumptions elsewhere — these four change the schema or the sales module, and are cheap to answer now and expensive to answer later.
+1. Answer PRD OQ-1, OQ-2, OQ-3, OQ-7 and OQ-11 with the shop owner — these change the schema or the sales module, and are cheap to answer now and expensive to answer later. OQ-10 (a real Excel export) is parked with M12 (§2.3); ask for the sample only if the shop asks for the integration.
 2. Set up the repository, database, deployment and CI (start of M0).
 3. Write the full schema for M0–M2 up front, even though you build it in stages, and include `device_identifier` as a separate table from the very first migration even though the UI will show a single IMEI field. The device, identifier and event tables are load-bearing for every later module, and rewriting them after M4 is the single most expensive mistake available in this project.

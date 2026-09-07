@@ -4,7 +4,7 @@ import { logger } from '@/server/logger'
 
 /**
  * Background worker. Runs as its own container beside the app
- * (docs/04 §4.1). pg-boss is introduced properly in M12/M13; for now this is
+ * (docs/04 §4.1). pg-boss is introduced properly in M13; for now this is
  * a simple interval loop that keeps the session table tidy.
  */
 const HOUR = 3_600_000

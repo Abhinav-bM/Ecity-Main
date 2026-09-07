@@ -285,7 +285,11 @@ export type CloseDayInput = {
   /** FR-13.2. Counted per non-cash method, keyed by payment method id. */
   countedByMethod?: Record<number, bigint>
   notes?: string
-  /** M12 hook: closing before the legacy file is in needs a stated reason. */
+  /**
+   * Kept from M12's design, which is deferred (docs/02 §2.3): the two
+   * businesses are separated, so there is no feed to wait for. A gate could
+   * still be hung on these without a migration if they are ever merged.
+   */
   externalFeedImported?: boolean
   overrideReason?: string
 }

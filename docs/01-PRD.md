@@ -327,13 +327,23 @@ All analytics honour the user's role and branch scope, support date-range select
 - FR-30.6 The timeline must make the chain traceable end to end: **Purchase → Seller → Branch → Transfers → Sale → Customer → Return/Repair/Other**.
 - FR-30.7 All Global Search results respect the user's role and branch permissions.
 
-### 6.22 External Billing System Integration (FR-38)
+### 6.22 External Billing System Integration (FR-38) — DEFERRED
 
-The shop operates an existing billing system that handles **NEW items only**, and cannot stop using it. ECITY must absorb that system's output daily without letting the two disagree about stock, cash or history.
+> **Deferred 2026-09-07 — the two businesses are separated instead.** NEW
+> handsets are bought, stocked and billed entirely in the other system; ECITY
+> handles everything else. Nothing is imported between them, so there is no
+> feed to absorb.
+>
+> FR-38.1 – FR-38.4, the channel controls, are **built and stay** — they are
+> the line between the two businesses, not a temporary guard. FR-38.5 onwards,
+> the import itself, is not being built and ships only if the shop later wants
+> NEW sales visible in here too. See docs/02 §2.3.
 
-**Channel control — how double-selling is prevented**
+The shop operates an existing billing system that handles **NEW items only**. The two systems own different stock and do not overlap; what follows is what keeps them from crossing, and — from FR-38.5 — what merging them would take.
 
-- FR-38.1 Every device carries a **`sales_channel`**: `ECITY`, `EXTERNAL` or `BOTH`, defaulted from its main type (NEW → `EXTERNAL`) and overridable per device by an authorised user.
+**Channel control — how double-selling is prevented** *(built)*
+
+- FR-38.1 Every device carries a **`sales_channel`**: `ECITY`, `EXTERNAL` or `BOTH`, defaulted from the business's `new_stock_sales_channel` setting (OQ-11, defaulting to `EXTERNAL` for NEW) and overridable per device by an authorised user.
 - FR-38.2 The ECITY billing screen refuses any device whose channel is `EXTERNAL`, at search time and again at save time, with a message explaining that it is billed through the other system.
 - FR-38.3 For `BOTH`-channel devices, an authorised user can **Mark as sold externally**, setting `SOLD_PENDING_IMPORT`: stock drops immediately and the later import completes the record with the real invoice details.
 - FR-38.4 Every record carries a **`source`** of `ECITY` or `LEGACY`, and every report and analytics view can filter on it or show the two side by side.
@@ -537,10 +547,10 @@ Sizing assumption for v1: up to 10 branches, 50 users, 30 concurrent users, ~500
 | ~~OQ-7~~ | ~~Is offline billing genuinely required?~~ **ANSWERED (M4): no.** A reliable connection is acceptable. A half-built bill still survives a refresh or a dropped connection via the persisted cart, and a retried submit cannot double-bill — but saving needs the server. Revisit as its own module if the shop's connection proves unreliable. | — | **Closed** |
 | OQ-8 | Multi-currency, or single currency per business? | Currently assumed single | Module 1 |
 | OQ-9 | Which existing data must be migrated in (products, IMEIs, customer dues, supplier dues), and in what format? | Shapes the importer and go-live plan | Module M11 |
-| OQ-10 | **What do the other system's Excel exports actually look like?** One real sales export and one purchase export, with real data | Nothing about the adapter can be finalised without a sample. Everything else in M12 can be built first | Module M12 |
-| OQ-11 | **Is the split strictly "NEW → other system, everything else → ECITY"?** Or are some NEW items also billed here, and are any non-NEW items billed there? | Decides whether channel blocking alone is enough (clean) or the `SOLD_PENDING_IMPORT` path is routinely needed (a race window remains) | Module M4, before billing is built |
-| OQ-12 | Does the other system also record **purchases** of NEW stock, and will that export be uploaded too? | If not, ECITY never learns those devices exist until they appear in a sale | Module M12 |
-| OQ-13 | How often can the shop realistically upload — once at end of day, or several times? | Determines how stale ECITY's NEW-stock view is, and how noisy the reconciliation report gets | Module M12 |
+| ~~OQ-10~~ | ~~What do the other system's Excel exports actually look like?~~ **PARKED (2026-09-07):** the businesses are separated and nothing is imported (docs/02 §2.3). Ask for a sample only if the shop later wants NEW sales visible in ECITY. | — | **Parked with M12** |
+| ~~OQ-11~~ | ~~Is the split strictly "NEW → other system, everything else → ECITY"?~~ **ANSWERED (2026-09-07): yes, strictly.** The two businesses are fully separated — NEW is bought, stocked and billed in the other system, ECITY owns everything else. Channel blocking alone is therefore enough; `SOLD_PENDING_IMPORT` stays for the rare `BOTH` device but is not the routine path. Built as a per-shop setting so a shop that merges them later only changes a switch. | — | **Closed** |
+| ~~OQ-12~~ | ~~Does the other system also record **purchases** of NEW stock, and will that export be uploaded too?~~ **PARKED with M12.** | — | **Parked with M12** |
+| ~~OQ-13~~ | ~~How often can the shop realistically upload?~~ **PARKED with M12.** | — | **Parked with M12** |
 
 ---
 
@@ -564,4 +574,4 @@ The v1 release is successful when, for a live multi-branch shop:
 | **Alpha** (Modules 0–5) | Auth, master data, inventory, purchases, sales, credit | One branch can transact end to end, internally tested |
 | **Beta** (Modules 6–9) | Returns, exchange, cash/bank/expenses, daily closing, transfers, adjustments, global search & device history | One real branch runs live on the system in parallel with existing records |
 | **v1.0** (Modules 10–14) | Analytics, reports, import/export, opening balances, **external billing feed**, notifications, warranty, backup and hardening | All branches live; paper records retired; both systems reconciled daily |
-| **v1.1+** | Automated recommendations, offline billing, messaging channels, statutory GST integration | Driven by OQ-4, OQ-6 and OQ-7 outcomes |
+| **v1.1+** | Merging the two businesses — external billing import (FR-38.5+, docs/02 §2.3) — automated recommendations, offline billing, messaging channels, statutory GST integration | Driven by OQ-6 and whether the shop ever wants NEW sales visible in ECITY |

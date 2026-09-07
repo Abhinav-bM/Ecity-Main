@@ -737,10 +737,13 @@ export type { MainType }
 /**
  * PRD FR-38.3 - mark a device sold in the other billing system.
  *
- * Stock drops immediately so it cannot also be sold here, and M12's daily
- * import later completes the record with the real invoice number, date and
- * price. This is the fallback for BOTH-channel devices; the normal path for
- * an EXTERNAL device is that it never reaches this till at all.
+ * Stock drops immediately so it cannot also be sold here. The other system's
+ * invoice number is not recorded on this side - nothing is imported between
+ * the two businesses (docs/02 §2.3).
+ *
+ * This is the fallback for a BOTH-channel device, which is rare: NEW stock is
+ * a separate business, and the normal path for an EXTERNAL device is that it
+ * never reaches this till at all.
  */
 export async function markSoldExternally(
   actor: AuthUser,

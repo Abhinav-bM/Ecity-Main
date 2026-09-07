@@ -263,10 +263,15 @@ export const business = pgTable('business', {
   /**
    * PRD FR-38.1 / OQ-11. Which system bills NEW stock.
    *
-   * The shop's other system handles new items, so NEW defaults to EXTERNAL
-   * and such devices never reach the ECITY till. Not every shop splits it
-   * that way, so this is a setting rather than a rule in the code. Anything
-   * that is not NEW is always ECITY.
+   * EXTERNAL, and deliberately so. The shop runs two separate businesses: NEW
+   * handsets are bought, stocked and billed entirely in the other system, and
+   * ECITY handles everything else - used, ER, ACT and GLOBAL. They do not
+   * overlap (docs/02 §2.3).
+   *
+   * So this is not a stopgap waiting for an importer. It is the line between
+   * the two businesses, and the till's refusal to sell an EXTERNAL device is
+   * what keeps them from crossing. A shop that wants to bill NEW here as well
+   * sets this to ECITY. Anything that is not NEW is always ECITY.
    */
   newStockSalesChannel: salesChannelEnum('new_stock_sales_channel')
     .notNull()
@@ -1921,9 +1926,10 @@ export const dailyClosing = pgTable(
 
     notes: text('notes'),
     /**
-     * FR-38 / M12. Legacy sales drop cash into the same physical till, so the
-     * expected figure is incomplete until that day's file is imported. The
-     * gate is wired in M12; this records that someone closed anyway and why.
+     * FR-38. Kept from M12's design, now deferred (docs/02 §2.3): NEW stock
+     * is a separate business with its own system, so nothing is imported and
+     * ECITY's expected cash is complete for what ECITY billed. These stay so a
+     * gate could be added without a migration if the two are ever merged.
      */
     externalFeedImported: boolean('external_feed_imported').notNull().default(false),
     overrideReason: text('override_reason'),

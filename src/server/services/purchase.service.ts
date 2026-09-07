@@ -117,7 +117,8 @@ async function validateLines(actor: AuthUser, lines: PurchaseLineInput[], tx: Db
 
 /**
  * Create and confirm in one go. There is no separate draft step in the UI yet;
- * the status column exists so M12's importer and a future "save draft" can use
+ * the status column exists so a future "save draft" (and a merged-in importer,
+ * docs/02 §2.3) can use
  * it without a migration.
  */
 export async function createPurchase(

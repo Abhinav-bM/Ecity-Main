@@ -571,7 +571,8 @@ branch. Give a few products an **HSN code** (8517 phones, 8544 cables).
 
 - **No returns or exchanges** — that is M6
 - **No trade-in** on the bill — also M6
-- **No Excel import** of the other system's sales — that is M12; devices marked
+- **No Excel import** of the other system's sales — that was M12, now deferred
+  because the two businesses are separated (docs/02 §2.3); devices marked
   `SOLD_PENDING_IMPORT` are waiting for it
 - **Returns do not appear in customer history yet** — the tab says so; they
   arrive with M6. Payments now have their own Statement and Receipts tabs
@@ -881,7 +882,7 @@ On the billing screen, with something in the cart:
 - **No repair workflow** — REPAIR is a status, not a job card
 - **No automatic valuation** of trade-ins; the shop decides the number
 - **No returns against the other billing system's sales** — those bills do not
-  exist here until M12 imports them
+  exist here at all — NEW stock belongs to the other business (docs/02 §2.3)
 
 ## Housekeeping
 
@@ -1019,10 +1020,11 @@ come back and check it moved the right way and by the right amount.
 ## What M7 does not do
 
 - **No cash counting by denomination**; one counted total per day
-- **Legacy sales are not in the expected figure.** They take cash into the same
-  physical till, so until M12 imports that day's file, expected cash is short
-  by whatever the other system took. The closing screen is built to be gated on
-  that import, with a recorded override — the gate is wired in M12
+- **The other business's sales are not in the expected figure**, by design
+  (docs/02 §2.3). ECITY's closing covers what ECITY billed. **If both take cash
+  into the same physical drawer, every day will read as an overage** — settle
+  that operationally before go-live, with a separate drawer or a single cash
+  movement recording the other takings
 
 # M8 — Branch Transfers & Stock Adjustments
 
