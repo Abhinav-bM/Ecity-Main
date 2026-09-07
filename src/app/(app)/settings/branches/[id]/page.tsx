@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getBranch } from '@/server/services/branch.service'
+import { getBusiness } from '@/server/services/business.service'
 import { listUsers } from '@/server/services/user.service'
 import { BranchForm } from '../branch-form'
 
@@ -15,15 +16,17 @@ export default async function EditBranchPage({ params }: { params: Promise<{ id:
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [branch, users] = await Promise.all([
+  const [branch, users, business] = await Promise.all([
     getBranch(session.user, id),
     listUsers(session.user),
+    getBusiness(session.user),
   ])
 
   return (
     <BranchForm
       id={id}
       managers={users.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name }))}
+      gstEnabled={business.gstEnabled}
       initial={{
         code: branch.code,
         name: branch.name,

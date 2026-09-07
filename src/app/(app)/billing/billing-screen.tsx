@@ -29,6 +29,7 @@ export function BillingScreen({
   defaultTaxRateId,
   taxRates,
   canDiscount,
+  gstEnabled,
 }: {
   branchId: number
   branchName: string
@@ -39,6 +40,8 @@ export function BillingScreen({
   defaultTaxRateId: number | null
   taxRates: { id: number; rateBasisPoints: number }[]
   canDiscount: boolean
+  /** Off for an unregistered shop: no tax on the bill, no tax on screen. */
+  gstEnabled: boolean
 }) {
   const router = useRouter()
   const cart = useCart()
@@ -110,8 +113,10 @@ export function BillingScreen({
       quantity: 1,
       unitPrice: hit.sellingPricePaise ? String(Number(hit.sellingPricePaise) / 100) : '',
       discount: '0',
-      taxRateId: hit.taxRateId ?? defaultTaxRateId,
-      taxRateBasisPoints: rateBp.get(hit.taxRateId ?? defaultTaxRateId ?? -1) ?? 0,
+      taxRateId: gstEnabled ? (hit.taxRateId ?? defaultTaxRateId) : null,
+      taxRateBasisPoints: gstEnabled
+        ? (rateBp.get(hit.taxRateId ?? defaultTaxRateId ?? -1) ?? 0)
+        : 0,
       availableQuantity: null,
     })
     if (!result.added) toast.error(result.reason ?? 'Could not add that item.')
@@ -128,8 +133,10 @@ export function BillingScreen({
       quantity: 1,
       unitPrice: hit.sellingPricePaise ? String(Number(hit.sellingPricePaise) / 100) : '',
       discount: '0',
-      taxRateId: hit.taxRateId ?? defaultTaxRateId,
-      taxRateBasisPoints: rateBp.get(hit.taxRateId ?? defaultTaxRateId ?? -1) ?? 0,
+      taxRateId: gstEnabled ? (hit.taxRateId ?? defaultTaxRateId) : null,
+      taxRateBasisPoints: gstEnabled
+        ? (rateBp.get(hit.taxRateId ?? defaultTaxRateId ?? -1) ?? 0)
+        : 0,
       availableQuantity: hit.quantity,
     })
     if (!result.added) toast.error(result.reason ?? 'Could not add that item.')
@@ -314,10 +321,15 @@ export function BillingScreen({
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-1 text-sm">
-                <dt className="text-muted-foreground">Taxable</dt>
-                <dd className="tabular text-right">{formatMoney(totals.taxablePaise)}</dd>
-                <dt className="text-muted-foreground">Tax</dt>
-                <dd className="tabular text-right">{formatMoney(totals.taxPaise)}</dd>
+                {/* No tax to break out when the shop is not registered. */}
+                {gstEnabled ? (
+                  <>
+                    <dt className="text-muted-foreground">Taxable</dt>
+                    <dd className="tabular text-right">{formatMoney(totals.taxablePaise)}</dd>
+                    <dt className="text-muted-foreground">Tax</dt>
+                    <dd className="tabular text-right">{formatMoney(totals.taxPaise)}</dd>
+                  </>
+                ) : null}
                 <dt className="font-medium">Bill total</dt>
                 <dd className="tabular text-right font-medium">
                   {formatMoney(totals.totalPaise)}

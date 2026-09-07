@@ -26,6 +26,7 @@ export function ProductForm({
   brands,
   taxRates,
   suppliers,
+  gstEnabled,
 }: {
   id?: number
   initial?: Partial<Values>
@@ -33,6 +34,8 @@ export function ProductForm({
   brands: { id: number; name: string }[]
   taxRates: { id: number; name: string }[]
   suppliers: { id: number; name: string }[]
+  /** HSN and tax rate are GST concepts; hidden when the shop is not registered. */
+  gstEnabled: boolean
 }) {
   const router = useRouter()
   const [formError, setFormError] = useState<string | null>(null)
@@ -152,14 +155,16 @@ export function ProductForm({
             <Field id="sku" label="SKU" error={errors.sku?.message} hint="Unique across the business">
               <Input id="sku" className="uppercase" {...register('sku')} />
             </Field>
-            <Field
-              id="hsnCode"
-              label="HSN code"
-              error={errors.hsnCode?.message}
-              hint="Printed on every tax invoice. 8517 for phones, 8544 for cables."
-            >
-              <Input id="hsnCode" inputMode="numeric" {...register('hsnCode')} />
-            </Field>
+            {gstEnabled ? (
+              <Field
+                id="hsnCode"
+                label="HSN code"
+                error={errors.hsnCode?.message}
+                hint="Printed on every tax invoice. 8517 for phones, 8544 for cables."
+              >
+                <Input id="hsnCode" inputMode="numeric" {...register('hsnCode')} />
+              </Field>
+            ) : null}
 
             <Field id="barcode" label="Barcode" error={errors.barcode?.message}>
               <Input id="barcode" {...register('barcode')} />
@@ -190,18 +195,20 @@ export function ProductForm({
             <Field id="sellingPrice" label="Selling price (₹)" error={errors.sellingPrice?.message}>
               <Input id="sellingPrice" inputMode="decimal" {...register('sellingPrice')} />
             </Field>
-            <Field id="taxRateId" label="Tax rate" error={errors.taxRateId?.message}>
-              <FormSelect
-                control={control}
-                name="taxRateId"
-                id="taxRateId"
-                label="Tax rate"
-                allowEmpty
-                emptyLabel="No tax rate"
-                placeholder="No tax rate"
-                options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
-              />
-            </Field>
+            {gstEnabled ? (
+              <Field id="taxRateId" label="Tax rate" error={errors.taxRateId?.message}>
+                <FormSelect
+                  control={control}
+                  name="taxRateId"
+                  id="taxRateId"
+                  label="Tax rate"
+                  allowEmpty
+                  emptyLabel="No tax rate"
+                  placeholder="No tax rate"
+                  options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
+                />
+              </Field>
+            ) : null}
             <Field
               id="defaultSupplierId"
               label="Usual supplier"

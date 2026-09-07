@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { PartyForm } from '@/components/party-form'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getBusiness } from '@/server/services/business.service'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getParty } from '@/server/services/party.service'
@@ -32,12 +33,13 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const canSeeMoney = hasPermission(session.user, 'customer_payment.view')
   const canCollect = hasPermission(session.user, 'customer_payment.manage')
 
-  const [party, history, statement, receipts, balance] = await Promise.all([
+  const [party, history, statement, receipts, balance, business] = await Promise.all([
     getParty(session.user, 'customer', id),
     canSeeSales ? getCustomerHistory(session.user, id) : null,
     canSeeMoney ? customerStatement(session.user, id) : null,
     canSeeMoney ? customerReceipts(session.user, id) : [],
     canSeeMoney ? customerBalance(id) : 0n,
+      getBusiness(session.user),
   ])
 
   return (
@@ -109,6 +111,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             kind="customer"
             id={id}
             readOnly={!canManage}
+            gstEnabled={business.gstEnabled}
             initial={{
               name: party.name,
               company: party.company ?? '',

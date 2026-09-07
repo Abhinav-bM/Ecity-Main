@@ -323,6 +323,22 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Depends on.** M5. **Effort.** 2.0 weeks.
 
+**Also delivered here — the GST registration switch (FR-2.6, FR-26.6).** Asked for on 2026-09-07: the shop sells mostly used handsets, trades below the registration threshold, and expects to register within about a year. Built alongside M6 rather than as its own module because it is one setting and a set of conditionals, not a subsystem.
+
+*Built as:*
+- **Two flags, not one.** `business.gst_enabled` is what the shop is *today* and drives the forms and the till. `sale.gst_enabled` is what the shop *was* when that bill was issued and drives that invoice for good. The setting moves; history does not.
+- **Why the second one is not optional.** Nothing archives the invoice PDF — `/api/sales/[id]/pdf` renders from the rows on every request. So a reprint is always a fresh render, and if the invoice asked the business setting whether to print GST, registering next year would reprint every bill from this year as a tax invoice, headed with a GSTIN the shop did not have at the time. Bills get reprinted for warranties, returns and disputes; M6 itself takes returns against old bills.
+- **Zero tax cannot stand in for the flag.** Exempt and zero-rated goods sold *under* GST are also zero, and those do belong on a tax invoice with an HSN. "Tax was zero" and "there was no GST regime" are different facts that produce the same number, so the number cannot carry it.
+- **The rate is forced server-side, not just hidden.** `createSale` reads the setting and zeroes the rate itself, so a stale browser tab still holding a tax rate cannot put tax on a bill. Place of supply, the state code and the HSN snapshot are left null for the same reason — they are GST concepts with nothing to say outside one.
+- **The document is retitled, not just stripped.** An unregistered dealer must not issue something headed "Tax Invoice" or carrying a GSTIN. Leaving the heading while removing the tax would produce a document that misstates what it is.
+- **Nothing is deleted.** The GST columns, the tax rates and `src/lib/gst.ts` all stay in place, dormant. Registering is flipping the switch.
+- **Purchases need no flag.** A purchase record is not a document the shop issues to anyone — the supplier provides theirs — so those screens read the live setting. Worth knowing operationally: while unregistered, tax a supplier charges is not reclaimable, so enter the full price paid as the unit cost and leave the tax box empty, and margins read correctly.
+
+**Done when.**
+- With GST off, a bill charges no tax even if the request carries a tax rate, and the invoice has no "Tax Invoice" heading, GSTIN, HSN column, tax column or HSN summary.
+- Turning GST on afterwards leaves every bill issued before it printing exactly as it was issued.
+- Turning GST off does not strip GST from bills already issued under it.
+
 ---
 ## M7 — Expenses, Cash Drawer, Bank Accounts & Daily Closing
 

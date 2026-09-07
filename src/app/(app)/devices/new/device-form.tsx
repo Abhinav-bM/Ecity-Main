@@ -27,6 +27,7 @@ export function DeviceForm({
   suppliers,
   branches,
   taxRates,
+  gstEnabled,
   defaultBranchId,
 }: {
   imeiSlots: number
@@ -36,6 +37,7 @@ export function DeviceForm({
   suppliers: { id: number; name: string }[]
   branches: { id: number; code: string; name: string }[]
   taxRates: { id: number; name: string }[]
+  gstEnabled: boolean
   defaultBranchId: number | null
 }) {
   const router = useRouter()
@@ -319,18 +321,20 @@ export function DeviceForm({
             <Field id="sellingPrice" label="Selling price (₹)" error={errors.sellingPrice?.message}>
               <Input id="sellingPrice" inputMode="decimal" {...register('sellingPrice')} />
             </Field>
-            <Field id="taxRateId" label="Tax rate" error={errors.taxRateId?.message}>
-              <FormSelect
-                control={control}
-                name="taxRateId"
-                id="taxRateId"
-                label="Tax rate"
-                allowEmpty
-                emptyLabel="Use the product default"
-                placeholder="Use the product default"
-                options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
-              />
-            </Field>
+            {gstEnabled ? (
+              <Field id="taxRateId" label="Tax rate" error={errors.taxRateId?.message}>
+                <FormSelect
+                  control={control}
+                  name="taxRateId"
+                  id="taxRateId"
+                  label="Tax rate"
+                  allowEmpty
+                  emptyLabel="Use the product default"
+                  placeholder="Use the product default"
+                  options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
+                />
+              </Field>
+            ) : null}
             <Field id="supplierId" label="Supplier" error={errors.supplierId?.message}>
               <FormSelect
                 control={control}

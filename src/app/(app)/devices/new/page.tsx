@@ -33,6 +33,7 @@ export default async function NewDevicePage() {
       suppliers={suppliers.rows.map((s) => ({ id: s.id, name: s.name }))}
       branches={branches}
       taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}
+      gstEnabled={business.gstEnabled}
       defaultBranchId={session.activeBranchId ?? branches[0]?.id ?? null}
     />
   )

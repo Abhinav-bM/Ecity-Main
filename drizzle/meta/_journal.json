@@ -127,6 +127,13 @@
       "when": 1788722743269,
       "tag": "0017_m6_device_resellable",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788786270077,
+      "tag": "0018_m6_gst_toggle",
+      "breakpoints": true
     }
   ]
 }

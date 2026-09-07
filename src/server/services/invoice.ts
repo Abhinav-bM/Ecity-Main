@@ -17,6 +17,12 @@ export async function getInvoiceData(actor: AuthUser, saleId: number): Promise<I
     invoiceNumber: detail.sale.invoiceNumber,
     soldAt: detail.sale.soldAt,
     pricesIncludedTax: detail.sale.pricesIncludedTax,
+    /*
+     * Read from the SALE, never from the business setting. Nothing archives
+     * the PDF, so a reprint is always a fresh render - taking it from settings
+     * would relabel every old bill the day the shop registers for GST.
+     */
+    gstEnabled: detail.sale.gstEnabled,
     business: {
       name: business.name,
       addressLine1: business.addressLine1,

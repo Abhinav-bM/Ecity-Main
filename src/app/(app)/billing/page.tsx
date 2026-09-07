@@ -48,6 +48,7 @@ export default async function BillingPage() {
       canDiscount={hasPermission(session.user, 'sale.discount')}
       canCreateCustomer={hasPermission(session.user, 'customer.manage')}
       defaultCreditDays={business.defaultCreditDays}
+      gstEnabled={business.gstEnabled}
     />
   )
 }

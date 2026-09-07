@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 266 unit and integration tests, 564
+Automated tests cover the mechanics — 271 unit and integration tests, 580
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -833,6 +833,34 @@ On the billing screen, with something in the cart:
       full value is credited. *A credit note is not money leaving the till*
 - [ ] Return the rest of a part-returned bill → the two refunds together never
       exceed what was paid
+
+## 6c. The GST switch (FR-2.6, FR-26.6)
+
+**Settings → Business → GST.** Turn *Registered for GST* off and save.
+
+- [ ] The **GST number** and **GST state** fields disappear from business
+      settings, and so does the **Tax** tab and **Prices include tax**
+- [ ] A new product form has no **HSN code** and no **Tax rate**
+- [ ] A new customer, supplier and branch form has no **GST number**
+- [ ] A device form has no **Tax rate**
+- [ ] At the till, the total shows **Bill total** only — no Taxable, no Tax
+- [ ] Sell a phone at ₹10,000 and take ₹10,000 → the bill total is exactly
+      ₹10,000. *The customer pays the price on the label*
+- [ ] Its invoice is headed **Invoice**, not Tax Invoice, and shows no GSTIN,
+      no HSN column, no tax column and no HSN summary
+- [ ] Download the PDF — same on paper as on screen
+
+**Now turn GST back on and save.**
+
+- [ ] Reopen that bill. It **still** reads Invoice, with no GSTIN and no tax.
+      *This is the important one: nothing stores the PDF, so every reprint is
+      re-rendered. A bill issued before the shop registered must never reprint
+      as a tax invoice*
+- [ ] Sell another phone → this one **is** a Tax Invoice, with GSTIN, HSN and
+      the tax breakdown
+- [ ] Turn GST off again and reopen that taxed bill → it still shows its GST.
+      *It works in both directions*
+- [ ] Turn GST back on before carrying on with the rest of the checklist
 
 ## 7. Correcting a device
 

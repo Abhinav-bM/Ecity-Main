@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { PartyForm } from '@/components/party-form'
+import { getBusiness } from '@/server/services/business.service'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 
@@ -9,5 +10,6 @@ export default async function NewCustomerPage() {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   if (!hasPermission(session.user, 'customer.manage')) redirect('/customers')
-  return <PartyForm kind="customer" />
+  const business = await getBusiness(session.user)
+  return <PartyForm kind="customer" gstEnabled={business.gstEnabled} />
 }

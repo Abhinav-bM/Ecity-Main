@@ -27,12 +27,15 @@ export function PartyForm({
   id,
   initial,
   readOnly = false,
+  gstEnabled,
 }: {
   kind: 'customer' | 'supplier'
   id?: number
   initial?: Partial<Values>
   /** View-only for a role that can see the record but not change it. */
   readOnly?: boolean
+  /** GSTIN and GST state are hidden when the shop is not registered. */
+  gstEnabled: boolean
 }) {
   const router = useRouter()
   const [formError, setFormError] = useState<string | null>(null)
@@ -105,22 +108,26 @@ export function PartyForm({
                 <Input id="company" {...register('company')} />
               </Field>
             ) : null}
-            <Field
-              id="gstin"
-              label="GST number"
-              error={errors.gstin?.message}
-              hint="15 characters, e.g. 29ABCDE1234F1Z5"
-            >
-              <Input id="gstin" className="uppercase" {...register('gstin')} />
-            </Field>
-            <Field
-              id="stateCode"
-              label="GST state"
-              error={errors.stateCode?.message}
-              hint="Decides CGST/SGST or IGST on their invoices"
-            >
-              <FormStateCodeSelect control={control} name="stateCode" id="stateCode" />
-            </Field>
+            {gstEnabled ? (
+              <>
+                <Field
+                  id="gstin"
+                  label="GST number"
+                  error={errors.gstin?.message}
+                  hint="15 characters, e.g. 29ABCDE1234F1Z5"
+                >
+                  <Input id="gstin" className="uppercase" {...register('gstin')} />
+                </Field>
+                <Field
+                  id="stateCode"
+                  label="GST state"
+                  error={errors.stateCode?.message}
+                  hint="Decides CGST/SGST or IGST on their invoices"
+                >
+                  <FormStateCodeSelect control={control} name="stateCode" id="stateCode" />
+                </Field>
+              </>
+            ) : null}
           </CardContent>
         </Card>
 

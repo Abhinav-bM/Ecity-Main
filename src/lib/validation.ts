@@ -134,6 +134,12 @@ export const businessProfileSchema = z.object({
   currency: z.string().trim().length(3).default('INR'),
   timezone: z.string().trim().min(3).default('Asia/Kolkata'),
   pricesIncludeTax: z.boolean().default(true),
+  /**
+   * Is the shop registered for GST? Off means no tax on any bill and no GST
+   * field anywhere in the app. Nothing is deleted, so it can be switched back
+   * on when the shop registers.
+   */
+  gstEnabled: z.boolean().default(true),
   invoicePrefix: z.string().trim().min(1).max(10).default('INV'),
   /**
    * PRD FR-4.11. How many IMEI inputs the device and purchase forms show.

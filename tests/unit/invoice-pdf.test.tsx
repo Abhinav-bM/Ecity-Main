@@ -58,6 +58,7 @@ function invoice(overrides: Partial<InvoiceData> = {}): InvoiceData {
     ],
     payments: [{ id: 1, methodName: 'Cash', amountPaise: 7499900n, reference: null }],
     tradeIns: [],
+    gstEnabled: true,
     subtotalPaise: 7499900n,
     discountPaise: 0n,
     taxablePaise: 6355847n,

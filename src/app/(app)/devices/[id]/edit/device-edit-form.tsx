@@ -43,12 +43,14 @@ export function DeviceEditForm({
   identifiers,
   initial,
   taxRates,
+  gstEnabled,
   suppliers,
 }: {
   deviceId: number
   identifiers: string[]
   initial: DeviceEditValues
   taxRates: { id: number; name: string }[]
+  gstEnabled: boolean
   suppliers: { id: number; name: string }[]
 }) {
   const router = useRouter()
@@ -203,18 +205,20 @@ export function DeviceEditForm({
               onChange={(e) => set('sellingPrice', e.target.value)}
             />
           </Field>
-          <Field id="taxRateId" label="Tax rate">
-            <AppSelect
-              id="taxRateId"
-              label="Tax rate"
-              allowEmpty
-              emptyLabel="Use the product default"
-              placeholder="Use the product default"
-              value={v.taxRateId}
-              onValueChange={(x) => set('taxRateId', x)}
-              options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
-            />
-          </Field>
+          {gstEnabled ? (
+            <Field id="taxRateId" label="Tax rate">
+              <AppSelect
+                id="taxRateId"
+                label="Tax rate"
+                allowEmpty
+                emptyLabel="Use the product default"
+                placeholder="Use the product default"
+                value={v.taxRateId}
+                onValueChange={(x) => set('taxRateId', x)}
+                options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
+              />
+            </Field>
+          ) : null}
           <Field id="supplierId" label="Supplier">
             <AppSelect
               id="supplierId"

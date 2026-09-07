@@ -23,10 +23,13 @@ export function BranchForm({
   id,
   initial,
   managers,
+  gstEnabled,
 }: {
   id?: number
   initial?: Partial<Values>
   managers: { id: number; name: string }[]
+  /** A branch's GSTIN and state only decide CGST/SGST vs IGST under GST. */
+  gstEnabled: boolean
 }) {
   const router = useRouter()
   const [formError, setFormError] = useState<string | null>(null)
@@ -136,18 +139,22 @@ export function BranchForm({
             <Field id="email" label="Email" error={errors.email?.message}>
               <Input id="email" type="email" {...register('email')} />
             </Field>
-            <Field id="gstin" label="GST number" error={errors.gstin?.message}>
-              <Input id="gstin" className="uppercase" {...register('gstin')} />
-            </Field>
-            <Field
-              id="stateCode"
-              label="GST state"
-              error={errors.stateCode?.message}
-              hint="A branch in another state bills inter-state (IGST)"
-            >
-              <FormStateCodeSelect control={control} name="stateCode" id="stateCode" />
-            </Field>
-            <div className="hidden sm:block" />
+            {gstEnabled ? (
+              <>
+                <Field id="gstin" label="GST number" error={errors.gstin?.message}>
+                  <Input id="gstin" className="uppercase" {...register('gstin')} />
+                </Field>
+                <Field
+                  id="stateCode"
+                  label="GST state"
+                  error={errors.stateCode?.message}
+                  hint="A branch in another state bills inter-state (IGST)"
+                >
+                  <FormStateCodeSelect control={control} name="stateCode" id="stateCode" />
+                </Field>
+                <div className="hidden sm:block" />
+              </>
+            ) : null}
             <Field id="addressLine1" label="Address line 1" className="sm:col-span-2" error={errors.addressLine1?.message}>
               <Input id="addressLine1" {...register('addressLine1')} />
             </Field>

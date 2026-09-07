@@ -140,6 +140,7 @@ export async function createSale(
         pricesIncludeTax: business.pricesIncludeTax,
         stateCode: business.stateCode,
         gstin: business.gstin,
+        gstEnabled: business.gstEnabled,
         defaultCreditDays: business.defaultCreditDays,
       })
       .from(business)
@@ -147,6 +148,17 @@ export async function createSale(
       .limit(1)
   )[0]
   const pricesIncludeTax = settings?.pricesIncludeTax ?? true
+
+  /*
+   * Is the shop registered? An unregistered dealer charges no GST at all, so
+   * the rate is forced to zero here rather than trusted from the request - a
+   * stale browser tab still holding a tax rate cannot put tax on a bill.
+   *
+   * Stamped onto the sale below, because nothing archives the invoice PDF:
+   * every reprint is a fresh render, and without this a bill issued today
+   * would reprint as a tax invoice the day the shop registers.
+   */
+  const gstEnabled = settings?.gstEnabled ?? true
 
   /**
    * Where this supply is taxed (PRD OQ-4).
@@ -182,8 +194,10 @@ export async function createSale(
   const customerStateCode =
     normaliseStateCode(customerRow?.stateCode) ?? stateCodeFromGstin(customerRow?.gstin)
 
-  const placeOfSupplyCode = placeOfSupply(supplyStateCode, customerStateCode)
-  const interState = isInterState(supplyStateCode, placeOfSupplyCode)
+  // Place of supply only means something under GST. Left null when there is
+  // none, so the invoice has nothing to print rather than an empty heading.
+  const placeOfSupplyCode = gstEnabled ? placeOfSupply(supplyStateCode, customerStateCode) : null
+  const interState = gstEnabled ? isInterState(supplyStateCode, placeOfSupplyCode) : false
 
   return db.transaction(async (tx) => {
     // Resolve products, devices and tax rates in one go.
@@ -236,7 +250,7 @@ export async function createSale(
       const p = productById.get(line.productId)
       if (!p) throw new AppError('A line references a product that does not exist.', 422, 'BAD_PRODUCT')
 
-      const bp = line.taxRateId ? (rateById.get(line.taxRateId) ?? 0) : 0
+      const bp = gstEnabled && line.taxRateId ? (rateById.get(line.taxRateId) ?? 0) : 0
 
       if (p.isSerialised) {
         if (!line.deviceId) {
@@ -368,9 +382,10 @@ export async function createSale(
           sgstPaise: totals.sgstPaise,
           igstPaise: totals.igstPaise,
           placeOfSupplyCode,
-          supplyStateCode,
+          supplyStateCode: gstEnabled ? supplyStateCode : null,
           isInterState: interState,
           pricesIncludedTax: pricesIncludeTax,
+          gstEnabled,
           idempotencyKey: input.idempotencyKey ?? null,
           notes: input.notes?.trim() || null,
           // Only a bill that leaves unpaid carries credit terms.
@@ -400,13 +415,15 @@ export async function createSale(
         description: p.name,
         // Snapshots, so a reprint reads as it did on the day.
         identifierSnapshot: device?.identifier ?? null,
-        hsnCodeSnapshot: p.hsnCode,
+        // No HSN on a bill from an unregistered dealer - it is a GST code and
+        // has no meaning outside one.
+        hsnCodeSnapshot: gstEnabled ? p.hsnCode : null,
         mainTypeSnapshot: device?.mainType ?? null,
         isNewCutSnapshot: device?.isNewCut ?? false,
         quantity: line.quantity,
         unitPricePaise: line.unitPricePaise,
         discountPaise: line.discountPaise ?? 0n,
-        taxRateId: line.taxRateId ?? null,
+        taxRateId: gstEnabled ? (line.taxRateId ?? null) : null,
         taxRateBasisPoints: bp,
         taxablePaise: computed.taxablePaise,
         taxPaise: computed.taxPaise,

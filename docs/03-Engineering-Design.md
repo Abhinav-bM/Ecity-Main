@@ -111,7 +111,7 @@ Constraints that shaped every choice below:
 
 ## 4. Data Layer Decisions
 
-These seven decisions are the difference between a system that reconciles and one that does not.
+These nine decisions are the difference between a system that reconciles and one that does not.
 
 **4.1 Money is `bigint` paise.** Every amount column is integer minor units. A `Money` helper type handles arithmetic, and formatting to `₹` happens only at the display edge. No `float`, no `number` arithmetic on amounts in JavaScript.
 
@@ -198,6 +198,8 @@ returning id;   -- zero rows returned  =>  abort the sale with a clear message
 **4.7 Indexes that must exist from day one.** `device_identifier(imei)` unique plus its trigram index; `device_unit(current_branch_id, status, main_type)`; `device_event(device_id, seq)`; `sale(branch_id, created_at)`; `sale_item(device_id)`; `customer(phone)`, `supplier(phone)`; and GIN trigram indexes on customer, supplier and product names for global search. Add a `pg_trgm` extension for partial IMEI and name matching.
 
 **4.8 Reporting strategy.** Live SQL for anything within the current month. For year-range analytics, a nightly `pg-boss` job writes per-branch, per-day rollups (sales, cost, profit, units, payment mix, stock value) and the analytics pages read rollups for closed days plus live queries for today. This keeps PRD §9.1's five-second target reachable without a warehouse.
+
+**4.9 A document records the regime it was issued under, not the one in force today.** Nothing archives the invoice PDF — `/api/sales/[id]/pdf` renders from the rows on every request — so every reprint is a fresh render and the row has to carry everything the document needs to look like itself. `sale.prices_included_tax` was the first of these; `sale.gst_enabled` (FR-2.6) is the second. The general rule: **when a setting decides how a past document reads, snapshot it onto the document.** Read it live only where the value describes the shop now, never where it describes a document then. Watch for the tempting shortcut of inferring the setting from the figures — zero tax does not mean "no GST regime", because exempt and zero-rated goods sold under GST are also zero.
 
 ---
 ## 5. Cross-Cutting Implementation Notes

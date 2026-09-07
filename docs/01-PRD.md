@@ -142,6 +142,7 @@ Requirement IDs map to the section numbers of the source Feature List v3 so the 
 - FR-2.1 Business profile: name, logo, contact details, address, GST/tax identifiers, currency.
 - FR-2.2 Invoice numbering scheme, with per-branch series where configured (see FR-26.3).
 - FR-2.3 Tax configuration, including tax-inclusive vs tax-exclusive pricing.
+- FR-2.6 A business-level **GST registration switch**. A shop trading below the registration threshold — which is where this starts, selling mostly used handsets — charges no GST and must not issue a tax invoice. Off means every line is forced to 0% by the server and the GST fields disappear from the app; nothing is deleted, so registering later is this one switch. *(Added on request, 2026-09-07.)*
 - FR-2.4 Payment methods: Cash, UPI, Card, Bank Transfer, plus configurable additional methods.
 
 ### 6.2 Multi-Branch Management (FR-3)
@@ -285,7 +286,8 @@ All analytics honour the user's role and branch scope, support date-range select
 - FR-26.2 Purchase invoices/documents, and receipts for customer and supplier payments.
 - FR-26.3 Branch-specific invoice numbering where configured.
 - FR-26.4 Print output for both A4 and 80 mm thermal receipt formats, plus PDF download and share.
-- FR-26.5 Every sales invoice is a statutory GST tax invoice: HSN/SAC per line, CGST/SGST for intra-state supply or IGST for inter-state, place of supply, and an HSN-wise tax summary. *(Added when OQ-4 was answered.)*
+- FR-26.5 Every sales invoice **from a GST-registered shop** is a statutory GST tax invoice: HSN/SAC per line, CGST/SGST for intra-state supply or IGST for inter-state, place of supply, and an HSN-wise tax summary. *(Added when OQ-4 was answered.)*
+- FR-26.6 An unregistered shop (FR-2.6) issues a plain invoice: no "Tax Invoice" heading, no GSTIN, no HSN column, no tax column and no tax summary. **Which of the two a bill is, is fixed when it is issued and never re-decided.** Nothing archives the PDF — every reprint is a fresh render — so registering for GST later must not turn bills issued before it into tax invoices.
 
 ### 6.18 Notifications & Alerts (FR-27)
 

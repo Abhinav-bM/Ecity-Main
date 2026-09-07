@@ -3,6 +3,7 @@ import { PartyForm } from '@/components/party-form'
 import { SupplierHistory } from '@/components/supplier-history'
 import { Attachments } from '@/components/attachments'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getBusiness } from '@/server/services/business.service'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getParty } from '@/server/services/party.service'
@@ -24,10 +25,11 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
   const canEdit = hasPermission(session.user, 'supplier.manage')
   const canSeeMoney = hasPermission(session.user, 'supplier_payment.view')
 
-  const [history, methods, files] = await Promise.all([
+  const [history, methods, files, business] = await Promise.all([
     canSeeMoney ? supplierHistory(session.user, id) : null,
     canSeeMoney ? listPaymentMethods(session.user) : [],
     listAttachments(session.user, 'supplier', id),
+      getBusiness(session.user),
   ])
 
   return (
@@ -68,6 +70,7 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
             <PartyForm
               kind="supplier"
               id={id}
+              gstEnabled={business.gstEnabled}
               initial={{
                 name: party.name,
                 company: party.company ?? '',
@@ -90,8 +93,12 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
               <dd>{party.phone ?? '—'}</dd>
               <dt className="text-muted-foreground">Email</dt>
               <dd>{party.email ?? '—'}</dd>
-              <dt className="text-muted-foreground">GST</dt>
-              <dd>{party.gstin ?? '—'}</dd>
+              {business.gstEnabled ? (
+                <>
+                  <dt className="text-muted-foreground">GST</dt>
+                  <dd>{party.gstin ?? '—'}</dd>
+                </>
+              ) : null}
             </dl>
           )}
         </TabsContent>

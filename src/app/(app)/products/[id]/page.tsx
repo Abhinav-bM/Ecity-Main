@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { listTaxRates } from '@/server/services/business.service'
+import { getBusiness, listTaxRates } from '@/server/services/business.service'
 import { getProduct, listBrands, listCategories } from '@/server/services/product.service'
 import { listParties } from '@/server/services/party.service'
 import { paiseToRupees } from '@/lib/validation'
@@ -19,11 +19,12 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [detail, categories, brands, taxRates, suppliers] = await Promise.all([
+  const [detail, categories, brands, taxRates, business, suppliers] = await Promise.all([
     getProduct(session.user, id),
     listCategories(session.user),
     listBrands(session.user),
     listTaxRates(session.user),
+    getBusiness(session.user),
     listParties(session.user, 'supplier', { page: 1, pageSize: 500 }),
   ])
 
@@ -43,6 +44,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           brands={brands.map((b) => ({ id: b.id, name: b.name }))}
           taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}
           suppliers={suppliers.rows.map((s) => ({ id: s.id, name: s.name }))}
+          gstEnabled={business.gstEnabled}
           initial={{
             name: p.name,
             categoryId: p.categoryId,

@@ -13,6 +13,12 @@ export type InvoiceData = {
   invoiceNumber: string;
   soldAt: Date | string;
   pricesIncludedTax: boolean;
+  /**
+   * Was the shop registered for GST when this bill was issued? Stamped on the
+   * sale, so a reprint shows the document that was actually issued rather than
+   * whatever the shop is registered as today.
+   */
+  gstEnabled: boolean;
   business: {
     name: string;
     addressLine1: string | null;
@@ -158,8 +164,10 @@ export function Invoice({
 
       <div id="invoice" className="rounded-lg border bg-card p-6 text-sm">
         <header className="mb-4 border-b pb-3">
+          {/* An unregistered dealer must not issue a "Tax Invoice", and must
+              not show a GSTIN. */}
           <p className="text-[11px] tracking-wide uppercase text-muted-foreground">
-            Tax Invoice
+            {data.gstEnabled ? "Tax Invoice" : "Invoice"}
           </p>
           <h2 className="text-base font-semibold">{data.business.name}</h2>
           {data.business.addressLine1 ? (
@@ -170,13 +178,13 @@ export function Invoice({
               .filter(Boolean)
               .join(" · ")}
           </p>
-          {data.business.gstin ? (
+          {data.gstEnabled && data.business.gstin ? (
             <p className="font-mono text-xs">GSTIN {data.business.gstin}</p>
           ) : null}
           <p className="mt-1 text-xs text-muted-foreground">
             {data.branch.name} ({data.branch.code})
           </p>
-          {data.gst.placeOfSupplyCode ? (
+          {data.gstEnabled && data.gst.placeOfSupplyCode ? (
             <p className="text-xs text-muted-foreground">
               Place of supply: {data.gst.placeOfSupplyCode}
               {data.gst.placeOfSupplyName
@@ -214,10 +222,14 @@ export function Invoice({
             <thead className="border-y">
               <tr className="text-left text-xs uppercase">
                 <th className="py-1">Item</th>
-                <th className="a4-only py-1 text-right">HSN</th>
+                {data.gstEnabled ? (
+                  <th className="a4-only py-1 text-right">HSN</th>
+                ) : null}
                 <th className="py-1 text-right">Qty</th>
                 <th className="py-1 text-right">Price</th>
-                <th className="a4-only py-1 text-right">Tax</th>
+                {data.gstEnabled ? (
+                  <th className="a4-only py-1 text-right">Tax</th>
+                ) : null}
                 <th className="py-1 text-right">Amount</th>
               </tr>
             </thead>
@@ -238,16 +250,20 @@ export function Invoice({
                       </span>
                     ) : null}
                   </td>
-                  <td className="a4-only tabular py-1.5 text-right text-xs">
-                    {i.hsnCodeSnapshot ?? "—"}
-                  </td>
+                  {data.gstEnabled ? (
+                    <td className="a4-only tabular py-1.5 text-right text-xs">
+                      {i.hsnCodeSnapshot ?? "—"}
+                    </td>
+                  ) : null}
                   <td className="tabular py-1.5 text-right">{i.quantity}</td>
                   <td className="tabular py-1.5 text-right">
                     {formatMoney(i.unitPricePaise)}
                   </td>
-                  <td className="a4-only tabular py-1.5 text-right">
-                    {formatMoney(i.taxPaise)}
-                  </td>
+                  {data.gstEnabled ? (
+                    <td className="a4-only tabular py-1.5 text-right">
+                      {formatMoney(i.taxPaise)}
+                    </td>
+                  ) : null}
                   <td className="tabular py-1.5 text-right">
                     {formatMoney(i.lineTotalPaise)}
                   </td>
@@ -259,37 +275,55 @@ export function Invoice({
 
         <div className="mt-3 flex justify-end">
           <dl className="grid w-56 grid-cols-2 gap-0.5">
-            <dt className="text-muted-foreground">Taxable</dt>
-            <dd className="tabular text-right">
-              {formatMoney(data.taxablePaise)}
-            </dd>
+            {/* Without GST there is no "taxable value" - it is just the total. */}
+            {data.gstEnabled ? (
+              <>
+                <dt className="text-muted-foreground">Taxable</dt>
+                <dd className="tabular text-right">
+                  {formatMoney(data.taxablePaise)}
+                </dd>
+              </>
+            ) : null}
             {/*
               Intra-state supply must show CGST and SGST separately; only an
               inter-state supply is billed as a single IGST line.
             */}
-            {[...taxByRate.entries()]
-              .sort((a, b) => a[0] - b[0])
-              .map(([bp, v]) =>
-                data.gst.isInterState ? (
-                  <div key={bp} className="col-span-2 grid grid-cols-2 gap-0.5">
-                    <dt className="text-muted-foreground">IGST {bp / 100}%</dt>
-                    <dd className="tabular text-right">
-                      {formatMoney(v.igst)}
-                    </dd>
-                  </div>
-                ) : (
-                  <div key={bp} className="col-span-2 grid grid-cols-2 gap-0.5">
-                    <dt className="text-muted-foreground">CGST {bp / 200}%</dt>
-                    <dd className="tabular text-right">
-                      {formatMoney(v.cgst)}
-                    </dd>
-                    <dt className="text-muted-foreground">SGST {bp / 200}%</dt>
-                    <dd className="tabular text-right">
-                      {formatMoney(v.sgst)}
-                    </dd>
-                  </div>
-                ),
-              )}
+            {data.gstEnabled &&
+              [...taxByRate.entries()]
+                .sort((a, b) => a[0] - b[0])
+                .map(([bp, v]) =>
+                  data.gst.isInterState ? (
+                    <div
+                      key={bp}
+                      className="col-span-2 grid grid-cols-2 gap-0.5"
+                    >
+                      <dt className="text-muted-foreground">
+                        IGST {bp / 100}%
+                      </dt>
+                      <dd className="tabular text-right">
+                        {formatMoney(v.igst)}
+                      </dd>
+                    </div>
+                  ) : (
+                    <div
+                      key={bp}
+                      className="col-span-2 grid grid-cols-2 gap-0.5"
+                    >
+                      <dt className="text-muted-foreground">
+                        CGST {bp / 200}%
+                      </dt>
+                      <dd className="tabular text-right">
+                        {formatMoney(v.cgst)}
+                      </dd>
+                      <dt className="text-muted-foreground">
+                        SGST {bp / 200}%
+                      </dt>
+                      <dd className="tabular text-right">
+                        {formatMoney(v.sgst)}
+                      </dd>
+                    </div>
+                  ),
+                )}
             <dt className="border-t pt-1 font-medium">Total</dt>
             <dd className="tabular border-t pt-1 text-right font-medium">
               {formatMoney(data.totalPaise)}
@@ -323,7 +357,7 @@ export function Invoice({
           </dl>
         </div>
 
-        {data.gst.hsnSummary.length > 0 ? (
+        {data.gstEnabled && data.gst.hsnSummary.length > 0 ? (
           <div className="a4-only mt-4">
             <p className="mb-1 text-xs font-medium">HSN summary</p>
             <div className="overflow-x-auto">
@@ -381,9 +415,9 @@ export function Invoice({
         ) : null}
 
         <footer className="mt-4 border-t pt-2 text-center text-[11px] text-muted-foreground">
-          {data.pricesIncludedTax
-            ? "Prices include GST."
-            : "GST added as shown."}{" "}
+          {data.gstEnabled
+            ? `${data.pricesIncludedTax ? "Prices include GST." : "GST added as shown."} `
+            : ""}
           Thank you.
         </footer>
       </div>

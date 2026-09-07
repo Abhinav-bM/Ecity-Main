@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getDevice } from '@/server/services/device.service'
-import { listTaxRates } from '@/server/services/business.service'
+import { getBusiness, listTaxRates } from '@/server/services/business.service'
 import { listParties } from '@/server/services/party.service'
 import { DeviceEditForm } from './device-edit-form'
 
@@ -20,9 +20,10 @@ export default async function EditDevicePage({ params }: { params: Promise<{ id:
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [detail, taxRates, suppliers] = await Promise.all([
+  const [detail, taxRates, business, suppliers] = await Promise.all([
     getDevice(session.user, id),
     listTaxRates(session.user),
+    getBusiness(session.user),
     listParties(session.user, 'supplier', { page: 1, pageSize: 500 }),
   ])
   const d = detail.device
@@ -46,6 +47,7 @@ export default async function EditDevicePage({ params }: { params: Promise<{ id:
         deviceId={id}
         identifiers={detail.identifiers.map((i) => i.value)}
         taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}
+        gstEnabled={business.gstEnabled}
         suppliers={suppliers.rows.map((s) => ({ id: s.id, name: s.name }))}
         initial={{
           mainType: d.mainType,
