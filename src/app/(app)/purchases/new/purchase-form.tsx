@@ -7,6 +7,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
 import { formatMoney } from '@/lib/money'
+import { shopDateString } from '@/lib/date'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -52,7 +53,7 @@ export function PurchaseForm({
   const router = useRouter()
   const [supplier, setSupplier] = useState<PickedParty | null>(null)
   const [branchId, setBranchId] = useState(String(defaultBranchId ?? branches[0]?.id ?? ''))
-  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
+  const [purchaseDate, setPurchaseDate] = useState(shopDateString())
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<Line[]>([newLine()])

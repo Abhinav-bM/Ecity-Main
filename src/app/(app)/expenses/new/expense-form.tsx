@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { shopDateString } from '@/lib/date'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
@@ -29,7 +30,8 @@ export function ExpenseForm({
   canCorrectClosedDays: boolean
 }) {
   const router = useRouter()
-  const today = new Date().toISOString().slice(0, 10)
+  // The shop's today, not the browser's - they differ overnight in India.
+  const today = shopDateString()
 
   const [branchId, setBranchId] = useState(String(defaultBranchId ?? ''))
   const [categoryId, setCategoryId] = useState(String(categories[0]?.id ?? ''))

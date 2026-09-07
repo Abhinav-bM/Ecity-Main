@@ -369,8 +369,13 @@ test.describe('the bill, after it is saved', () => {
     await page.getByRole('button', { name: 'Sold in other system' }).click()
     await page.getByRole('button', { name: 'Mark as sold' }).click()
 
-    // Stock drops now; the daily import fills in the real invoice later.
-    await expect(page.getByText('SOLD_PENDING_IMPORT')).toBeVisible()
+    /*
+     * Stock drops now. This used to assert the raw enum, which only appeared
+     * because M2's placeholder timeline dumped the event payload as JSON; M9
+     * replaced that with a readable history, so assert the badge a person
+     * actually sees.
+     */
+    await expect(page.getByText('Sold (awaiting import)')).toBeVisible()
   })
 })
 

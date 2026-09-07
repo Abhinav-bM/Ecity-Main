@@ -160,10 +160,14 @@ test.describe('as admin', () => {
     await page.getByRole('button', { name: 'Search' }).click()
     await page.getByText(one).and(page.locator(':visible')).first().click()
 
-    // shadcn's CardTitle is a div, not a heading element, so assert on text.
-    await expect(page.getByText('History', { exact: true })).toBeVisible()
-    // "Purchased" is also a detail label, so scope to the timeline entry.
-    await expect(page.locator('ol').getByText('Purchased', { exact: true })).toBeVisible()
+    /*
+     * M2 built a placeholder timeline; M9 replaced it with the real lifecycle
+     * view, so the card is now "Its whole life" and each entry is a sentence
+     * rather than a bare event name. What M2 cares about is unchanged: the
+     * append-only history is on the page and starts with the purchase.
+     */
+    await expect(page.getByText('Its whole life', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('device-timeline')).toContainText('Purchased')
     await expect(page.getByText('Identifiers', { exact: true })).toBeVisible()
     await expect(page.getByText('Primary', { exact: true })).toBeVisible()
     await expectNoHorizontalOverflow(page)

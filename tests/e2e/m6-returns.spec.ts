@@ -100,7 +100,7 @@ test.describe('taking a return', () => {
 
     await page.goto('/returns/new')
     await page.getByRole('searchbox', { name: 'Find the bill' }).fill(invoiceNumber)
-    await page.getByRole('button', { name: 'Find' }).click()
+    await page.getByRole('button', { name: 'Find', exact: true }).click()
     await page.getByTestId('sale-hits').getByRole('button').first().click()
     await expect(page).toHaveURL(/saleId=\d+/)
     await expect(page.getByTestId('returnable-lines')).toBeVisible()
@@ -347,10 +347,15 @@ test.describe('correcting a device', () => {
     await page.getByRole('textbox', { name: 'Colour', exact: true }).fill('Midnight Blue')
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page).toHaveURL(/\/devices\/\d+$/)
-    // Twice, and that is the point: once as the device's colour, and once in
-    // the recorded history showing it was corrected.
+    /*
+     * The correction has to be on the record, not just applied. M2's
+     * placeholder timeline dumped the raw payload, so the new colour appeared
+     * twice; M9 replaced that with a sentence naming the field that moved,
+     * which is the same fact told better. The point of the test is unchanged:
+     * the history shows it was corrected.
+     */
     await expect(page.getByText('Midnight Blue').first()).toBeVisible()
-    await expect(page.getByText('Midnight Blue')).toHaveCount(2)
+    await expect(page.getByTestId('device-timeline')).toContainText('Reclassified: colour')
   })
 })
 

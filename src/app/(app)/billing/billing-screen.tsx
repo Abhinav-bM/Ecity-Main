@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { computeBill } from '@/lib/tax'
 import { formatMoney } from '@/lib/money'
 import { rupeesToPaise } from '@/lib/validation'
+import { shopDateString } from '@/lib/date'
 import { useCart, type CartLine } from '@/stores/cart'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -204,7 +205,9 @@ export function BillingScreen({
   // touches the date when this customer is an exception.
   const defaultDueDate = useMemo(() => {
     const d = new Date(Date.now() + defaultCreditDays * 86_400_000)
-    return d.toISOString().slice(0, 10)
+    // The shop's calendar, not UTC - otherwise the terms shown overnight are
+    // a day out from the ones the server records.
+    return shopDateString(d)
   }, [defaultCreditDays])
 
   if (!hydrated) {

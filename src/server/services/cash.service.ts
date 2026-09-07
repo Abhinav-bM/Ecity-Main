@@ -11,6 +11,7 @@ import {
 } from '@/server/db/schema'
 import { AppError, conflict, notFound } from '@/server/http'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
+import { SHOP_TIME_ZONE, shopDateString } from '@/lib/date'
 
 /**
  * The cash drawer (PRD FR-11.1 – FR-11.5).
@@ -25,15 +26,14 @@ import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permiss
  * nothing.
  */
 
-/** Today where the shop is, not where the server is. */
-export function businessDateFor(when: Date = new Date(), timeZone = 'Asia/Kolkata'): string {
-  // en-CA renders ISO-shaped yyyy-mm-dd, which is what a `date` column wants.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(when)
+/**
+ * Today where the shop is, not where the server is.
+ *
+ * Shares its definition with the browser-side `shopDateString`, so a form's
+ * default date and the drawer it posts into can never disagree.
+ */
+export function businessDateFor(when: Date = new Date(), timeZone = SHOP_TIME_ZONE): string {
+  return shopDateString(when, timeZone)
 }
 
 /**

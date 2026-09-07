@@ -14,6 +14,7 @@ import { Attachments } from '@/components/attachments'
 import { MainTypeBadge, DeviceStatusBadge } from '@/components/main-type-badge'
 import { formatDateTime } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
+import { shopDateString } from '@/lib/date'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getPurchase } from '@/server/services/purchase.service'
@@ -73,7 +74,7 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
             <EditPurchaseMeta
               purchaseId={id}
               supplierInvoiceNumber={detail.purchase.supplierInvoiceNumber}
-              purchaseDate={detail.purchase.purchaseDate.toISOString().slice(0, 10)}
+              purchaseDate={shopDateString(detail.purchase.purchaseDate)}
               notes={detail.purchase.notes}
             />
           ) : null}

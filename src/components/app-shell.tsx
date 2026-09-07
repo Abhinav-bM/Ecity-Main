@@ -38,6 +38,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { BranchSwitcher } from './branch-switcher'
+import { GlobalSearch } from './global-search'
 import { UserMenu } from './user-menu'
 
 type NavItem = {
@@ -232,9 +233,9 @@ export function AppShell({
 
   const footnote = (
     <p className="text-[11px] leading-relaxed text-muted-foreground">
-      Modules M0–M4 complete.
+      Modules M0–M9 complete.
       <br />
-      Credit, returns and reporting arrive in M5 onward.
+      Dashboards and reports arrive in M10 onward.
     </p>
   )
 
@@ -294,6 +295,8 @@ export function AppShell({
           <span className="font-semibold tracking-tight text-primary md:hidden">ECITY</span>
 
           <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-2">
+            {/* PRD FR-30.1 — reachable from every screen, ⌘K or /. */}
+            <GlobalSearch />
             <BranchSwitcher
               branches={branches}
               activeBranchId={activeBranchId}

@@ -71,6 +71,38 @@ async function sellForCash(page: Page, rupees: string) {
   await expect(page).toHaveURL(/\/sales\/\d+$/)
 }
 
+/**
+ * Start from an open drawer, on whatever branch the closing screen defaults to.
+ *
+ * Deliberately does NOT pin a branch. The active branch is per SESSION, and
+ * every test signs in afresh - so pinning one here would close that branch's
+ * day while the next test, starting from the default again, reopened a
+ * different one. The first branch would then stay closed for the rest of the
+ * run, and the next spec's billing would fail with no hint as to why.
+ */
+async function startFromAnOpenDay(page: Page) {
+  await page.goto('/closing')
+  const reopen = page.getByRole('button', { name: 'Reopen this day' })
+  if ((await reopen.count()) === 0) return
+  await reopen.click()
+  await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Reset for testing')
+  await page.getByRole('button', { name: 'Reopen day' }).click()
+  await expect(page.getByTestId('close-day')).toBeVisible()
+}
+
+/** Close today for the active branch, unless it already is. */
+async function closeTheDayIfOpen(page: Page) {
+  await page.goto('/closing')
+  if ((await page.getByRole('button', { name: 'Reopen this day' }).count()) > 0) return
+
+  const expected = await page.getByTestId('closing-expected').innerText()
+  await page
+    .getByRole('textbox', { name: 'Counted cash (₹)', exact: true })
+    .fill(parseRupees(expected).toFixed(2))
+  await page.getByRole('button', { name: 'Close the day' }).click()
+  await expect(page.getByTestId('closed-summary')).toBeVisible()
+}
+
 async function recordExpense(page: Page, amount: string, description: string) {
   await page.goto('/expenses/new')
   await page.getByRole('textbox', { name: 'Amount (₹)', exact: true }).fill(amount)
@@ -251,6 +283,16 @@ test.describe('closing the day', () => {
   test('a shortage is shown, and a later correction does not rewrite the signature', async ({
     page,
   }) => {
+    /*
+     * Start from an open day whatever ran before.
+     *
+     * A closed drawer refuses new cash, so if an earlier run left today closed
+     * this test cannot even bill - and it would look like a billing failure
+     * rather than what it is. A test that only passes on a virgin database is
+     * not much of a test.
+     */
+    await startFromAnOpenDay(page)
+
     await sellForCash(page, '8000')
     await recordExpense(page, '100', `E2E Close ${unique()}`)
 
@@ -282,6 +324,17 @@ test.describe('closing the day', () => {
   })
 
   test('the closing appears in the history and the day can be reopened', async ({ page }) => {
+    /*
+     * Close the day if it is not already closed.
+     *
+     * This used to lean on the previous test having closed it, which made the
+     * pair only runnable together and in order - and when the first one
+     * failed, this one left the day CLOSED for everything that came after.
+     * A closed drawer refuses cash, so the next spec's billing broke with no
+     * hint as to why.
+     */
+    await closeTheDayIfOpen(page)
+
     await page.goto('/closing/history')
     await expect(page.locator('[data-testid="closing-row"]:visible').first()).toBeVisible()
 

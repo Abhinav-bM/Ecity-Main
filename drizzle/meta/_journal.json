@@ -155,6 +155,13 @@
       "when": 1788793906055,
       "tag": "0021_m8_transfers",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788800674414,
+      "tag": "0022_m9_search_indexes",
+      "breakpoints": true
     }
   ]
 }

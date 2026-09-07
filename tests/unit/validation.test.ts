@@ -34,3 +34,31 @@ describe('create user', () => {
     expect(parsed.roleId).toBe(3)
   })
 })
+
+describe('the shop day (M9 — found by a test run after midnight IST)', () => {
+  it('is the shop’s calendar day, not the browser’s UTC one', async () => {
+    const { shopDateString } = await import('@/lib/date')
+
+    /*
+     * 18:45 UTC on 7 September is already 00:15 on the 8th in India. Between
+     * midnight and 05:30 every night the two disagree, and a form defaulting
+     * to the UTC day would post an expense into yesterday - a day that may
+     * already be closed - while capping its own picker below the day the shop
+     * is actually standing in.
+     */
+    const lateEvening = new Date('2026-09-07T18:45:00Z')
+    expect(lateEvening.toISOString().slice(0, 10)).toBe('2026-09-07')
+    expect(shopDateString(lateEvening)).toBe('2026-09-08')
+
+    // Comfortably inside one day, both agree.
+    expect(shopDateString(new Date('2026-09-07T09:00:00Z'))).toBe('2026-09-07')
+  })
+
+  it('matches what the server posts money against', async () => {
+    const { shopDateString } = await import('@/lib/date')
+    const { businessDateFor } = await import('@/server/services/cash.service')
+    const when = new Date('2026-09-07T20:10:00Z')
+    // One definition, so a form's default and its drawer cannot drift.
+    expect(shopDateString(when)).toBe(businessDateFor(when))
+  })
+})

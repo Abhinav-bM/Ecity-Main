@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 321 unit and integration tests, 676
+Automated tests cover the mechanics — 341 unit and integration tests, 704
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -1152,3 +1152,84 @@ otherwise.
 - **No printed barcode labels**; a scanner types the IMEI into the scan box
   like a keyboard, which is how these scanners work anyway
 - **No transfer between businesses**, only between branches of one
+
+# M9 — Global Search & IMEI Device History
+
+The flagship. Sign in as **admin** unless a step says otherwise.
+
+## 1. The search box (FR-30.1)
+
+- [ ] A **Find anything** box sits in the header on every screen. *Deliberately
+      not called "Search": every list has its own Search button that filters
+      that list, and this does something different*
+- [ ] **⌘K** (or Ctrl+K) opens it from anywhere; **/** opens it too, unless you
+      are already typing in a field
+- [ ] **Escape** closes it
+- [ ] On a phone it collapses to a magnifying-glass button
+- [ ] Typing one character says to type more; nonsense says *Nothing matched*
+
+## 2. Finding a handset (FR-30.5) — *the important one*
+
+- [ ] Type a **full IMEI** → it opens that device page immediately, without a
+      list. *A complete IMEI is unambiguous; making someone click a list of one
+      is wasted work at a counter*
+- [ ] Type the **first 10–12 digits** → a list of candidates, and you stay put
+- [ ] Click one → its device page
+- [ ] Register a **dual-SIM** handset (raise *IMEI fields per device* in
+      Settings → Business first)
+- [ ] Search its **second** IMEI → the same device page as the first.
+      *A customer reads out whichever number is printed nearest*
+
+## 3. The identity header
+
+- [ ] The device page shows **main type** and **NEW CUT** where it applies
+- [ ] **Every** identifier is listed, with the primary one marked
+- [ ] A multi-IMEI handset says how many identifiers it has
+
+## 4. The whole life (FR-30.6)
+
+Take one handset through: purchase → transfer out → transfer in → sell on
+credit → return → inspect → correct something.
+
+- [ ] The timeline shows **all seven** stages, oldest first
+- [ ] Each entry is a **sentence**: *Sold on INV/… to Anil*, not just *SOLD*
+- [ ] A transfer entry names **both branches**
+- [ ] A reclassification says **what changed**, not just that something did
+- [ ] Every entry with a document has a **working link** — click each one and
+      land on that invoice, purchase, return or transfer
+- [ ] **What it sold for** shows the price from the bill, the discount on that
+      line, the customer, the cost and margin if you may see cost, the
+      **payment status**, and **paid versus still owing**
+- [ ] The Details card shows the **previous branch** for a handset that has
+      moved, and a dash for one that never has
+- [ ] A device sold, returned and sold again says so
+
+## 5. Everything else searchable (FR-30.2 – FR-30.4)
+
+- [ ] **Customer name**, **phone**, **email** all find the customer
+- [ ] **Supplier name** finds the supplier
+- [ ] **Product name**, **SKU** and **barcode** find the product
+- [ ] An **invoice number** finds the bill
+- [ ] Results are **grouped** by kind, with devices showing their type
+
+## 6. Permissions (FR-30.7)
+
+- [ ] Signed in as the **branch manager** (MAIN only), search a customer who
+      has only ever bought at **North** → **no results**
+- [ ] A customer who has bought at **both** branches → found by both
+- [ ] Search an IMEI sitting at **North** as that manager → no results
+- [ ] Signed in as **staff**, searching still works for what they may see, and
+      returns nothing they may not
+
+## 7. Speed (PRD §9.1)
+
+- [ ] Search results appear in well under a second
+- [ ] A device with a long history opens in **under 1.5 s**
+
+## What M9 does not do
+
+- **No saved or recent searches**
+- **No fuzzy spelling correction** — a mistyped name finds nothing
+- **No search across voided documents** unless you open them directly
+- **The timeline shows events, not field-level diffs** beyond naming what a
+  reclassification changed; the audit log has the full before-and-after
