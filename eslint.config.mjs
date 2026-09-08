@@ -53,6 +53,18 @@ export default tseslint.config(
     },
   },
   {
+    /*
+     * Build scripts and config files are plain JavaScript running in Node.
+     *
+     * The block above only reaches .ts/.tsx, so `process` and `console` in a
+     * .mjs script were undefined globals — which CI catches and a local
+     * `eslint src tests` does not.
+     */
+    files: ['**/*.mjs', '**/*.js', 'scripts/**'],
+    languageOptions: { globals: globals.node },
+    rules: { 'no-console': 'off' },
+  },
+  {
     // Tests and scripts may be looser.
     files: ['tests/**/*.ts', 'src/server/db/seed.ts', 'src/server/db/migrate.ts'],
     rules: {
