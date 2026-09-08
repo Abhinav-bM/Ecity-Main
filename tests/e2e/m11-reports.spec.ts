@@ -399,3 +399,34 @@ test.describe('import permissions', () => {
     await expect(page).toHaveURL(/\/dashboard$/)
   })
 })
+
+/**
+ * M14 — the owner's own copy of everything (PRD FR-32.3).
+ *
+ * Not a system backup: that runs on the server (docs/04 §7). This is what the
+ * owner would still have if the software went away.
+ */
+test.describe('your data', () => {
+  test('the owner can see what an export contains, and take it', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    await page.goto('/settings/data')
+
+    await expect(page.getByRole('heading', { name: 'Your data', level: 1 })).toBeVisible()
+    await expect(page.getByTestId('export-contents')).toContainText('Customers')
+    await expect(page.getByTestId('export-contents')).toContainText('Devices')
+    // Says plainly what it is not, so nobody treats it as a server backup.
+    await expect(page.getByText(/not a system backup/i)).toBeVisible()
+
+    const download = page.waitForEvent('download')
+    await page.getByRole('link', { name: /Download everything/ }).click()
+    const file = await download
+    expect(file.suggestedFilename()).toMatch(/ecity-full-export-\d{4}-\d{2}-\d{2}\.csv/)
+  })
+
+  test('a manager cannot take the whole business', async ({ page }) => {
+    // Every customer, every price, every figure — the owner's decision alone.
+    await signIn(page, USERS.manager)
+    await page.goto('/settings/data')
+    await expect(page).toHaveURL(/\/dashboard$/)
+  })
+})

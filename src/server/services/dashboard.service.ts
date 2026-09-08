@@ -4,7 +4,7 @@ import { branch, branchStock, cashDrawerDay, dailyClosing, product, sale } from 
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
 import { shopDateString } from '@/lib/date'
-import { customerDues } from './customer-ledger.service'
+import { customerDuesTotalPaise } from './customer-ledger.service'
 import { supplierOutstanding } from './supplier-ledger.service'
 import { expectedCashPaise } from './cash.service'
 import {
@@ -52,7 +52,9 @@ export async function dashboard(actor: AuthUser, branchIds?: number[]) {
         ? listAccounts(actor)
         : Promise.resolve([] as AccountBalance[]),
       hasPermission(actor, 'customer_payment.view')
-        ? customerDues(actor, { page: 1, pageSize: 1 })
+        // The figure only. Aging every open bill to print one total was the
+        // slowest thing on this page by an order of magnitude (§9.1 pass).
+        ? customerDuesTotalPaise(actor)
         : Promise.resolve(null),
       hasPermission(actor, 'supplier_payment.view')
         ? supplierOutstanding(actor, 1, 1)
@@ -71,7 +73,7 @@ export async function dashboard(actor: AuthUser, branchIds?: number[]) {
     profit,
     cashPaise,
     accountsPaise: accounts.reduce((sum, a) => sum + a.balancePaise, 0n),
-    customerDuesPaise: dues?.totalPaise ?? 0n,
+    customerDuesPaise: dues ?? 0n,
     supplierDuesPaise: supplierDues?.totalOwedPaise ?? 0n,
     alerts,
   }

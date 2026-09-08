@@ -471,30 +471,32 @@ You are running your own database now, so backups are entirely your responsibili
 | `pg_dump` to Cloudflare R2 | Bad migration, wrong DELETE, provider outage | Nightly, off-site |
 | Restore drill | Backups that were never actually valid | **Monthly, by hand** |
 
-### 7.1 `backup.sh`
+### 7.1 `scripts/backup.sh`
+
+**It ships with the app** — `scripts/backup.sh` in the repository, so it is
+version-controlled and reviewed like anything else rather than pasted onto a
+server once and forgotten.
+
+It does three things a hand-written dump does not, each of which has cost
+somebody their data somewhere:
+
+- **It fails loudly.** A backup that exits 0 after a failed dump buys a year
+  of false confidence and is discovered on the day it is needed.
+- **It dumps with `-Z 0`** so restic can deduplicate between snapshots.
+  Compressed dumps differ completely each night, and seventeen retained
+  snapshots would then cost seventeen full copies — which is what keeps the
+  history inside R2's free 10 GB.
+- **It checks what it produced.** A dump under a size floor is refused, and
+  the archive's table of contents is read back with `pg_restore --list`
+  before it is called a backup. An empty dump restores perfectly into an
+  empty database; silence is the failure mode worth designing against.
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-cd /home/ecity/app
-STAMP=$(date +%F-%H%M)
-OUT=/var/backups/ecity
-mkdir -p "$OUT"
+# on the server, where the database is a container
+cd /home/ecity/app && ./scripts/backup.sh
 
-# -Z 0 = no Postgres compression, so restic can deduplicate
-# between snapshots. Without it every nightly backup stores a
-# full fresh copy and the R2 free tier fills up fast.
-docker compose exec -T db \
-  pg_dump -U ecity -Fc -Z 0 ecity > "$OUT/db-$STAMP.dump"
-
-export RESTIC_REPOSITORY="s3:https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com/ecity-backups"
-export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-export RESTIC_PASSWORD="$RESTIC_PASSWORD"
-
-restic backup "$OUT"
-restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
-find "$OUT" -name 'db-*.dump' -mtime +3 -delete
+# anywhere with a connection string, no restic
+DATABASE_URL=... ./scripts/backup.sh --local
 ```
 
 With `-Z 0` and the retention below, seventeen retained snapshots deduplicate down to roughly the size of one or two — which is what keeps the whole backup history inside Cloudflare R2's free 10 GB.
@@ -510,26 +512,29 @@ A nightly-only schedule means a disk failure at 8 PM loses **everything entered 
 
 ### 7.2 The monthly restore drill
 
-Put a recurring reminder in your calendar. It takes ten minutes.
+Put a recurring reminder in your calendar. It takes ten minutes, and it is
+also a script — `scripts/restore-drill.sh` — because a drill somebody has to
+remember the steps for is a drill that gets skipped.
 
 ```bash
-# 1. pull the latest backup down
-restic restore latest --target /tmp/restore
-
-# 2. load it into a scratch database
-docker compose exec -T db createdb -U ecity ecity_drill
-docker compose exec -T db pg_restore -U ecity -d ecity_drill \
-  /tmp/restore/var/backups/ecity/db-<stamp>.dump
-
-# 3. confirm it is real data, not an empty shell
-docker compose exec -T db psql -U ecity -d ecity_drill \
-  -c "select count(*) from sale; select count(*) from device_unit;"
-
-# 4. clean up and note how long the whole thing took
-docker compose exec -T db dropdb -U ecity ecity_drill
+# newest local dump, or name one
+restic restore latest --target /tmp/restore     # only if pulling from R2
+./scripts/restore-drill.sh
 ```
 
-If the counts look right, your backups work. If you have never done this, **you do not have backups** — you have files you hope are backups.
+It restores into a **scratch** database (never over the live one — finding out
+a backup is bad on top of real data is the disaster), then reports:
+
+- how many sales, devices, ledger entries and cash movements came back;
+- whether the **append-only guards** came back *and still refuse a write* — it
+  attempts a forbidden update and expects to be rejected. A restored database
+  that is writable in ways the live one never was is the copy somebody would
+  promote on a bad day;
+- **how long the restore took.** Write that number down: it is how long the
+  shop is shut for.
+
+If the counts look right, your backups work. If you have never done this,
+**you do not have backups** — you have files you hope are backups.
 
 ---
 

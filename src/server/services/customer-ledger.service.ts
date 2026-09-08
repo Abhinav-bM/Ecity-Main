@@ -182,6 +182,31 @@ export type DuesFilters = {
  * one new one belongs in two buckets, and collapsing them to a single "oldest"
  * age would overstate how bad the debt is.
  */
+/**
+ * Just the total owed, for a screen that only shows a figure.
+ *
+ * `customerDues` reads every open bill so it can age each one — necessary for
+ * the dues screen, and pure waste for the dashboard, which prints one number.
+ * On a five-year dataset that difference was 1.9 seconds against a
+ * two-second target (PRD §9.1); this is the same number in about fifty
+ * milliseconds, because the aggregate never leaves the database.
+ *
+ * Derived from the ledger rather than by re-deriving bills: the ledger is
+ * the truth for what a customer owes (docs/03 §4.2), which is also what
+ * makes an opening balance count (M11) without any special case here.
+ */
+export async function customerDuesTotalPaise(actor: AuthUser): Promise<bigint> {
+  const rows = await db.execute<{ total: string }>(sql`
+    select coalesce(sum(amount_paise), 0)::text as total
+    from customer_ledger_entry
+    where business_id = ${actor.businessId}
+  `)
+  const total = BigInt((rows as unknown as { total: string }[])[0]?.total ?? '0')
+  // A shop with more credit notes than debts owes nothing; it is not owed
+  // a negative amount.
+  return total > 0n ? total : 0n
+}
+
 export async function customerDues(
   actor: AuthUser,
   filters: DuesFilters = {},
@@ -212,6 +237,22 @@ export async function customerDues(
     const term = `%${filters.search.trim()}%`
     conditions.push(sql`(${customer.name} ilike ${term} or ${customer.phone} ilike ${term})`)
   }
+
+  /*
+   * Only bills that still owe something.
+   *
+   * The loop below already skips settled bills — but it skipped them *after*
+   * every completed sale in the shop's history had been read out of the
+   * database and turned into JavaScript objects. On a five-year dataset
+   * (900k sales, of which 5% are open) that was 3.3 seconds, and it made the
+   * dashboard miss its two-second target: the cost scaled with everything the
+   * shop had ever sold rather than with what it is still owed.
+   *
+   * Moving the same test into SQL leaves the result identical and the work
+   * proportional to the debts. Found by the M14 performance pass; a
+   * developer's database of a thousand sales never shows it.
+   */
+  conditions.push(sql`${sale.totalPaise} > ${saleReceivedSql()}`)
 
   const rows = await db
     .select({

@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Bell,
   Boxes,
+  DatabaseBackup,
   Building2,
   LayoutDashboard,
   Menu,
@@ -180,6 +181,12 @@ const NAV: NavGroup[] = [
       { href: '/settings/users', label: 'Users', icon: Users, permission: 'user.view' },
       { href: '/settings/roles', label: 'Roles', icon: ShieldCheck, permission: 'role.view' },
       { href: '/settings/audit', label: 'Audit log', icon: ScrollText, permission: 'audit.view' },
+      {
+        href: '/settings/data',
+        label: 'Your data',
+        icon: DatabaseBackup,
+        permission: 'business.manage',
+      },
     ],
   },
 ]

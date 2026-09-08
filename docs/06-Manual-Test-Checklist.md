@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 452 unit and integration tests, 904
+Automated tests cover the mechanics — 481 unit and integration tests, 912
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -1693,3 +1693,104 @@ Make each condition, then press **Check now**.
 - **No job queue.** The worker is an interval loop: both jobs are idempotent
   and safe to miss and repeat. The first job that must not be lost is when
   that changes
+
+# M14 — Backup, Data Protection, Hardening & Go-Live
+
+**Delivers.** PRD FR-31.2, FR-31.3, FR-32.1 – FR-32.3, and §9 non-functional
+requirements.
+
+Most of this module is checked by scripts and tests rather than by clicking.
+What is left for a person is the part no test can do: proving the restore
+works on the real server, and watching the shop use it.
+
+## 1. Backups (FR-32.1)
+
+On the **server**, not a developer's machine:
+
+- [ ] `./scripts/backup.sh` completes and prints a size and a table count
+- [ ] The dump lands in R2 (`restic snapshots` lists it)
+- [ ] Break it on purpose — stop the database and run it again. It **fails
+      loudly**, non-zero. *A backup script that exits 0 after a failed dump is
+      worse than none*
+- [ ] The cron line is in place and has run unattended at least once
+- [ ] A failed run reaches you (email or Sentry), not just a log file
+
+## 2. The restore drill (FR-32.1)
+
+- [ ] `./scripts/restore-drill.sh` passes
+- [ ] It reports plausible counts — sales, devices, ledger, cash
+- [ ] It reports **append-only guards enforce: true**
+- [ ] **Write down how long it took.** That is how long the shop is shut for
+- [ ] Do it once more from an R2 snapshot, not a local file. *The local copy
+      is not the backup that survives the server*
+- [ ] Agree the acceptable data-loss window with the shop: four-hourly dumps
+      lose up to four hours. WAL archiving takes it to about five minutes
+
+## 3. The owner's export (FR-32.3)
+
+- [ ] **Settings → Your data** shows the row count and what it contains
+- [ ] **Download everything** produces a CSV with a section per table
+- [ ] It opens in Excel with accents intact
+- [ ] Customers, devices, sales and payments are all in it, as data
+- [ ] It contains **no password hashes** and no reset tokens
+- [ ] It says plainly that it is your data, not a system backup
+- [ ] The export appears in **Recent exports** afterwards
+- [ ] Signed in as a manager (not the owner), the page redirects away
+
+## 4. Nothing is destroyed (FR-31.2, FR-31.3)
+
+- [ ] Void a sale — it stays, marked voided, with its reason
+- [ ] Reverse a purchase — the handsets become voided, and their **history is
+      still there**
+- [ ] Look up one of those IMEIs — the device page still tells its whole story
+- [ ] Book the same IMEI in again on a corrected purchase. *Only the claim on
+      the number was released, not the history*
+- [ ] Void an expense and a customer payment — both stay, marked
+- [ ] There is no button anywhere that deletes money or stock
+
+## 5. Hardening
+
+- [ ] Get the password wrong twenty times quickly — it starts refusing with a
+      wait, before the account lock
+- [ ] **Sign in correctly as many times as you like** — a successful sign-in
+      is never counted. *All the shop's staff share one connection; counting
+      good logins would lock the shop out of its own till after a power cut*
+- [ ] Try from a different device — **that** person can still sign in. *One
+      shop being attacked must not lock out another*
+- [ ] Wait out the window and sign in normally
+- [ ] Request a password reset repeatedly — it is limited the same way
+- [ ] A file link (`/api/files/...`) opened while signed out is refused
+- [ ] The same link, copied and used an hour later, is refused
+- [ ] `npm audit` shows no high or critical advisories
+
+## 6. Speed on real data (§9.1)
+
+Against a full-size database (`scripts/perf-seed.sql`, or the shop's own after
+go-live):
+
+- [ ] Global search on a full IMEI — under half a second
+- [ ] A partial IMEI — under half a second
+- [ ] A device history page — under a second and a half
+- [ ] The dashboard — under two seconds
+- [ ] Twelve months of analytics — under five seconds
+- [ ] Do these at the shop's busiest hour, not at midnight
+
+## 7. Go-live
+
+- [ ] Everything in the Go-Live Checklist (docs/04 §11)
+- [ ] Existing data loaded in the order in docs/04 §10, each step checked
+- [ ] Staff trained: billing, returns, dues, the daily closing
+- [ ] **Two weeks running in parallel with paper**, one branch
+- [ ] At the end of it, cash, stock and dues agree with the paper — or every
+      difference is explained. *This is the real acceptance test*
+
+## What M14 does not do
+
+- **No WAL archiving yet.** Four-hourly dumps mean losing at most four hours.
+  Point-in-time recovery (about five minutes) is roughly half a day of
+  `pgBackRest` setup on the server — recommended for money data, and the
+  decision is the shop's
+- **Rate limiting is per process.** One app container, so this is the whole
+  mechanism; scaling to a second container means moving it to Redis
+- **No automated penetration testing.** The endpoint sweep proves every route
+  declares who may call it; it is not a substitute for someone trying

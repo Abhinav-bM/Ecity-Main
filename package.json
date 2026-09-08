@@ -22,7 +22,11 @@
     "db:sync-roles": "tsx src/server/db/sync-roles.ts",
     "test:e2e:clean": "bash scripts/test-clean-db.sh",
     "prebuild": "node scripts/copy-scanner-wasm.mjs",
-    "predev": "node scripts/copy-scanner-wasm.mjs"
+    "predev": "node scripts/copy-scanner-wasm.mjs",
+    "perf:seed": "psql -d ${PERF_DB_NAME:-ecity_perf} -f scripts/perf-seed.sql",
+    "perf:check": "PERF_DB=1 vitest run tests/integration/perf.integration.test.ts",
+    "backup": "bash scripts/backup.sh",
+    "restore:drill": "bash scripts/restore-drill.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
