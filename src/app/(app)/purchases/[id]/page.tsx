@@ -115,7 +115,20 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
             <TableBody>
               {detail.items.map((i) => (
                 <TableRow key={i.id}>
-                  <TableCell className="font-medium">{i.productName}</TableCell>
+                  <TableCell className="font-medium">
+                    {i.productName}
+                    {/*
+                      What the line stamped on its handsets. Shown here because
+                      a bill for "iPhone 17 × 10" is ambiguous a month later,
+                      and this is where somebody checks it against the
+                      supplier's paperwork.
+                    */}
+                    {[i.storage, i.ram, i.colour, i.variant].some(Boolean) ? (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {[i.storage, i.ram, i.colour, i.variant].filter(Boolean).join(' · ')}
+                      </span>
+                    ) : null}
+                  </TableCell>
                   <TableCell>
                     {i.isSerialised && i.mainType ? (
                       <MainTypeBadge mainType={i.mainType} isNewCut={i.isNewCut} />

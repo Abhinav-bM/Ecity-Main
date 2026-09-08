@@ -13,7 +13,10 @@ import {
 } from '@/components/ui/table'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { listLowStock } from '@/server/services/product.service'
+import { listLowStock, LOW_STOCK_SORTS } from '@/server/services/product.service'
+import { readListView } from '@/lib/list-view'
+import { Pagination } from '@/components/pagination'
+import { SortableHead, SortStrip } from '@/components/sortable-head'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,12 +27,27 @@ export const dynamic = 'force-dynamic'
  * reorder "3 more iPhone 15s" the way you reorder cables, and M10's dead-stock
  * and turnover reports are the right lens for handsets.
  */
-export default async function LowStockPage() {
+const PAGE_SIZE = 25
+
+export default async function LowStockPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   if (!hasPermission(session.user, 'inventory.view')) redirect('/dashboard')
 
-  const rows = await listLowStock(session.user, session.activeBranchId)
+  const p = await searchParams
+  // Shortfall first: what is furthest below its minimum is what to reorder
+  // first, and alphabetical order would bury it.
+  const view = readListView(p, LOW_STOCK_SORTS, { sort: 'shortfall', dir: 'desc' })
+  const { rows, total } = await listLowStock(session.user, session.activeBranchId, {
+    page: view.page,
+    pageSize: PAGE_SIZE,
+    sort: view.sort,
+    dir: view.dir,
+  })
 
   return (
     <div className="space-y-4">
@@ -41,7 +59,7 @@ export default async function LowStockPage() {
         </p>
       </div>
 
-      {rows.length === 0 ? (
+      {total === 0 ? (
         <Card className="p-10 text-center">
           <p className="text-sm font-medium">Nothing is running low.</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -50,6 +68,20 @@ export default async function LowStockPage() {
         </Card>
       ) : (
         <>
+          <SortStrip
+            basePath="/inventory/low-stock"
+            params={p}
+            columns={[
+              ['shortfall', 'Short by'],
+              ['product', 'Product'],
+              ['branch', 'Branch'],
+              ['quantity', 'In stock'],
+              ['minimum', 'Minimum'],
+            ]}
+            active={view.sort}
+            dir={view.dir}
+            className="md:hidden"
+          />
           <div className="grid gap-3 md:hidden" data-testid="low-stock-cards">
             {rows.map((r) => (
               <Card key={`${r.productId}:${r.branchId}`} className="p-4">
@@ -78,12 +110,42 @@ export default async function LowStockPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
+                  <SortableHead
+                    basePath="/inventory/low-stock"
+                    params={p}
+                    column="product"
+                    label="Product"
+                    active={view.sort}
+                    dir={view.dir}
+                  />
+                  {/* SKU is optional on a product, so there is little to sort by. */}
                   <TableHead className="hidden lg:table-cell">SKU</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead className="text-right">In stock</TableHead>
-                  <TableHead className="text-right">Minimum</TableHead>
-                  <TableHead className="text-right">Short by</TableHead>
+                  <SortableHead
+                    basePath="/inventory/low-stock"
+                    params={p}
+                    column="branch"
+                    label="Branch"
+                    active={view.sort}
+                    dir={view.dir}
+                  />
+                  {(
+                    [
+                      ['quantity', 'In stock'],
+                      ['minimum', 'Minimum'],
+                      ['shortfall', 'Short by'],
+                    ] as const
+                  ).map(([column, label]) => (
+                    <SortableHead
+                      key={column}
+                      basePath="/inventory/low-stock"
+                      params={p}
+                      column={column}
+                      label={label}
+                      active={view.sort}
+                      dir={view.dir}
+                      align="right"
+                    />
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -121,6 +183,15 @@ export default async function LowStockPage() {
               </TableBody>
             </Table>
           </Card>
+
+          <Pagination
+            basePath="/inventory/low-stock"
+            params={p}
+            page={view.page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            noun="products"
+          />
         </>
       )}
     </div>

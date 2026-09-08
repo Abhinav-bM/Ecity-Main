@@ -15,6 +15,9 @@ import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listUsers, type UserListItem } from '@/server/services/user.service'
+import { readListView, sortAndPage } from '@/lib/list-view'
+import { Pagination } from '@/components/pagination'
+import { SortableHead, SortStrip } from '@/components/sortable-head'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +41,9 @@ function UserCard({ user }: { user: UserListItem }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-medium">{user.name}</p>
-          <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+          <p className="truncate text-sm text-muted-foreground" data-testid="user-email">
+            {user.email}
+          </p>
         </div>
         <Badge variant={user.isActive ? 'success' : 'muted'} className="shrink-0">
           {user.isActive ? 'Active' : 'Inactive'}
@@ -58,12 +63,37 @@ function UserCard({ user }: { user: UserListItem }) {
   )
 }
 
-export default async function UsersPage() {
+const PAGE_SIZE = 25
+const SORTS = ['name', 'email', 'role', 'lastLogin', 'status'] as const
+
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   if (!hasPermission(session.user, 'user.view')) redirect('/dashboard')
 
-  const users = await listUsers(session.user)
+  const p = await searchParams
+  const view = readListView(p, SORTS, { sort: 'name' })
+  const all = await listUsers(session.user)
+  /*
+   * Fetched whole and paged here: the list is bounded by the business - one
+   * row per employee - and every other screen that reads users wants all of
+   * them. See sortAndPage.
+   */
+  const { rows: users, total } = sortAndPage(all, view, PAGE_SIZE, (u) =>
+    view.sort === 'email'
+      ? u.email
+      : view.sort === 'role'
+        ? u.roleName
+        : view.sort === 'lastLogin'
+          ? (u.lastLoginAt?.getTime() ?? null)
+          : view.sort === 'status'
+            ? Number(u.isActive)
+            : u.name,
+  )
   const canManage = hasPermission(session.user, 'user.manage')
 
   return (
@@ -82,10 +112,24 @@ export default async function UsersPage() {
         ) : null}
       </div>
 
-      {users.length === 0 ? (
+      {total === 0 ? (
         <Card className="p-10 text-center text-sm text-muted-foreground">No users yet.</Card>
       ) : (
         <>
+          <SortStrip
+            basePath="/settings/users"
+            params={p}
+            columns={[
+              ['name', 'Name'],
+              ['email', 'Email'],
+              ['role', 'Role'],
+              ['lastLogin', 'Last signed in'],
+              ['status', 'Status'],
+            ]}
+            active={view.sort}
+            dir={view.dir}
+            className="md:hidden"
+          />
           <div className="grid gap-3 md:hidden" data-testid="user-cards">
             {users.map((u) => (
               <UserCard key={u.id} user={u} />
@@ -96,12 +140,42 @@ export default async function UsersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
+                  {(
+                    [
+                      ['name', 'Name'],
+                      ['email', 'Email'],
+                      ['role', 'Role'],
+                    ] as const
+                  ).map(([column, label]) => (
+                    <SortableHead
+                      key={column}
+                      basePath="/settings/users"
+                      params={p}
+                      column={column}
+                      label={label}
+                      active={view.sort}
+                      dir={view.dir}
+                    />
+                  ))}
+                  {/* Branches is a list per row, so there is nothing to sort by. */}
                   <TableHead>Branches</TableHead>
-                  <TableHead className="hidden lg:table-cell">Last signed in</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableHead
+                    basePath="/settings/users"
+                    params={p}
+                    column="lastLogin"
+                    label="Last signed in"
+                    active={view.sort}
+                    dir={view.dir}
+                    className="hidden lg:table-cell"
+                  />
+                  <SortableHead
+                    basePath="/settings/users"
+                    params={p}
+                    column="status"
+                    label="Status"
+                    active={view.sort}
+                    dir={view.dir}
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -126,6 +200,15 @@ export default async function UsersPage() {
               </TableBody>
             </Table>
           </Card>
+
+          <Pagination
+            basePath="/settings/users"
+            params={p}
+            page={view.page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            noun="users"
+          />
         </>
       )}
     </div>

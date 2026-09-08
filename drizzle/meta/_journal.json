@@ -169,6 +169,13 @@
       "when": 1788848317352,
       "tag": "0023_m11_reports_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788866081617,
+      "tag": "0024_purchase_line_specs",
+      "breakpoints": true
     }
   ]
 }

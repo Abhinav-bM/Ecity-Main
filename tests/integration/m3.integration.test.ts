@@ -188,6 +188,125 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
     })
   })
 
+  /*
+   * The specs a handset arrived with, captured where it arrived.
+   *
+   * Before this the purchase knew only the product and the IMEI, so ten
+   * iPhones came in as ten handsets that did not know they were 256GB green -
+   * somebody had to open each device afterwards and type it in.
+   */
+  describe('specs on a purchase line', () => {
+    it('stamps the line specs onto every handset it creates', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 3,
+            unitCostPaise: rs(50000),
+            mainType: 'USED',
+            ram: '8 GB',
+            storage: '256 GB',
+            colour: 'Green',
+            variant: 'Pro Max',
+            identifiers: [imei(70), imei(71), imei(72)],
+          },
+        ],
+      })
+
+      const devices = await db
+        .select()
+        .from(schema.deviceUnit)
+        .where(inArray(schema.deviceUnit.id, result.deviceIds))
+
+      expect(devices).toHaveLength(3)
+      for (const d of devices) {
+        expect(d.ram).toBe('8 GB')
+        expect(d.storage).toBe('256 GB')
+        expect(d.colour).toBe('Green')
+        expect(d.variant).toBe('Pro Max')
+      }
+    })
+
+    it('lets one handset in the batch differ, and leaves the rest alone', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 3,
+            unitCostPaise: rs(50000),
+            mainType: 'USED',
+            ram: '8 GB',
+            storage: '256 GB',
+            colour: 'Green',
+            units: [
+              { identifier: imei(73) },
+              // The odd one out: a different colour and its own battery.
+              { identifier: imei(74), colour: 'Black', batteryHealthPercent: 87 },
+              { identifier: imei(75) },
+            ],
+          },
+        ],
+      })
+
+      const devices = await db
+        .select()
+        .from(schema.deviceUnit)
+        .where(inArray(schema.deviceUnit.id, result.deviceIds))
+
+      const odd = devices.find((d) => d.primaryIdentifier === imei(74))!
+      const rest = devices.filter((d) => d.primaryIdentifier !== imei(74))
+
+      expect(odd.colour).toBe('Black')
+      expect(odd.batteryHealthPercent).toBe(87)
+      // It still takes the line's specs for everything it did not override.
+      expect(odd.storage).toBe('256 GB')
+      expect(odd.ram).toBe('8 GB')
+
+      expect(rest.map((d) => d.colour)).toEqual(['Green', 'Green'])
+      expect(rest.every((d) => d.batteryHealthPercent === null)).toBe(true)
+    })
+
+    it('keeps the specs on the line, so the bill still reads right later', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 1,
+            unitCostPaise: rs(50000),
+            mainType: 'USED',
+            storage: '512 GB',
+            colour: 'Blue',
+            identifiers: [imei(76)],
+          },
+        ],
+      })
+
+      const detail = await getPurchase(actor, result.id)
+      const line = detail.items.find((i) => i.isSerialised)!
+      expect(line.storage).toBe('512 GB')
+      expect(line.colour).toBe('Blue')
+    })
+
+    it('takes no specs on a counted line', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        lines: [
+          // Specs on a box of cables mean nothing; they must not be stored.
+          { productId: cableProductId, quantity: 2, unitCostPaise: rs(100), colour: 'Green' },
+        ],
+      })
+      const detail = await getPurchase(actor, result.id)
+      expect(detail.items[0]!.colour).toBeNull()
+    })
+  })
+
   describe('gapless numbering under concurrency', () => {
     it('ten simultaneous purchases take ten distinct numbers', async () => {
       // The bug this guards against: with NULLS NOT DISTINCT missing, every

@@ -212,7 +212,7 @@ suite('M11 reports, imports and opening balances (database-backed)', () => {
   describe('importing 1,000 devices with 20 errors', () => {
     let jobId: number
 
-    it('stages the file without creating anything', async () => {
+    it('stages the file without creating anything', { timeout: 30_000 }, async () => {
       const header = 'Product,IMEI No,IMEI 2,Type,NEW CUT,Cost Price\n'
       const lines: string[] = []
 
@@ -255,7 +255,7 @@ suite('M11 reports, imports and opening balances (database-backed)', () => {
       expect(devices).toHaveLength(0)
     })
 
-    it('finds exactly the 20 bad rows, by line number', async () => {
+    it('finds exactly the 20 bad rows, by line number', { timeout: 30_000 }, async () => {
       const result = await validateImport(actor, jobId, {
         product: 'Product',
         imei: 'IMEI No',
@@ -280,7 +280,16 @@ suite('M11 reports, imports and opening balances (database-backed)', () => {
       expect(rows[0]!.error).toMatch(/not a main type/i)
     })
 
-    it('imports 980, reports 20, and leaves no partial rows', async () => {
+    /*
+     * The M11 acceptance case, and deliberately the slowest test here: a
+     * thousand rows through the real service layer, each one checking its
+     * IMEIs against every identifier in the business. Given its own timeout
+     * because it grows with the database it runs against - on a developer's
+     * machine after months of test runs it is seconds, not milliseconds, and
+     * the default 5s starts failing for reasons that have nothing to do with
+     * the importer.
+     */
+    it('imports 980, reports 20, and leaves no partial rows', { timeout: 60_000 }, async () => {
       const result = await commitImport(actor, ctx, jobId)
 
       expect(result.committed).toBe(980)

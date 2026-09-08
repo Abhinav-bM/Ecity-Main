@@ -116,6 +116,84 @@ test.describe('recording a purchase', () => {
     await expect(page.getByText(a).and(page.locator(':visible')).first()).toBeVisible()
   })
 
+  /*
+   * The specs the goods arrived with, typed where they arrive.
+   *
+   * Before this a purchase knew the product and the IMEI and nothing else, so
+   * ten iPhones came in as ten handsets that did not know they were 256GB
+   * green - and somebody opened each device afterwards to type it in.
+   */
+  test('a handset knows its specs the moment it is booked in', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E SpecSup ${id}`)
+    await createProduct(page, `E2E SpecPhone ${id}`, 'Mobiles (IMEI)')
+
+    const a = imei(30)
+    const b = imei(31)
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E SpecSup ${id}`)
+    await pickProduct(page, `E2E SpecPhone ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('50000')
+
+    // One combination for the whole line.
+    await page.getByRole('textbox', { name: 'RAM', exact: true }).fill('8 GB')
+    await page.getByRole('textbox', { name: 'Storage', exact: true }).fill('256 GB')
+    await page.getByRole('textbox', { name: 'Colour', exact: true }).fill('Green')
+
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(a)
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(b)
+
+    // ...except the second piece, which is black.
+    await page.getByRole('button', { name: 'Specs for IMEI 2 on line 1' }).click()
+    await page.getByRole('textbox', { name: 'IMEI 2 colour' }).fill('Black')
+    await page.getByRole('textbox', { name: 'IMEI 2 battery health %' }).fill('87')
+
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+    // The bill itself says what it booked in, for checking against the
+    // supplier's paperwork a month later.
+    await expect(page.getByText(/256 GB · 8 GB · Green/)).toBeVisible()
+
+    // The first handset took the line's specs...
+    await page.goto('/devices')
+    await page.getByLabel('Search devices').fill(a)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name: a }).first().click()
+    await expect(page.getByText(/256 GB/).first()).toBeVisible()
+    await expect(page.getByText(/Green/).first()).toBeVisible()
+
+    // ...and the odd one kept its own, without losing the rest.
+    await page.goto('/devices')
+    await page.getByLabel('Search devices').fill(b)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name: b }).first().click()
+    await expect(page.getByText(/Black/).first()).toBeVisible()
+    await expect(page.getByText(/256 GB/).first()).toBeVisible()
+  })
+
+  test('a line can be copied for the next combination in the same shipment', async ({ page }) => {
+    const id = unique()
+    await createProduct(page, `E2E CopyPhone ${id}`, 'Mobiles (IMEI)')
+
+    await page.goto('/purchases/new')
+    await pickProduct(page, `E2E CopyPhone ${id}`)
+    await page.getByRole('textbox', { name: 'Storage', exact: true }).fill('256 GB')
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(imei(40))
+
+    await page.getByRole('button', { name: 'Duplicate line 1' }).click()
+
+    // The second line keeps the product and the specs...
+    await expect(page.getByTestId('purchase-line')).toHaveCount(2)
+    const second = page.getByTestId('purchase-line').nth(1)
+    await expect(second.getByRole('textbox', { name: 'Storage', exact: true })).toHaveValue(
+      '256 GB',
+    )
+    // ...and never the identifiers, which belong to the handsets already typed.
+    await expect(second.getByRole('textbox', { name: 'Line 2 IMEI 1' })).toHaveValue('')
+  })
+
   test('refuses a quantity that does not match the identifiers entered', async ({ page }) => {
     const id = unique()
     await createSupplier(page, `E2E Mismatch ${id}`)

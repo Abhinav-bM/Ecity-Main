@@ -27,6 +27,16 @@ export default async function RolesPage() {
           A role is a named set of permissions. Changing one signs the affected users out so the
           change takes effect immediately.
         </p>
+        {/*
+          Deliberately not paged. Roles are a master-detail editor over a list
+          bounded by the business - a shop defines a handful - and paging the
+          picker would mean turning a page to reach the role you came to edit.
+          The count is here so the screen still states its own size, which is
+          the half of pagination that was actually missing.
+        */}
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="role-count">
+          {roles.length} role{roles.length === 1 ? '' : 's'}
+        </p>
       </div>
 
       {canManage ? (

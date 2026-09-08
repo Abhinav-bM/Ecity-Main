@@ -33,6 +33,24 @@ import {
  * purchase can never be half-recorded (docs/02 §2.2 rule 3).
  */
 
+/**
+ * One handset on a serialised line.
+ *
+ * Every field except the identifier is optional and falls back to the line.
+ * Nine of ten pieces in a shipment are identical and the tenth is not, so the
+ * line carries the batch and a unit says only how it differs. Battery health
+ * has no line default on purpose - on used stock it is genuinely different on
+ * every handset, and a default would be a number somebody trusted.
+ */
+export type PurchaseUnitInput = {
+  identifier: string
+  variant?: string
+  ram?: string
+  storage?: string
+  colour?: string
+  batteryHealthPercent?: number | null
+}
+
 export type PurchaseLineInput = {
   productId: number
   quantity: number
@@ -42,9 +60,47 @@ export type PurchaseLineInput = {
   taxPaise?: bigint
   /** Serialised lines only. One per unit; length must equal quantity. */
   identifiers?: string[]
+  /**
+   * The same units, with their own specs. Supply this *or* `identifiers` -
+   * `identifiers` is the short form for a batch that is uniform, and is what
+   * the tests and the API use when they have nothing to vary.
+   */
+  units?: PurchaseUnitInput[]
   mainType?: MainType
   isNewCut?: boolean
   newCutNotes?: string
+  /** Line specs, stamped onto every unit that does not override them. */
+  variant?: string
+  ram?: string
+  storage?: string
+  colour?: string
+}
+
+/**
+ * The units a line describes, however they were given.
+ *
+ * One list from here on, so nothing downstream has to know which form the
+ * caller used.
+ */
+export function unitsOf(line: PurchaseLineInput): PurchaseUnitInput[] {
+  if (line.units?.length) {
+    return line.units.filter((u) => u.identifier.trim())
+  }
+  return (line.identifiers ?? [])
+    .filter((v) => v.trim())
+    .map((identifier) => ({ identifier }))
+}
+
+/** A unit's spec, or the line's if it did not say. */
+function specFor(line: PurchaseLineInput, unit: PurchaseUnitInput) {
+  const pick = (a?: string, b?: string) => a?.trim() || b?.trim() || undefined
+  return {
+    variant: pick(unit.variant, line.variant),
+    ram: pick(unit.ram, line.ram),
+    storage: pick(unit.storage, line.storage),
+    colour: pick(unit.colour, line.colour),
+    batteryHealthPercent: unit.batteryHealthPercent ?? null,
+  }
 }
 
 export type PurchaseInput = {
@@ -86,7 +142,7 @@ async function validateLines(actor: AuthUser, lines: PurchaseLineInput[], tx: Db
     }
 
     if (p.isSerialised) {
-      const supplied = (line.identifiers ?? []).filter((v) => v.trim()).length
+      const supplied = unitsOf(line).length
       if (!line.mainType) {
         throw new AppError(`${p.name}: choose a main type for this line.`, 422, 'NO_MAIN_TYPE')
       }
@@ -104,7 +160,7 @@ async function validateLines(actor: AuthUser, lines: PurchaseLineInput[], tx: Db
           'IDENTIFIER_COUNT_MISMATCH',
         )
       }
-    } else if (line.identifiers?.some((v) => v.trim())) {
+    } else if (unitsOf(line).length > 0) {
       throw new AppError(
         `${p.name} is counted by quantity and takes no identifiers.`,
         422,
@@ -190,6 +246,10 @@ export async function createPurchase(
             mainType: p.isSerialised ? (line.mainType ?? null) : null,
             isNewCut: p.isSerialised ? (line.isNewCut ?? false) : false,
             newCutNotes: line.newCutNotes?.trim() || null,
+            variant: p.isSerialised ? line.variant?.trim() || null : null,
+            ram: p.isSerialised ? line.ram?.trim() || null : null,
+            storage: p.isSerialised ? line.storage?.trim() || null : null,
+            colour: p.isSerialised ? line.colour?.trim() || null : null,
           })
           .returning()
       )[0]!
@@ -199,16 +259,22 @@ export async function createPurchase(
         // and enforces the classification and duplicate rules.
         const identifierType = await identifierTypeForProduct(line.productId, tx)
         const unitCost = line.unitCostPaise
-        for (const value of line.identifiers!.filter((v) => v.trim())) {
+        for (const unit of unitsOf(line)) {
           const device = await createDevice(
             actor,
             ctx,
             {
               productId: line.productId,
-              identifiers: [value],
+              identifiers: [unit.identifier],
               mainType: line.mainType!,
               isNewCut: line.isNewCut,
               newCutNotes: line.newCutNotes,
+              /*
+               * The specs the goods actually arrived with, so a handset is
+               * complete the moment it is booked in. Before this they had to
+               * be typed in afterwards, one device screen at a time.
+               */
+              ...specFor(line, unit),
               purchasePricePaise: unitCost,
               supplierId: input.supplierId,
               purchaseDate: input.purchaseDate ?? new Date(),
@@ -445,6 +511,10 @@ export async function getPurchase(actor: AuthUser, id: number) {
       isSerialised: purchaseItem.isSerialised,
       mainType: purchaseItem.mainType,
       isNewCut: purchaseItem.isNewCut,
+      variant: purchaseItem.variant,
+      ram: purchaseItem.ram,
+      storage: purchaseItem.storage,
+      colour: purchaseItem.colour,
     })
     .from(purchaseItem)
     .innerJoin(product, eq(product.id, purchaseItem.productId))

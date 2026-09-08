@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
+import { Copy, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
 import { formatMoney } from '@/lib/money'
@@ -19,6 +19,23 @@ import { ProductPicker, type PickedProduct } from '@/components/product-picker'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
 import { AppSelect } from '@/components/app-select'
 
+/**
+ * One handset on a serialised line.
+ *
+ * The specs are here as well as on the line because a shipment is *mostly*
+ * uniform: the line fills these in and a unit says only how it differs.
+ * Battery health has no line default - on used stock it is different on every
+ * piece, and a default would be a number somebody trusted.
+ */
+type Unit = {
+  identifier: string
+  variant: string
+  ram: string
+  storage: string
+  colour: string
+  battery: string
+}
+
 type Line = {
   key: string
   product: PickedProduct | null
@@ -27,9 +44,23 @@ type Line = {
   discount: string
   mainType: (typeof MAIN_TYPES)[number]
   isNewCut: boolean
+  /** Stamped onto every unit on this line that does not override it. */
+  variant: string
+  ram: string
+  storage: string
+  colour: string
   /** One per unit. Length must equal quantity for a serialised line. */
-  identifiers: string[]
+  units: Unit[]
 }
+
+const newUnit = (): Unit => ({
+  identifier: '',
+  variant: '',
+  ram: '',
+  storage: '',
+  colour: '',
+  battery: '',
+})
 
 let counter = 0
 const newLine = (): Line => ({
@@ -40,7 +71,11 @@ const newLine = (): Line => ({
   discount: '0',
   mainType: 'NEW',
   isNewCut: false,
-  identifiers: [''],
+  variant: '',
+  ram: '',
+  storage: '',
+  colour: '',
+  units: [newUnit()],
 })
 
 export function PurchaseForm({
@@ -57,6 +92,8 @@ export function PurchaseForm({
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<Line[]>([newLine()])
+  /** Which unit rows have their own specs showing, as `lineKey:index`. */
+  const [openUnits, setOpenUnits] = useState<Set<string>>(new Set())
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -70,11 +107,11 @@ export function PurchaseForm({
         // count can never silently disagree with the quantity.
         if (next.product?.isSerialised) {
           const want = Math.max(1, Math.min(999, Number(next.quantity) || 1))
-          const have = next.identifiers.length
+          const have = next.units.length
           if (want > have) {
-            next.identifiers = [...next.identifiers, ...Array(want - have).fill('')]
+            next.units = [...next.units, ...Array.from({ length: want - have }, newUnit)]
           } else if (want < have) {
-            next.identifiers = next.identifiers.slice(0, want)
+            next.units = next.units.slice(0, want)
           }
         }
         if (next.mainType !== 'GLOBAL') next.isNewCut = false
@@ -110,7 +147,7 @@ export function PurchaseForm({
         return
       }
       if (product.isSerialised) {
-        const filled = l.identifiers.filter((v) => v.trim()).length
+        const filled = l.units.filter((u) => u.identifier.trim()).length
         const qty = Number(l.quantity) || 0
         if (filled !== qty) {
           const what = product.identifierType === 'SERIAL' ? 'serial number' : 'IMEI'
@@ -139,8 +176,29 @@ export function PurchaseForm({
             quantity: l.quantity,
             unitCost: l.unitCost || 0,
             discount: l.discount || 0,
-            identifiers: product.isSerialised ? l.identifiers.filter((v) => v.trim()) : [],
-            ...(product.isSerialised ? { mainType: l.mainType, isNewCut: l.isNewCut } : {}),
+            identifiers: [],
+            units: product.isSerialised
+              ? l.units
+                  .filter((u) => u.identifier.trim())
+                  .map((u) => ({
+                    identifier: u.identifier.trim(),
+                    variant: u.variant,
+                    ram: u.ram,
+                    storage: u.storage,
+                    colour: u.colour,
+                    batteryHealthPercent: u.battery,
+                  }))
+              : [],
+            ...(product.isSerialised
+              ? {
+                  mainType: l.mainType,
+                  isNewCut: l.isNewCut,
+                  variant: l.variant,
+                  ram: l.ram,
+                  storage: l.storage,
+                  colour: l.colour,
+                }
+              : {}),
           }
         }),
       }),
@@ -233,7 +291,33 @@ export function PurchaseForm({
                   </CardDescription>
                 ) : null}
               </div>
-              {lines.length > 1 ? (
+              <div className="flex items-center gap-1">
+                {/*
+                  A mixed shipment is the same phone in four storages. Copying
+                  the line keeps the product, cost and specs and clears the
+                  identifiers, so the second combination is two edits rather
+                  than a second full entry.
+                */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Duplicate line ${index + 1}`}
+                  onClick={() =>
+                    setLines((prev) => {
+                      const at = prev.findIndex((l) => l.key === line.key)
+                      const copy: Line = {
+                        ...line,
+                        key: `l${counter++}`,
+                        units: line.units.map(() => newUnit()),
+                      }
+                      return [...prev.slice(0, at + 1), copy, ...prev.slice(at + 1)]
+                    })
+                  }
+                >
+                  <Copy className="size-4" />
+                </Button>
+                {lines.length > 1 ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -243,7 +327,8 @@ export function PurchaseForm({
                 >
                   <Trash2 className="size-4" />
                 </Button>
-              ) : null}
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -258,8 +343,11 @@ export function PurchaseForm({
                         unitCost: p.purchasePricePaise
                           ? String(Number(p.purchasePricePaise) / 100)
                           : line.unitCost,
-                        identifiers: p.isSerialised
-                          ? Array(Math.max(1, Number(line.quantity) || 1)).fill('')
+                        units: p.isSerialised
+                          ? Array.from(
+                              { length: Math.max(1, Number(line.quantity) || 1) },
+                              newUnit,
+                            )
                           : [],
                       })
                     }
@@ -313,17 +401,71 @@ export function PurchaseForm({
                   </div>
 
                   {/*
+                    The specs the goods arrived with, entered where they
+                    arrive. A line is one combination anyway - its unit cost
+                    is a single number, and a 256GB does not cost what a
+                    128GB costs - so these belong to the line and stamp every
+                    handset on it.
+                  */}
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium">
+                      Specs for this line
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        every {label === 'IMEI' ? 'handset' : 'unit'} on the line gets these
+                      </span>
+                    </span>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <Field id={`ram-${line.key}`} label="RAM">
+                        <Input
+                          id={`ram-${line.key}`}
+                          placeholder="8 GB"
+                          value={line.ram}
+                          onChange={(e) => update(line.key, { ram: e.target.value })}
+                        />
+                      </Field>
+                      <Field id={`storage-${line.key}`} label="Storage">
+                        <Input
+                          id={`storage-${line.key}`}
+                          placeholder="256 GB"
+                          value={line.storage}
+                          onChange={(e) => update(line.key, { storage: e.target.value })}
+                        />
+                      </Field>
+                      <Field id={`colour-${line.key}`} label="Colour">
+                        <Input
+                          id={`colour-${line.key}`}
+                          placeholder="Green"
+                          value={line.colour}
+                          onChange={(e) => update(line.key, { colour: e.target.value })}
+                        />
+                      </Field>
+                      <Field id={`variant-${line.key}`} label="Variant">
+                        <Input
+                          id={`variant-${line.key}`}
+                          placeholder="Pro Max"
+                          value={line.variant}
+                          onChange={(e) => update(line.key, { variant: e.target.value })}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  {/*
                     The capture grid. One box per unit, so scanning twenty
                     handsets is twenty scans and one save - and the count can
                     never disagree with the quantity.
+
+                    Each box opens onto that unit's own specs, for the piece
+                    in the batch that is not like the others. Left closed it
+                    stays a plain grid of boxes to scan into.
                   */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">
                         {label}s
                         <Badge variant="muted" className="ml-2">
-                          {line.identifiers.filter((v) => v.trim()).length} of{' '}
-                          {line.identifiers.length}
+                          {line.units.filter((u) => u.identifier.trim()).length} of{' '}
+                          {line.units.length}
                         </Badge>
                       </span>
                     </div>
@@ -331,31 +473,103 @@ export function PurchaseForm({
                       className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
                       data-testid={`identifier-grid-${index}`}
                     >
-                      {line.identifiers.map((value, i) => (
-                        <Input
-                          key={i}
-                          className="font-mono"
-                          inputMode={isSerial ? 'text' : 'numeric'}
-                          placeholder={`${label} ${i + 1}`}
-                          aria-label={`Line ${index + 1} ${label} ${i + 1}`}
-                          value={value}
-                          onChange={(e) => {
-                            const next = [...line.identifiers]
-                            next[i] = e.target.value
-                            update(line.key, { identifiers: next })
-                          }}
-                          onKeyDown={(e) => {
-                            // A scanner sends Enter after each read; jump to
-                            // the next box so a box of twenty is one pass.
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              const grid = e.currentTarget.closest('[data-testid^="identifier-grid"]')
-                              const inputs = grid?.querySelectorAll('input')
-                              ;(inputs?.[i + 1] as HTMLInputElement | undefined)?.focus()
-                            }
-                          }}
-                        />
-                      ))}
+                      {line.units.map((unit, i) => {
+                        const patch = (change: Partial<Unit>) => {
+                          const next = [...line.units]
+                          next[i] = { ...next[i]!, ...change }
+                          update(line.key, { units: next })
+                        }
+                        const openKey = `${line.key}:${i}`
+                        const open = openUnits.has(openKey)
+                        const differs =
+                          unit.variant || unit.ram || unit.storage || unit.colour || unit.battery
+
+                        return (
+                          <div key={i} className="space-y-1.5">
+                            <div className="flex items-center gap-1">
+                              <Input
+                                data-identifier="true"
+                                className="font-mono"
+                                inputMode={isSerial ? 'text' : 'numeric'}
+                                placeholder={`${label} ${i + 1}`}
+                                aria-label={`Line ${index + 1} ${label} ${i + 1}`}
+                                value={unit.identifier}
+                                onChange={(e) => patch({ identifier: e.target.value })}
+                                onKeyDown={(e) => {
+                                  // A scanner sends Enter after each read; jump
+                                  // to the next box so a box of twenty is one
+                                  // pass. Only the identifier boxes, or an open
+                                  // spec field would swallow the next scan.
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    const grid = e.currentTarget.closest(
+                                      '[data-testid^="identifier-grid"]',
+                                    )
+                                    const boxes = grid?.querySelectorAll('input[data-identifier]')
+                                    ;(boxes?.[i + 1] as HTMLInputElement | undefined)?.focus()
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant={differs ? 'secondary' : 'ghost'}
+                                size="icon"
+                                aria-label={`Specs for ${label} ${i + 1} on line ${index + 1}`}
+                                aria-expanded={open}
+                                onClick={() =>
+                                  setOpenUnits((prev) => {
+                                    const next = new Set(prev)
+                                    if (next.has(openKey)) next.delete(openKey)
+                                    else next.add(openKey)
+                                    return next
+                                  })
+                                }
+                              >
+                                <SlidersHorizontal className="size-4" />
+                              </Button>
+                            </div>
+
+                            {open ? (
+                              <div className="grid gap-2 rounded-md border p-2">
+                                <p className="text-xs text-muted-foreground">
+                                  Only for this one. Blank means it takes the line&rsquo;s.
+                                </p>
+                                <Input
+                                  aria-label={`${label} ${i + 1} RAM`}
+                                  placeholder={line.ram || 'RAM'}
+                                  value={unit.ram}
+                                  onChange={(e) => patch({ ram: e.target.value })}
+                                />
+                                <Input
+                                  aria-label={`${label} ${i + 1} storage`}
+                                  placeholder={line.storage || 'Storage'}
+                                  value={unit.storage}
+                                  onChange={(e) => patch({ storage: e.target.value })}
+                                />
+                                <Input
+                                  aria-label={`${label} ${i + 1} colour`}
+                                  placeholder={line.colour || 'Colour'}
+                                  value={unit.colour}
+                                  onChange={(e) => patch({ colour: e.target.value })}
+                                />
+                                <Input
+                                  aria-label={`${label} ${i + 1} variant`}
+                                  placeholder={line.variant || 'Variant'}
+                                  value={unit.variant}
+                                  onChange={(e) => patch({ variant: e.target.value })}
+                                />
+                                <Input
+                                  inputMode="numeric"
+                                  aria-label={`${label} ${i + 1} battery health %`}
+                                  placeholder="Battery health %"
+                                  value={unit.battery}
+                                  onChange={(e) => patch({ battery: e.target.value })}
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 </>

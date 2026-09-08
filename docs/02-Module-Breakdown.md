@@ -238,6 +238,14 @@ column plus a check constraint, the same shape as `is_new_cut`.
 - Partially paying a purchase leaves the correct supplier outstanding, and the supplier profile shows the purchase, the payment and the balance.
 - Reversing an untouched purchase removes the stock and the ledger effect and leaves an audit trail; reversing a purchase whose device was sold is refused with a specific reason.
 
+*Built as (revised after M11): a purchase line carries the specs, and stamps them on every handset it creates.* As first built, a purchase knew only the product, the IMEI and the main type. So ten iPhone 17s came in as ten handsets that did not know they were 256GB green, and the specs had to be typed in afterwards, one device screen at a time — the shop found this the moment a real shipment arrived.
+
+The fix is not product-level specs. "iPhone 17 256GB Green" as its own product means four storages × six colours = **24 products for one model**, none of which exist until the stock walks in, so product creation moves into the purchase flow anyway and the catalogue fills with near-duplicates that two people spell differently. It would not even finish the job: battery health, grade and IMEI stay per-handset regardless. And for used stock it is simply the wrong shape — two 256GB green handsets at 82% and 94% battery are not the same thing.
+
+So the specs sit on the **line**, which is what the line already was: its unit cost is a single number, and a 256GB does not cost what a 128GB costs, so a mixed-spec line was never possible. The line fills RAM, storage, colour and variant onto every unit; any single unit can override them, plus its own battery health, for the one piece in the batch that is not like the others. **Duplicate line** copies the product, cost and specs while clearing the identifiers, so the second combination in a shipment is two edits rather than a second full entry. Battery health has no line default on purpose: on used stock it differs on every piece, and a default would be a number somebody trusted.
+
+They stamp at creation and stop there. Correcting a line afterwards does not rewrite handsets already booked in — the same rule an invoice follows (docs/03 §4.9); a handset is corrected on its own screen, where it always could be.
+
 **Depends on.** M2. **Effort.** 2.0 weeks.
 
 ---
@@ -614,7 +622,7 @@ column plus a check constraint, the same shape as `is_new_cut`.
 
 **Depends on.** M10. **Effort.** 2.0 weeks.
 
-*On OQ-9.* The importer is mapping-driven, so it does not need to know the shop's file format in advance — which is what unblocked this module. OQ-9 still has to be answered before go-live, but as a migration plan ("which files, from where, in what order") rather than as a design input.
+*On OQ-9 — now closed.* The importer is mapping-driven, so it never needed the shop's file format in advance; that is what unblocked this module. What remained was the order, which the service layer decides for us — an import can only reference what already exists — so the go-live sequence, its checks, and what is deliberately left behind are written up in **docs/04 §10**.
 
 ---
 

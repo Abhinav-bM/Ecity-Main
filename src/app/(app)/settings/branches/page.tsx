@@ -5,16 +5,42 @@ import { Card } from '@/components/ui/card'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listBranches } from '@/server/services/branch.service'
+import { readListView, sortAndPage } from '@/lib/list-view'
+import { Pagination } from '@/components/pagination'
 import { BranchList } from './branch-list'
 
 export const dynamic = 'force-dynamic'
 
-export default async function BranchesPage() {
+const PAGE_SIZE = 25
+const SORTS = ['code', 'name', 'city', 'manager', 'users', 'status'] as const
+
+export default async function BranchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const session = await getSessionContext()
   if (!session) redirect('/login')
   if (!hasPermission(session.user, 'branch.manage')) redirect('/dashboard')
 
-  const branches = await listBranches(session.user)
+  const p = await searchParams
+  const view = readListView(p, SORTS, { sort: 'code' })
+  const all = await listBranches(session.user)
+  // Bounded by the business — a shop has a handful of branches, and every
+  // picker in the app reads this same list whole. See sortAndPage.
+  const { rows: branches, total } = sortAndPage(all, view, PAGE_SIZE, (b) =>
+    view.sort === 'name'
+      ? b.name
+      : view.sort === 'city'
+        ? b.city
+        : view.sort === 'manager'
+          ? b.managerName
+          : view.sort === 'users'
+            ? b.userCount
+            : view.sort === 'status'
+              ? b.status
+              : b.code,
+  )
   const canManage = hasPermission(session.user, 'branch.manage')
 
   return (
@@ -34,10 +60,26 @@ export default async function BranchesPage() {
         ) : null}
       </div>
 
-      {branches.length === 0 ? (
+      {total === 0 ? (
         <Card className="p-10 text-center text-sm text-muted-foreground">No branches yet.</Card>
       ) : (
-        <BranchList branches={branches} canManage={canManage} />
+        <>
+          <BranchList
+            branches={branches}
+            canManage={canManage}
+            params={p}
+            sort={view.sort}
+            dir={view.dir}
+          />
+          <Pagination
+            basePath="/settings/branches"
+            params={p}
+            page={view.page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            noun="branches"
+          />
+        </>
       )}
     </div>
   )

@@ -411,7 +411,26 @@ export async function listProducts(actor: AuthUser, filters: ProductFilters) {
 }
 
 /** Products at or below their minimum for a branch (PRD FR-4.7). */
-export async function listLowStock(actor: AuthUser, branchId?: number | null) {
+/** The columns the low-stock screen may sort by. Anything else is refused. */
+export const LOW_STOCK_SORTS = ['shortfall', 'product', 'branch', 'quantity', 'minimum'] as const
+export type LowStockSort = (typeof LOW_STOCK_SORTS)[number]
+
+/**
+ * Products at or below their branch minimum (PRD FR-4.7).
+ *
+ * Paged and sorted in the database, unlike the users and branches lists: this
+ * one grows with the catalogue rather than with the payroll, and a shop that
+ * has set minimums on a few thousand accessories should not be sent all of
+ * them to render twenty-five.
+ *
+ * Sorted by shortfall by default - what is furthest below its minimum is what
+ * to reorder first, which alphabetical order would bury.
+ */
+export async function listLowStock(
+  actor: AuthUser,
+  branchId?: number | null,
+  query: { page?: number; pageSize?: number; sort?: LowStockSort; dir?: 'asc' | 'desc' } = {},
+) {
   const scope = branchScope(actor, branchId ?? null)
   const conditions: SQL[] = [
     eq(product.businessId, actor.businessId),
@@ -424,21 +443,49 @@ export async function listLowStock(actor: AuthUser, branchId?: number | null) {
     conditions.push(scope.length > 0 ? inArray(branchStock.branchId, scope) : sql`false`)
   }
 
-  return db
-    .select({
-      productId: product.id,
-      productName: product.name,
-      sku: product.sku,
-      branchId: branchStock.branchId,
-      branchName: branch.name,
-      quantity: branchStock.quantity,
-      minQuantity: branchStock.minQuantity,
-    })
-    .from(branchStock)
-    .innerJoin(product, eq(product.id, branchStock.productId))
-    .innerJoin(branch, eq(branch.id, branchStock.branchId))
-    .where(and(...conditions))
-    .orderBy(desc(sql`${branchStock.minQuantity} - ${branchStock.quantity}`))
+  const where = and(...conditions)
+  const page = Math.max(1, query.page ?? 1)
+  const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 25))
+  const shortfall = sql`${branchStock.minQuantity} - ${branchStock.quantity}`
+
+  // Never the raw string from the URL: an ORDER BY built from user input is
+  // how a sort becomes an injection point.
+  const column = {
+    shortfall,
+    product: product.name,
+    branch: branch.name,
+    quantity: branchStock.quantity,
+    minimum: branchStock.minQuantity,
+  }[query.sort ?? 'shortfall']
+  const ordered = query.dir === 'asc' ? asc(column) : desc(column)
+
+  const [rows, totals] = await Promise.all([
+    db
+      .select({
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        branchId: branchStock.branchId,
+        branchName: branch.name,
+        quantity: branchStock.quantity,
+        minQuantity: branchStock.minQuantity,
+      })
+      .from(branchStock)
+      .innerJoin(product, eq(product.id, branchStock.productId))
+      .innerJoin(branch, eq(branch.id, branchStock.branchId))
+      .where(where)
+      .orderBy(ordered)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ n: count() })
+      .from(branchStock)
+      .innerJoin(product, eq(product.id, branchStock.productId))
+      .innerJoin(branch, eq(branch.id, branchStock.branchId))
+      .where(where),
+  ])
+
+  return { rows, total: totals[0]?.n ?? 0, page, pageSize }
 }
 
 export async function setMinQuantity(

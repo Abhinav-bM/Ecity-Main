@@ -387,8 +387,33 @@ suite('M2 inventory core (database-backed)', () => {
         branchId: branchB,
         minQuantity: 5,
       })
-      const low = await listLowStock(actor, branchB)
+      const low = (await listLowStock(actor, branchB)).rows
       expect(low.some((l) => l.productId === accessoryProductId)).toBe(true)
+    })
+
+    /*
+     * The low-stock list grows with the catalogue, not with the payroll, so it
+     * pages and sorts in the database rather than being fetched whole.
+     */
+    it('pages, and reports the whole total rather than the page', async () => {
+      const first = await listLowStock(actor, null, { page: 1, pageSize: 1 })
+      expect(first.rows.length).toBeLessThanOrEqual(1)
+      expect(first.total).toBeGreaterThanOrEqual(first.rows.length)
+    })
+
+    it('sorts by what is furthest below its minimum, worst first', async () => {
+      const { rows } = await listLowStock(actor, null, { pageSize: 50 })
+      const shortfalls = rows.map((r) => r.minQuantity - r.quantity)
+      // Alphabetical order would bury what actually needs reordering.
+      expect([...shortfalls].sort((a, b) => b - a)).toEqual(shortfalls)
+    })
+
+    it('sorts by product name when asked, and reverses', async () => {
+      const up = await listLowStock(actor, null, { pageSize: 50, sort: 'product', dir: 'asc' })
+      const down = await listLowStock(actor, null, { pageSize: 50, sort: 'product', dir: 'desc' })
+      expect(down.rows.map((r) => r.productName)).toEqual(
+        [...up.rows.map((r) => r.productName)].reverse(),
+      )
     })
   })
 

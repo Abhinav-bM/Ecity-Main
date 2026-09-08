@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 403 unit and integration tests, 820
+Automated tests cover the mechanics — 421 unit and integration tests, 856
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -402,6 +402,74 @@ At ~375px, ~810px and full width:
 - Logo upload is not wired to the business profile
 
 ---
+
+# M3 — Purchases · specs on a line
+
+*Added after M11, when a real shipment showed the gap: a purchase knew the
+product and the IMEI and nothing else, so ten iPhones arrived as ten handsets
+that did not know they were 256GB green — and each one had to be opened and
+edited afterwards.*
+
+- [ ] On a **serialised** line, **Specs for this line** shows RAM, Storage,
+      Colour and Variant
+- [ ] They are **not** shown on a counted line — a box of cables has no RAM
+- [ ] Book in 2 handsets with RAM 8 GB, Storage 256 GB, Colour Green
+- [ ] The purchase page shows `256 GB · 8 GB · Green` under the product name.
+      *A bill for "iPhone 17 × 10" is ambiguous a month later*
+- [ ] Open each handset in Devices — **both** carry all three
+- [ ] Book in 3 more; on the second only, open its spec box (the slider icon
+      beside the IMEI) and set Colour = Black, battery = 87
+- [ ] That handset is Black at 87%; the other two are Green with no battery
+      figure
+- [ ] The odd one still shows **256 GB** and **8 GB**. *Blank means "same as
+      the line", not "empty"*
+- [ ] Scanning still works: type an IMEI, press Enter, and the cursor lands on
+      the **next IMEI box** — never in a spec field
+- [ ] **Duplicate line** copies the product, cost and specs and leaves the
+      IMEIs blank. *A mixed shipment is the same phone in four storages*
+- [ ] A handset booked in before this change still opens and edits normally
+
+## What this does not do
+
+- **No specs on the product.** "iPhone 17 256GB Green" as its own product
+  would be 24 products for one model, invented at the goods-inwards desk in
+  whatever spelling was to hand — and used stock would still differ piece by
+  piece
+- **No retro-fill.** Changing a confirmed line's specs does not rewrite
+  handsets already created; correct those on their own screens
+
+# Lists: paging and sorting
+
+*Carried debt, cleared after M11. These four screens had no page control at
+all: a shop with sixty users saw twenty-five and no sign there were more.*
+
+- [ ] **Users**, **Branches** and **Low stock** each say `Showing 1–25 of N`,
+      or explain themselves when empty
+- [ ] Click a column heading — the rows re-order and the URL gains
+      `sort=` and `dir=`
+- [ ] Click the same heading again — it reverses
+- [ ] Copy that URL into another tab: the same sorted view comes back. *Sorting
+      is a link, not something the page remembers privately*
+- [ ] Go to page 2, then sort — you land back on **page 1**. *Staying on page 7
+      of a re-ordered list shows a stranger's rows*
+- [ ] On Low stock, the default order is **worst first** — furthest below its
+      minimum at the top, not alphabetical
+- [ ] Sort Low stock by Product, then page forward: the second page continues
+      the alphabet. *It is sorting the whole list, not the page on screen*
+- [ ] A blank cell (a branch with no city, a user who has never signed in)
+      sorts to the **bottom** either way
+- [ ] **Roles** shows a count and has **no** page control. *It is an editor:
+      paging the list would mean turning a page to reach the role you came to
+      edit*
+- [ ] Edit `?sort=` in the address bar to something invented — the screen falls
+      back to its normal order rather than breaking
+
+**On a phone**, where the tables become cards:
+
+- [ ] A **Sort** strip sits above the cards, scrolling sideways
+- [ ] Tapping one re-orders the cards and marks it as the active sort
+- [ ] Tapping it again reverses. *Sorting must exist on the screen the owner
+      actually carries*
 
 # M4 — Sales & Billing
 
@@ -1495,5 +1563,5 @@ Then save the same list as **.xlsx** and do it again:
 - **No scheduled or emailed reports**
 - **No undo on an import.** A wrong batch is corrected the way anything else
   is — by voiding or adjusting what it created
-- **OQ-9 is still open**: which files the shop actually has, and in what order
-  they should be loaded, is a go-live plan rather than a design question
+- **OQ-9 is closed**: the go-live loading order, the checks after each step,
+  and what is deliberately not migrated are in **docs/04 §10**

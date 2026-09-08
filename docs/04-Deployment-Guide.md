@@ -651,7 +651,90 @@ df -h && free -m && docker system df
 
 ---
 
-## 10. Go-Live Checklist
+## 10. Loading the Shop's Existing Data (PRD OQ-9)
+
+This is the answer to OQ-9. The importer is mapping-driven, so it never needed
+to know the shop's file layout in advance — the question that remained was
+*which files, in what order, and how do we know it worked*. That is a plan,
+and this is it.
+
+**The rule that sets the order:** every import runs through the same services
+as manual entry, so a row can only reference something that already exists. A
+device needs its product; a due needs the customer it belongs to. Load in this
+order and nothing is ever waiting on something that has not arrived yet.
+
+### Before any file: set the shop up by hand
+
+These are minutes of typing, not an import, and everything else hangs off them.
+
+- [ ] Business details, GST toggle, financial year, invoice prefix
+- [ ] **Branches** — codes matter; they appear on every document number
+- [ ] Tax rates and payment methods
+- [ ] Roles, then users, each assigned to their branches
+- [ ] Bank / UPI / card **accounts**
+
+### Then the files, in this order
+
+| # | What | Needs | Where | Notes |
+|---|---|---|---|---|
+| 1 | **Categories and brands** | — | Settings → Catalogue | Optional: the product import creates a missing category as a *counted* one. Create anything IMEI-tracked here **first**, because that setting locks once products use it |
+| 2 | **Products** | categories | Import → Products | `name` and `category` required. Bring `sku`, `purchasePrice`, `sellingPrice` if the shop has them |
+| 3 | **Customers** | — | Import → Customers | `name` required; `phone` is what the counter searches by, so include it |
+| 4 | **Suppliers** | — | Import → Suppliers | As above |
+| 5 | **Handsets in stock** | products, branches | Import → Handsets (by IMEI) | Choose the branch on the upload. One row per handset, with `mainType`; several IMEI columns per row are read. Include `receivedAt` if known, or every handset dates to the day you uploaded |
+| 6 | **Opening stock (accessories)** | products, branches | Opening balances → Stock, or Import → Opening stock | Counts as they stand on the day you start |
+| 7 | **Opening cash and account balances** | branches, accounts | Opening balances → Cash & accounts | Once per branch — a second figure is refused |
+| 8 | **Customer dues** | customers | Opening balances → Dues, or Import → Opening customer dues | A name the shop does not have stops that row rather than inventing an account |
+| 9 | **Supplier dues** | suppliers | Opening balances → Dues, or Import → Opening supplier dues | As above |
+
+Steps 6–9 are typed in when there are a handful and filed when there are
+hundreds; both go through the same services, so the result is identical.
+
+### What to ask the shop for
+
+One question per file, in the shop's own words:
+
+- *"A list of everything you sell"* → products
+- *"Every phone on the shelf, with its IMEI"* → handsets. **The single most
+  important file**, and the one most likely to be on paper
+- *"Everyone who owes you money, and how much"* → customer dues
+- *"Everyone you owe, and how much"* → supplier dues
+- *"How much is in the till and the bank today"* → opening cash
+- *"How many of each accessory are on the shelf"* → opening stock
+
+CSV or `.xlsx`, first sheet, one heading row. Anything else — a photo of a
+register, a WhatsApp list — becomes a spreadsheet first. **Nothing is created
+until the preview has been looked at**, so an ugly file is safe to try.
+
+### Checks after each step, before the next
+
+- [ ] The batch says how many rows imported and how many had problems
+- [ ] **Download the problem rows**, fix them in the original file, and
+      re-upload *just those* — the same whole file is refused by content hash
+- [ ] Spot-check five records against the source by hand
+- [ ] After handsets: the device count matches the file, and a known IMEI is
+      findable in the search box
+- [ ] After dues: the total on the dues screen matches the shop's own figure.
+      *If it does not, stop — everything after this is built on it*
+
+### Two things to decide with the shop before starting
+
+1. **The cut-off date.** Every opening figure is "as at" one day. Trading on
+   both systems either side of it is what makes a parallel run reconcilable.
+2. **Who checks.** The person who knows what the numbers *should* be has to
+   confirm each step, and it should not be whoever ran the import.
+
+### What is deliberately not migrated
+
+Past sales, purchases and payments. ECITY starts from balances, not from
+history: a re-keyed invoice is not the invoice that was issued, and a
+half-migrated sales history is worse than none — the reports would look
+complete while being wrong. The paper stays the record for anything before
+the cut-off, and the shop keeps its old files.
+
+---
+
+## 11. Go-Live Checklist
 
 - [ ] Provider account verified, instance running in an India region, snapshots enabled
 - [ ] Provider firewall: only 22, 80, 443 inbound. Port 5432 closed
@@ -664,12 +747,14 @@ df -h && free -m && docker system df
 - [ ] `backup.sh` scheduled nightly and confirmed writing to R2
 - [ ] **A restore drill completed successfully and timed at least once**
 - [ ] Sentry receiving errors; UptimeRobot alerting to a phone
-- [ ] Opening balances loaded (PRD FR-34)
+- [ ] Existing data loaded and checked, in the order in §10
+- [ ] Opening balances loaded (PRD FR-34), and the dues totals agreed with the
+      shop
 - [ ] Two-week parallel run with paper records agreed with the shop
 
 ---
 
-## 11. Things That Will Bite You
+## 12. Things That Will Bite You
 
 | Mistake | What happens | Prevention |
 |---|---|---|

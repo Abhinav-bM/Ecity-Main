@@ -230,11 +230,28 @@ export const partySchema = z.object({
   notes: optionalText(1000),
 })
 
+/**
+ * A boolean from a query string.
+ *
+ * `z.coerce.boolean()` is JavaScript truthiness, so the string `"false"` -
+ * which is what every client sends for false - arrives as **true**. Only the
+ * `serialised=true` case was ever used in the app, so nothing broke; but
+ * `?serialised=false` silently meaning "serialised only" is a trap the next
+ * screen would fall into. This reads the words people actually send.
+ */
+const queryBoolean = z.preprocess((value) => {
+  if (typeof value !== 'string') return value
+  const text = value.trim().toLowerCase()
+  if (['false', '0', 'no', ''].includes(text)) return false
+  if (['true', '1', 'yes'].includes(text)) return true
+  return value
+}, z.boolean())
+
 export const partyStatusSchema = z.object({ status: z.enum(['ACTIVE', 'INACTIVE']) })
 
 export const partyQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
-  includeInactive: z.coerce.boolean().default(false),
+  includeInactive: queryBoolean.default(false),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 })
@@ -382,8 +399,8 @@ export const productQuerySchema = z.object({
   categoryId: z.coerce.number().int().positive().optional(),
   brandId: z.coerce.number().int().positive().optional(),
   branchId: z.coerce.number().int().positive().optional(),
-  serialised: z.coerce.boolean().optional(),
-  includeInactive: z.coerce.boolean().default(false),
+  serialised: queryBoolean.optional(),
+  includeInactive: queryBoolean.default(false),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 })
@@ -411,9 +428,33 @@ export const purchaseLineSchema = z.object({
     z.coerce.number().int().positive().nullable(),
   ),
   identifiers: z.array(z.string().trim()).default([]),
+  /**
+   * The same units with their own specs. A batch is usually uniform, so the
+   * line carries the specs and a unit only says how it differs.
+   */
+  units: z
+    .array(
+      z.object({
+        identifier: z.string().trim(),
+        variant: optionalText(60),
+        ram: optionalText(30),
+        storage: optionalText(30),
+        colour: optionalText(40),
+        batteryHealthPercent: z.preprocess(
+          (v) => (v === '' || v === undefined || v === null ? null : v),
+          z.coerce.number().int().min(0).max(100).nullable(),
+        ),
+      }),
+    )
+    .default([]),
   mainType: z.enum(MAIN_TYPES).optional(),
   isNewCut: z.boolean().default(false),
   newCutNotes: optionalText(300),
+  /** Line specs, stamped onto every unit that does not override them. */
+  variant: optionalText(60),
+  ram: optionalText(30),
+  storage: optionalText(30),
+  colour: optionalText(40),
 })
 
 export const purchaseSchema = z.object({

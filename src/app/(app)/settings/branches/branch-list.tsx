@@ -15,14 +15,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { SortableHead, SortStrip } from '@/components/sortable-head'
 import type { BranchListItem } from '@/server/services/branch.service'
 
 export function BranchList({
   branches,
   canManage,
+  params,
+  sort,
+  dir,
 }: {
   branches: BranchListItem[]
   canManage: boolean
+  params: Record<string, string | undefined>
+  sort: string
+  dir: 'asc' | 'desc'
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -43,8 +50,25 @@ export function BranchList({
     startTransition(() => router.refresh())
   }
 
+  const SORT_COLUMNS = [
+    ['code', 'Code'],
+    ['name', 'Name'],
+    ['city', 'City'],
+    ['manager', 'Manager'],
+    ['users', 'Users'],
+    ['status', 'Status'],
+  ] as const
+
   return (
     <>
+      <SortStrip
+        basePath="/settings/branches"
+        params={params}
+        columns={SORT_COLUMNS}
+        active={sort}
+        dir={dir}
+        className="md:hidden"
+      />
       <div className="grid gap-3 md:hidden" data-testid="branch-cards">
         {branches.map((b) => (
           <Card key={b.id} className="p-4">
@@ -87,12 +111,18 @@ export function BranchList({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden lg:table-cell">City</TableHead>
-              <TableHead>Manager</TableHead>
-              <TableHead>Users</TableHead>
-              <TableHead>Status</TableHead>
+              {SORT_COLUMNS.map(([column, label]) => (
+                <SortableHead
+                  key={column}
+                  basePath="/settings/branches"
+                  params={params}
+                  column={column}
+                  label={label}
+                  active={sort}
+                  dir={dir}
+                  className={column === 'city' ? 'hidden lg:table-cell' : undefined}
+                />
+              ))}
               {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
             </TableRow>
           </TableHeader>

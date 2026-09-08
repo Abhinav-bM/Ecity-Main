@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createUserSchema, emailSchema, resetPasswordSchema } from '@/lib/validation'
+import {
+  createUserSchema,
+  emailSchema,
+  productQuerySchema,
+  resetPasswordSchema,
+} from '@/lib/validation'
 
 describe('email', () => {
   it('lower-cases and trims', () => {
@@ -60,5 +65,21 @@ describe('the shop day (M9 — found by a test run after midnight IST)', () => {
     const when = new Date('2026-09-07T20:10:00Z')
     // One definition, so a form's default and its drawer cannot drift.
     expect(shopDateString(when)).toBe(businessDateFor(when))
+  })
+})
+
+describe('booleans in a query string', () => {
+  it('reads "false" as false, not as a non-empty string', () => {
+    // z.coerce.boolean() gets this wrong, which made ?serialised=false mean
+    // "serialised only" — the opposite of what was asked.
+    expect(productQuerySchema.parse({ serialised: 'false' }).serialised).toBe(false)
+    expect(productQuerySchema.parse({ serialised: 'true' }).serialised).toBe(true)
+    expect(productQuerySchema.parse({ serialised: '0' }).serialised).toBe(false)
+    expect(productQuerySchema.parse({ includeInactive: 'false' }).includeInactive).toBe(false)
+  })
+
+  it('still defaults when the parameter is absent', () => {
+    expect(productQuerySchema.parse({}).serialised).toBeUndefined()
+    expect(productQuerySchema.parse({}).includeInactive).toBe(false)
   })
 })

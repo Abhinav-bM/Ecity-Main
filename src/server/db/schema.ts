@@ -1126,10 +1126,27 @@ export const purchaseItem = pgTable(
     lineTotalPaise: bigint('line_total_paise', { mode: 'bigint' }).notNull(),
     /** Denormalised from the product so reversal need not join. */
     isSerialised: boolean('is_serialised').notNull().default(false),
-    /** Serialised lines carry these onto every unit they create. */
+    /**
+     * Serialised lines carry these onto every unit they create.
+     *
+     * The specs live here rather than on the product because "iPhone 17" is
+     * one product and a 256GB green one is a *handset*. Putting them on the
+     * product would mean a separate product per storage and colour - two
+     * dozen for one model - and used stock would still differ piece by piece.
+     * A line already implies one combination anyway: its unit cost is a
+     * single number, and a 256GB does not cost what a 128GB costs.
+     *
+     * They stamp the device at creation and stop there. Correcting the line
+     * afterwards does not rewrite handsets already booked in - the same rule
+     * an invoice follows (docs/03 §4.9); a handset is corrected on its own.
+     */
     mainType: mainTypeEnum('main_type'),
     isNewCut: boolean('is_new_cut').notNull().default(false),
     newCutNotes: text('new_cut_notes'),
+    variant: text('variant'),
+    ram: text('ram'),
+    storage: text('storage'),
+    colour: text('colour'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
