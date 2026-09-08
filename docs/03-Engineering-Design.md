@@ -22,7 +22,7 @@ Constraints that shaped every choice below:
 | Layer | Choice | Why this one |
 |---|---|---|
 | Language | **TypeScript 5.x** (strict) | Your language; one type system from the database row to the React prop. Strict mode is what makes it worth having |
-| Framework | **Next.js 15 (App Router)** | Frontend and backend in one deployable TypeScript project. Server Components keep heavy report queries on the server; Route Handlers give you a normal REST API for the counter screens |
+| Framework | **Next.js 16 (App Router)** | Frontend and backend in one deployable TypeScript project. Server Components keep heavy report queries on the server; Route Handlers give you a normal REST API for the counter screens |
 | UI components | **shadcn/ui** + **Radix UI** | As requested. Components are copied into your repo, so you own and can adapt them — right for a dense back-office app with tables, dialogs, comboboxes and command palettes |
 | Styling | **Tailwind CSS v4** | Required by shadcn/ui; keeps a 40-screen app visually consistent without a growing stylesheet |
 | Forms & validation | **React Hook Form** + **Zod** | One Zod schema validates the browser form and the server handler, and infers the TypeScript type. Removes a whole class of bugs in a form-heavy product |
@@ -68,7 +68,7 @@ Constraints that shaped every choice below:
          React 19 + shadcn/ui + TanStack Query (server state) + Zustand (cart)
                                      |  HTTPS
               +----------------------+-----------------------+
-              |            Next.js 15 application            |
+              |            Next.js 16 application            |
               |                                              |
               |  Server Components   Route Handlers / Actions|
               |          |                    |              |
@@ -208,6 +208,8 @@ returning id;   -- zero rows returned  =>  abort the sale with a clear message
 **4.12 "Today" is the shop's day, never the browser's or the server's.** `new Date().toISOString().slice(0, 10)` is UTC, which in India is a *different day* between midnight and 05:30 — the till is open, the drawer is on today's business date, and the browser thinks it is yesterday. Found when a test run crossed midnight IST: the expense form defaulted to the previous day, and capped its own date picker below the day the shop was standing in, so nobody could record that evening's expense at all. `src/lib/date.ts` holds one definition of the shop's calendar day and both sides use it — the server's `businessDateFor` and every form default — so a form and the drawer it posts into cannot drift apart. Anything user-facing that means "today at the shop" comes from there.
 
 **4.13 Analytics read one query layer, and a limited user gets nothing rather than everything.** Nine areas (M10, FR-16 – FR-24) share one shape — range, branch set, comparison — so two screens cannot disagree about the same month. The branch resolver returns a *concrete list* whenever the caller is limited, never "no filter": an empty filter meaning *unfiltered* is the leak that matters, so a branch-limited user asking for a branch they cannot see gets zero, not the whole business. Margins sit behind their own permission (`analytics.view_profit`), the same line `inventory.view_cost` already drew. No rollup tables: live queries answer a twelve-month range well inside PRD §9.1's five seconds, and a nightly rollup would add a refresh to keep honest and a staleness window to explain.
+
+**4.14 Data arriving in bulk uses the same door as data typed in.** An importer that writes to tables directly is how a shop ends up with stock the ledger has never heard of and devices with no event history — records the rest of the system does not recognise, discovered months later by a report that will not reconcile. So every row goes through `createDevice`, `createParty`, `createProduct`, `increaseStock` and the ledger services, exactly as the forms do; the importer's job is parsing and mapping, never persistence. Two consequences follow, and both are deliberate. Bulk import is slower than a `COPY`, which does not matter for a job run once at go-live. And an opening balance is a *movement* like any other (§4.2): stock arrives as an `OPENING` stock movement, cash as an `OPENING` cash movement, a debt as an `OPENING` ledger entry — never a balance column, which would be the one number in the system nobody could prove. The other half of the rule is refusal. Structural problems reject the file whole, because importing "the rows that happened to parse" is silent partial data; row problems are named by their line *as the spreadsheet shows it* and the rest still goes in; and a name the file mentions but the shop does not have stops that row rather than creating the party, because a due against a name nobody recognises is worse than a missing row.
 
 ---
 ## 5. Cross-Cutting Implementation Notes

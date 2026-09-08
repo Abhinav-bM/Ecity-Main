@@ -466,3 +466,161 @@ export async function setMinQuantity(
     summary: `Minimum stock set to ${input.minQuantity}`,
   })
 }
+
+/* --------------------------------- M11: managing brands and categories --- */
+
+/**
+ * Rename a brand, or take it out of the pickers.
+ *
+ * Never deleted: a brand is referenced by products, and products by invoices
+ * already issued. Deactivating hides it from new work and leaves history
+ * readable, which is the same rule every other master record follows.
+ */
+export async function updateBrand(
+  actor: AuthUser,
+  ctx: AuditContext,
+  id: number,
+  input: { name?: string; isActive?: boolean },
+) {
+  const before = (
+    await db
+      .select()
+      .from(brand)
+      .where(and(eq(brand.id, id), eq(brand.businessId, actor.businessId)))
+      .limit(1)
+  )[0]
+  if (!before) throw notFound('Brand')
+
+  const name = input.name?.trim() ?? before.name
+  if (!name) throw new AppError('A brand needs a name.', 422, 'NO_NAME')
+
+  if (name !== before.name) {
+    const clash = (
+      await db
+        .select({ id: brand.id })
+        .from(brand)
+        .where(and(eq(brand.businessId, actor.businessId), eq(brand.name, name)))
+        .limit(1)
+    )[0]
+    if (clash) throw conflict('A brand with this name already exists.')
+  }
+
+  const values = { name, isActive: input.isActive ?? before.isActive, updatedAt: new Date() }
+  await db.update(brand).set(values).where(eq(brand.id, id))
+
+  await writeAudit(ctx, {
+    action: 'UPDATE',
+    entityType: 'brand',
+    entityId: id,
+    summary:
+      values.isActive === before.isActive
+        ? `Renamed brand ${before.name} to ${name}`
+        : `${values.isActive ? 'Reactivated' : 'Deactivated'} brand ${name}`,
+    changes: diff(before, values),
+  })
+}
+
+/**
+ * Rename a category, or take it out of the pickers.
+ *
+ * `isSerialised` and `identifierType` are NOT editable once any product uses
+ * the category. They decide whether its products are tracked by IMEI, by
+ * serial, or by quantity - changing that would reinterpret stock that already
+ * exists, turning counted items into ones the system thinks have identifiers.
+ */
+export async function updateCategory(
+  actor: AuthUser,
+  ctx: AuditContext,
+  id: number,
+  input: {
+    name?: string
+    isActive?: boolean
+    isSerialised?: boolean
+    identifierType?: 'IMEI' | 'SERIAL' | 'NONE'
+  },
+) {
+  const before = (
+    await db
+      .select()
+      .from(category)
+      .where(and(eq(category.id, id), eq(category.businessId, actor.businessId)))
+      .limit(1)
+  )[0]
+  if (!before) throw notFound('Category')
+
+  const name = input.name?.trim() ?? before.name
+  if (!name) throw new AppError('A category needs a name.', 422, 'NO_NAME')
+
+  if (name !== before.name) {
+    const clash = (
+      await db
+        .select({ id: category.id })
+        .from(category)
+        .where(and(eq(category.businessId, actor.businessId), eq(category.name, name)))
+        .limit(1)
+    )[0]
+    if (clash) throw conflict('A category with this name already exists.')
+  }
+
+  const wantsTrackingChange =
+    (input.isSerialised !== undefined && input.isSerialised !== before.isSerialised) ||
+    (input.identifierType !== undefined && input.identifierType !== before.identifierType)
+
+  if (wantsTrackingChange) {
+    const inUse = (
+      await db
+        .select({ id: product.id })
+        .from(product)
+        .where(eq(product.categoryId, id))
+        .limit(1)
+    )[0]
+    if (inUse) {
+      throw conflict(
+        'This category already has products, so how they are tracked cannot change. ' +
+          'Create a new category instead.',
+      )
+    }
+  }
+
+  const isSerialised = input.isSerialised ?? before.isSerialised
+  const values = {
+    name,
+    isActive: input.isActive ?? before.isActive,
+    isSerialised,
+    identifierType: isSerialised ? (input.identifierType ?? before.identifierType) : 'NONE',
+    updatedAt: new Date(),
+  } as const
+
+  await db.update(category).set(values).where(eq(category.id, id))
+
+  await writeAudit(ctx, {
+    action: 'UPDATE',
+    entityType: 'category',
+    entityId: id,
+    summary:
+      values.isActive === before.isActive
+        ? `Updated category ${name}`
+        : `${values.isActive ? 'Reactivated' : 'Deactivated'} category ${name}`,
+    changes: diff(before, values),
+  })
+}
+
+/** How many products each brand and category holds — shown before deactivating. */
+export async function masterDataUsage(actor: AuthUser) {
+  const [brands, categories] = await Promise.all([
+    db
+      .select({ id: product.brandId, n: sql<string>`count(*)` })
+      .from(product)
+      .where(eq(product.businessId, actor.businessId))
+      .groupBy(product.brandId),
+    db
+      .select({ id: product.categoryId, n: sql<string>`count(*)` })
+      .from(product)
+      .where(eq(product.businessId, actor.businessId))
+      .groupBy(product.categoryId),
+  ])
+  return {
+    byBrand: new Map(brands.filter((b) => b.id !== null).map((b) => [b.id!, Number(b.n)])),
+    byCategory: new Map(categories.map((c) => [c.id, Number(c.n)])),
+  }
+}

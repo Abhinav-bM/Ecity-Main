@@ -7,9 +7,19 @@ import { signIn, USERS } from './helpers'
  * hardcodes a colour and stops responding to the theme.
  */
 
-/** Browsers report oklch lightness as `20.5%`, not `0.205`. Normalise. */
-function lightnessOf(oklch: string): number {
-  const raw = /oklch\(\s*([\d.]+)(%?)/.exec(oklch)
+/**
+ * Lightness as a 0–1 fraction, whatever colour function the browser hands back.
+ *
+ * The themes are written in `oklch()`, but the stylesheet the browser
+ * actually receives is not the one we wrote: Next 16 compiles CSS with
+ * Lightning CSS, which rewrites those to the equivalent `lab()` for the
+ * browsers in range. The paint is identical — the notation is not — so
+ * matching on `oklch(` alone started returning NaN for a colour that was
+ * perfectly correct. Both spellings put lightness first, as a percentage or
+ * a fraction, which is all these assertions need.
+ */
+function lightnessOf(colour: string): number {
+  const raw = /(?:oklch|oklab|lch|lab)\(\s*(\d*\.?\d+)(%?)/.exec(colour)
   if (!raw) return Number.NaN
   const value = Number(raw[1])
   return raw[2] === '%' ? value / 100 : value

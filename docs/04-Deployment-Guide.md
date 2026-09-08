@@ -272,6 +272,13 @@ app.yourshop.in {
 }
 ```
 
+Caddy places no limit on request body size, which is what the go-live import
+needs — a file goes up in one request, and a spreadsheet is sent as bytes, so
+a shop's stock list can be several megabytes. If you ever add a
+`request_body max_size` here, keep it above 15 MB or the import will fail at
+the one moment it matters. (Nginx is the other way round: its default of 1 MB
+would need raising.)
+
 ### 4.3 `.env` on the server
 
 Create it with `nano .env`, then `chmod 600 .env`. **This file is never committed to git.**

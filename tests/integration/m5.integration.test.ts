@@ -21,7 +21,13 @@ import {
 } from '@/server/services/customer-payment.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { clearCustomerCredit, clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
+import {
+  clearCustomerCredit,
+  clearMoney,
+  databaseAvailable,
+  expectDatabaseRefusal,
+  withAppendOnlySuspended,
+} from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -363,13 +369,15 @@ suite('M5 customer credit and collections (database-backed)', () => {
 
   describe('the ledger is the only truth', () => {
     it('is append-only in the database, not merely in code', async () => {
-      await expect(
+      await expectDatabaseRefusal(
         db.execute(`update customer_ledger_entry set amount_paise = 0
                     where business_id = ${businessId}`),
-      ).rejects.toThrow(/append-only/i)
-      await expect(
+        /append-only/i,
+      )
+      await expectDatabaseRefusal(
         db.execute(`delete from customer_ledger_entry where business_id = ${businessId}`),
-      ).rejects.toThrow(/append-only/i)
+        /append-only/i,
+      )
     })
 
     it('every customer balance equals their outstanding recomputed from invoices', async () => {

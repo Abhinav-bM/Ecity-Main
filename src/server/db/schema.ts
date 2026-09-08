@@ -168,6 +168,26 @@ export const transferStatusEnum = pgEnum('transfer_status', [
   'CANCELLED',
 ])
 
+/** M11. Where an import or export got to (PRD FR-33, FR-34). */
+export const jobStatusEnum = pgEnum('job_status', [
+  'UPLOADED',
+  'VALIDATED',
+  'COMMITTED',
+  'FAILED',
+  'CANCELLED',
+])
+
+/** M11. What a file is bringing in (PRD FR-34.1). */
+export const importKindEnum = pgEnum('import_kind', [
+  'PRODUCTS',
+  'DEVICES',
+  'CUSTOMERS',
+  'SUPPLIERS',
+  'OPENING_STOCK',
+  'OPENING_CUSTOMER_DUES',
+  'OPENING_SUPPLIER_DUES',
+])
+
 /** M8. Why stock was corrected (PRD FR-28.3). */
 export const adjustmentReasonEnum = pgEnum('adjustment_reason', [
   'DAMAGE',
@@ -2092,5 +2112,141 @@ export const stockAdjustment = pgTable(
     index('stock_adjustment_business_idx').on(t.businessId, t.adjustedAt),
     index('stock_adjustment_device_idx').on(t.deviceId),
     index('stock_adjustment_product_idx').on(t.productId),
+  ],
+)
+
+/* ==================================================== M11 import/export === */
+
+/**
+ * One uploaded file, and how far it got (PRD FR-34.1 – FR-34.3).
+ *
+ * The wizard's state lives here rather than in the browser: a file is
+ * uploaded, mapped, validated and only then committed, and a browser crash
+ * between those steps must not lose a staged batch.
+ */
+export const importJob = pgTable(
+  'import_job',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    kind: importKindEnum('kind').notNull(),
+    status: jobStatusEnum('status').notNull().default('UPLOADED'),
+    fileName: text('file_name').notNull(),
+    /**
+     * SHA-256 of the upload. Re-uploading the same file is recognised rather
+     * than silently doubling everything in it.
+     */
+    fileHash: text('file_hash').notNull(),
+    /** Where the rows land. Null for records that are not branch-specific. */
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+
+    /**
+     * Which column of theirs feeds which field of ours, as chosen in the
+     * wizard. Stored so a re-run uses the same mapping without re-deriving it.
+     */
+    columnMap: jsonb('column_map').notNull().default(sql`'{}'::jsonb`),
+    /** The parsed rows, staged before anything is committed. */
+    totalRows: integer('total_rows').notNull().default(0),
+    validRows: integer('valid_rows').notNull().default(0),
+    errorRows: integer('error_rows').notNull().default(0),
+    committedRows: integer('committed_rows').notNull().default(0),
+
+    /** A structural problem rejects the whole file, and this says why. */
+    failureReason: text('failure_reason'),
+
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+    uploadedBy: bigint('uploaded_by', { mode: 'number' }),
+    committedAt: timestamp('committed_at', { withTimezone: true }),
+    committedBy: bigint('committed_by', { mode: 'number' }),
+  },
+  (t) => [
+    index('import_job_business_idx').on(t.businessId, t.uploadedAt),
+    index('import_job_hash_idx').on(t.businessId, t.fileHash),
+  ],
+)
+
+/**
+ * One row of an upload: what it said, what we made of it, and what went wrong.
+ *
+ * Kept for every row, not only the bad ones, because the preview shows what
+ * WILL happen before anything is committed - and a row that imported cleanly
+ * is still worth being able to trace back to its line in the file.
+ */
+export const importRow = pgTable(
+  'import_row',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    jobId: bigint('job_id', { mode: 'number' })
+      .notNull()
+      .references(() => importJob.id, { onDelete: 'cascade' }),
+    /** 1-based, matching what the spreadsheet shows the person. */
+    rowNumber: integer('row_number').notNull(),
+    /** The untouched source row, so an error can always be explained. */
+    raw: jsonb('raw').notNull().default(sql`'{}'::jsonb`),
+    /** The row after mapping, in our own shape. */
+    parsed: jsonb('parsed'),
+    /** Null while valid; otherwise why this row cannot be imported. */
+    error: text('error'),
+    /** What it created, once committed. */
+    appliedRefType: text('applied_ref_type'),
+    appliedRefId: bigint('applied_ref_id', { mode: 'number' }),
+  },
+  (t) => [
+    index('import_row_job_idx').on(t.jobId, t.rowNumber),
+    index('import_row_error_idx').on(t.jobId, t.error),
+  ],
+)
+
+/**
+ * A generated export (PRD FR-33.1 – FR-33.3).
+ *
+ * Recorded rather than merely streamed, so "who pulled the customer list, and
+ * when" is answerable - a question that matters more once real customer data
+ * is in the system.
+ */
+export const exportJob = pgTable(
+  'export_job',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    report: text('report').notNull(),
+    format: text('format').notNull(),
+    /** The filters it was run with, so the same file can be reproduced. */
+    filters: jsonb('filters').notNull().default(sql`'{}'::jsonb`),
+    rowCount: integer('row_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: bigint('created_by', { mode: 'number' }),
+  },
+  (t) => [index('export_job_business_idx').on(t.businessId, t.createdAt)],
+)
+
+/**
+ * A saved set of report filters (PRD FR-25.4).
+ *
+ * The shop looks at the same handful of views every week; making them retype
+ * a date range and a branch each time is how a report centre stops being used.
+ */
+export const savedReport = pgTable(
+  'saved_report',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** Whose it is. A saved view is personal unless it is shared. */
+    userId: bigint('user_id', { mode: 'number' }).notNull(),
+    name: text('name').notNull(),
+    report: text('report').notNull(),
+    filters: jsonb('filters').notNull().default(sql`'{}'::jsonb`),
+    isShared: boolean('is_shared').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('saved_report_owner_name_uq').on(t.userId, t.name),
+    index('saved_report_business_idx').on(t.businessId),
   ],
 )

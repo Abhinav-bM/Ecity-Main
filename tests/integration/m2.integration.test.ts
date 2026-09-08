@@ -23,7 +23,7 @@ import {
 } from '@/server/services/stock.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { databaseAvailable, withAppendOnlySuspended } from './setup'
+import { databaseAvailable, expectDatabaseRefusal, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -141,14 +141,15 @@ suite('M2 inventory core (database-backed)', () => {
 
     it('refuses NEW CUT on any other type, at the DATABASE', async () => {
       // Bypassing the service entirely, as an import or a script would.
-      await expect(
+      await expectDatabaseRefusal(
         db.insert(schema.deviceUnit).values({
           businessId,
           productId: mobileProductId,
           mainType: 'USED',
           isNewCut: true,
         }),
-      ).rejects.toThrow(/new_cut_only_global/i)
+        /new_cut_only_global/i,
+      )
     })
 
     it('defaults NEW devices to the external billing channel (FR-38.1)', async () => {
@@ -265,12 +266,14 @@ suite('M2 inventory core (database-backed)', () => {
       expect(d.events.map((e) => e.seq)).toEqual([1, 2])
       expect(d.device.status).toBe('RESERVED')
 
-      await expect(
+      await expectDatabaseRefusal(
         db.execute(`update device_event set seq = 99 where device_id = ${r.id}`),
-      ).rejects.toThrow(/append-only/i)
-      await expect(
+        /append-only/i,
+      )
+      await expectDatabaseRefusal(
         db.execute(`delete from device_event where device_id = ${r.id}`),
-      ).rejects.toThrow(/append-only/i)
+        /append-only/i,
+      )
     })
 
     it('refuses an illegal status transition', async () => {
@@ -372,9 +375,10 @@ suite('M2 inventory core (database-backed)', () => {
       expect(after.at(-1)!.delta).toBe(-2)
       expect(after.at(-1)!.quantityAfter).toBe(8)
 
-      await expect(
+      await expectDatabaseRefusal(
         db.execute(`update stock_ledger set delta = 0 where business_id = ${businessId}`),
-      ).rejects.toThrow(/append-only/i)
+        /append-only/i,
+      )
     })
 
     it('reports low stock against the branch minimum', async () => {
@@ -593,15 +597,15 @@ suite('M2 inventory core (database-backed)', () => {
     it('refuses an impossible percentage at the DATABASE', async () => {
       // Bypassing the service, as an import or a script would.
       for (const bad of [0, 101, -5]) {
-        await expect(
+        await expectDatabaseRefusal(
           db.insert(schema.deviceUnit).values({
             businessId,
             productId: mobileProductId,
             mainType: 'USED',
             batteryHealthPercent: bad,
           }),
-          `battery ${bad}%`,
-        ).rejects.toThrow(/battery_health_percent_range/i)
+          /battery_health_percent_range/i,
+        )
       }
     })
   })

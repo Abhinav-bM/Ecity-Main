@@ -1,0 +1,302 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Alert } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AppSelect } from '@/components/app-select'
+
+type Brand = { id: number; name: string; isActive: boolean; productCount: number }
+type Category = Brand & { isSerialised: boolean; identifierType: string }
+
+/**
+ * Managing the catalogue's two lists.
+ *
+ * Nothing here deletes. A category is referenced by products and products by
+ * invoices already issued, so removing one would break a bill somebody has
+ * already been given. Deactivating keeps history readable and takes the entry
+ * out of new work, which is what "delete" actually means to a shop.
+ */
+export function CatalogueManager({
+  brands,
+  categories,
+}: {
+  brands: Brand[]
+  categories: Category[]
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">Catalogue</h1>
+        <p className="text-sm text-muted-foreground">
+          The brands and categories the product pickers offer. Entries are deactivated, never
+          deleted — invoices already issued refer to them.
+        </p>
+      </div>
+
+      <Tabs defaultValue="brands">
+        <TabsList>
+          <TabsTrigger value="brands">Brands</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="brands" className="mt-4 space-y-4">
+          <NewBrand />
+          <List
+            kind="brand"
+            rows={brands}
+            testId="brand-list"
+            describe={(r) => `${r.productCount} product${r.productCount === 1 ? '' : 's'}`}
+          />
+        </TabsContent>
+
+        <TabsContent value="categories" className="mt-4 space-y-4">
+          <NewCategory />
+          <List
+            kind="category"
+            rows={categories}
+            testId="category-list"
+            describe={(r) => {
+              const c = r as Category
+              const tracking = c.isSerialised ? `${c.identifierType}-tracked` : 'counted'
+              return `${tracking} · ${c.productCount} product${c.productCount === 1 ? '' : 's'}`
+            }}
+          />
+        </TabsContent>
+      </Tabs>
+
+      <p className="text-xs text-muted-foreground">
+        <strong>Main types</strong> (NEW, USED, ER, ACT, GLOBAL) are not managed here. A main type
+        is not a label: it decides which handsets reach the till, what the invoice prints, how
+        GLOBAL carries NEW CUT, and how the dashboards group. A sixth one would carry none of that
+        behaviour, so adding one is a code change — and the question to answer first is what it
+        would <em>mean</em>.
+      </p>
+    </div>
+  )
+}
+
+function List({
+  kind,
+  rows,
+  testId,
+  describe,
+}: {
+  kind: 'brand' | 'category'
+  rows: Brand[]
+  testId: string
+  describe: (row: Brand) => string
+}) {
+  const router = useRouter()
+  const [editing, setEditing] = useState<number | null>(null)
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  async function save(id: number, body: Record<string, unknown>) {
+    setError(null)
+    const res = await fetch(`/api/${kind === 'brand' ? 'brands' : 'categories'}/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string }
+      setError(data.error ?? 'That did not work.')
+      return
+    }
+    setEditing(null)
+    toast.success('Saved.')
+    router.refresh()
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-2 py-3">
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <ul className="space-y-1.5" data-testid={testId}>
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+              data-testid={`${kind}-row`}
+            >
+              {editing === r.id ? (
+                <>
+                  <Input
+                    className="h-8 max-w-xs"
+                    aria-label={`Rename ${r.name}`}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                  <span className="flex gap-2">
+                    <Button size="sm" onClick={() => void save(r.id, { name })}>
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                      Cancel
+                    </Button>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="min-w-0">
+                    <span className="font-medium">{r.name}</span>
+                    {!r.isActive ? (
+                      <Badge variant="secondary" className="ml-2">
+                        Inactive
+                      </Badge>
+                    ) : null}
+                    <span className="block text-xs text-muted-foreground">{describe(r)}</span>
+                  </span>
+                  <span className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(r.id)
+                        setName(r.name)
+                      }}
+                    >
+                      Rename
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void save(r.id, { isActive: !r.isActive })}
+                    >
+                      {r.isActive ? 'Deactivate' : 'Reactivate'}
+                    </Button>
+                  </span>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )
+}
+
+function NewBrand() {
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    setError(null)
+    if (!name.trim()) return setError('Give the brand a name.')
+    setBusy(true)
+    const res = await fetch('/api/brands', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    setBusy(false)
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string }
+      return setError(data.error ?? 'Could not add it.')
+    }
+    setName('')
+    toast.success('Brand added.')
+    router.refresh()
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm">Add a brand</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-end gap-2">
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <div className="space-y-1.5">
+          <Label htmlFor="brand-name">Name</Label>
+          <Input id="brand-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <Button disabled={busy} onClick={() => void submit()}>
+          {busy ? 'Adding…' : 'Add brand'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function NewCategory() {
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [isSerialised, setIsSerialised] = useState(false)
+  const [identifierType, setIdentifierType] = useState('IMEI')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    setError(null)
+    if (!name.trim()) return setError('Give the category a name.')
+    setBusy(true)
+    const res = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, isSerialised, identifierType }),
+    })
+    setBusy(false)
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string }
+      return setError(data.error ?? 'Could not add it.')
+    }
+    setName('')
+    toast.success('Category added.')
+    router.refresh()
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm">Add a category</CardTitle>
+        <CardDescription>
+          How its items are tracked is fixed once the category has products — it decides whether
+          they carry identifiers at all.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-end gap-3">
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <div className="space-y-1.5">
+          <Label htmlFor="category-name">Name</Label>
+          <Input id="category-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <Checkbox
+            checked={isSerialised}
+            onCheckedChange={(c) => setIsSerialised(c === true)}
+            aria-label="Tracked individually"
+          />
+          Tracked individually
+        </label>
+        {isSerialised ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="identifier-type">Identifier</Label>
+            <AppSelect
+              id="identifier-type"
+              label="Identifier"
+              value={identifierType}
+              onValueChange={setIdentifierType}
+              options={[
+                { value: 'IMEI', label: 'IMEI (phones)' },
+                { value: 'SERIAL', label: 'Serial number (laptops, speakers)' },
+              ]}
+            />
+          </div>
+        ) : null}
+        <Button disabled={busy} onClick={() => void submit()}>
+          {busy ? 'Adding…' : 'Add category'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}

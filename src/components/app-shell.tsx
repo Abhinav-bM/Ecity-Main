@@ -13,6 +13,7 @@ import {
   Menu,
   ScrollText,
   Receipt,
+  Flag,
   ScanLine,
   Settings,
   ShieldCheck,
@@ -23,6 +24,7 @@ import {
   CalendarCheck,
   Landmark,
   SlidersHorizontal,
+  Upload,
   Truck,
   UserRound,
   Wallet,
@@ -56,6 +58,7 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.view' },
+      { href: '/reports', label: 'Reports', icon: ScrollText, permission: 'analytics.view' },
     ],
   },
   {
@@ -134,6 +137,24 @@ const NAV: NavGroup[] = [
     heading: 'Settings',
     items: [
       { href: '/settings/business', label: 'Business', icon: Settings, permission: 'business.view' },
+      {
+        href: '/settings/catalogue',
+        label: 'Catalogue',
+        icon: Boxes,
+        permission: 'product.manage',
+      },
+      {
+        href: '/imports',
+        label: 'Import data',
+        icon: Upload,
+        permission: 'product.manage',
+      },
+      {
+        href: '/settings/opening-balances',
+        label: 'Opening balances',
+        icon: Flag,
+        permission: 'product.manage',
+      },
       {
         href: '/settings/branches',
         label: 'Branches',

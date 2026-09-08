@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 368 unit and integration tests, 756
+Automated tests cover the mechanics — 403 unit and integration tests, 820
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -1361,3 +1361,139 @@ Pick a day you can add up by hand.
 - **Charts are simple bars**, with no axes, tooltips or zoom
 - **Estimated net profit is gross less recorded expenses.** Salaries and rent
   count only if somebody booked them as expenses
+
+# M11 — Reports, Exports, Imports & Opening Balances
+
+Sign in as **admin** unless a step says otherwise.
+
+## 1. The report centre (FR-25.1 – FR-25.3)
+
+- [ ] **Reports** in the sidebar opens the centre
+- [ ] Ten reports: Sales, Purchases, Inventory, Financial, Credit, Tax,
+      Reconciliation, Branch comparison, Customers, Suppliers
+- [ ] Each has From, To and a branch picker, and the filters are in the URL —
+      copy the address to someone and they see the same figures
+- [ ] The preview shows the first 100 rows and says how many there are
+- [ ] Sales revenue for a period matches the Analytics page for the same period
+- [ ] **Inventory** groups by main type, with **GLOBAL · NEW CUT** as its own
+      value — never a sixth type
+- [ ] **Credit** carries the 0–7, 8–30, 31–60 and over-60 buckets
+- [ ] **Customers** and **Suppliers** list everyone with what they traded in
+      the period and what is owed *now* — a list to call, and a list to pay
+- [ ] Signed in as **staff**, the Financial report says it needs permission to
+      see cost prices
+- [ ] Changing the period says **Rebuilding…** while it works. *A report that
+      looks frozen gets asked for three times*
+- [ ] **Save this view**, name it, and it appears as a chip
+- [ ] Go to another report, click the chip, and the first one comes back with
+      its dates and branch
+- [ ] Saving again under the same name **replaces** it rather than being
+      refused
+- [ ] Remove the view with its ×, and it goes
+
+## 2. Exports (FR-33.3)
+
+For at least Sales and Inventory:
+
+- [ ] **CSV** downloads and opens in Excel with the accents intact
+- [ ] **Excel** downloads as a real `.xlsx`, and the money column **adds up**
+      when you select it. *A spreadsheet that cannot sum its own money column
+      is not much use*
+- [ ] **PDF** downloads, is landscape, and repeats the column headings on every
+      page
+- [ ] A very large PDF is refused with a message pointing at CSV, rather than
+      silently cutting rows off
+
+## 3. The catalogue (carried in from M5)
+
+- [ ] **Settings → Catalogue** lists brands and categories with how many
+      products each holds
+- [ ] **Add a brand** → it appears, and shows in the product form's picker
+- [ ] **Rename** it → the change shows everywhere
+- [ ] **Deactivate** it → it stays listed, marked inactive. *Invoices already
+      issued refer to it, so nothing is deleted*
+- [ ] A duplicate name is refused
+- [ ] **Add a category**, choosing whether it is tracked individually and by
+      IMEI or serial
+- [ ] On a category that **already has products**, changing how it is tracked
+      is refused with a reason. *That would reinterpret stock that already
+      exists*
+- [ ] The page explains why **main types** are not managed here
+
+## 4. The import wizard (FR-33.1)
+
+Make a CSV with a heading row and a few customers, including one row with an
+empty name.
+
+- [ ] **Import data** → choose Customers → pick the file
+- [ ] It says how many rows it read, and **nothing has been created yet**
+- [ ] The column mapping is **guessed** — "Full Name" finds *name*, "Mobile"
+      finds *phone*
+- [ ] The guess can be **changed**; a required field left unmapped is refused
+      with a message naming it
+- [ ] **Check the file** → it says how many are ready and how many have
+      problems
+- [ ] The bad row is named by its **line number as the spreadsheet shows it**
+- [ ] **Download the full list of problems** gives a CSV of just those rows,
+      with the row as uploaded beside the reason
+- [ ] **Import** → only the good rows go in; the bad ones are left out and
+      nothing is half-created
+- [ ] The customers really exist afterwards
+- [ ] Uploading the **same file again** is refused. *It would double
+      everything in it*
+- [ ] Signed in as **staff**, the import page redirects away
+
+Then save the same list as **.xlsx** and do it again:
+
+- [ ] The `.xlsx` uploads directly — no converting to CSV first
+- [ ] An IMEI column typed as a number comes through as its digits, not as
+      `3.81E+14`. *An IMEI that arrives in scientific notation matches nothing*
+- [ ] A date cell arrives as a day, not as a timestamp
+- [ ] An old **.xls** is refused with a message saying to save it as .xlsx
+
+## 5. Handsets, with more than one IMEI (FR-33.2)
+
+- [ ] Import a devices file with `IMEI No` and `IMEI 2` columns
+- [ ] Both IMEIs land on the **same handset**, not two
+- [ ] This works even while *IMEI fields per device* is set to 1 in Settings.
+      *The file decides how many the handset has, not the form*
+- [ ] A row with a main type that is not one of the five is rejected by name
+- [ ] A row naming a product the shop does not have is rejected, and says so
+
+## 6. Opening balances (FR-34.1 – FR-34.3)
+
+**Settings → Opening balances**, three tabs.
+
+- [ ] Declare **opening stock** for an accessory → the stock figure and the
+      inventory report both show it
+- [ ] Declare **opening cash** for a branch → the cash drawer shows it as the
+      opening movement
+- [ ] Declaring it twice for the same branch is refused
+- [ ] Declare a customer's **existing due** → they appear on the dues screen,
+      in the aging buckets, in the credit report and in the dashboard's
+      "customers owe". *A balance nobody can see is worse than not importing
+      it*
+- [ ] Declare a supplier's **existing due** → it shows in supplier dues
+- [ ] Every opening entry is dated as at the day you declared, not the day you
+      typed it
+- [ ] **Import a file instead** on the stock and dues tabs opens the wizard
+      already set to the right kind
+- [ ] A dues file naming somebody the shop does not have rejects **that row**
+      and imports the rest. *A due against a name nobody recognises is worse
+      than a missing row*
+- [ ] A stock file uploaded without choosing a branch is refused straight
+      away, not one row at a time
+
+## What M11 does not do
+
+- **Only `.xlsx`, not the old binary `.xls`** — Excel saves one as the other in
+  a click, and the message says so
+- **Only the first sheet of a workbook** — several sheets is a question about
+  which one, and guessing imports the wrong list
+- **No saved report filters yet**; the URL carries them, which covers sharing
+  but not naming
+- **No scheduled or emailed reports**
+- **No undo on an import.** A wrong batch is corrected the way anything else
+  is — by voiding or adjusting what it created
+- **OQ-9 is still open**: which files the shop actually has, and in what order
+  they should be loaded, is a go-live plan rather than a design question

@@ -6,7 +6,7 @@ import * as svc from '@/server/services/auth.service'
 import { purgeExpiredSessions } from '@/server/auth/session'
 import { effectivePermissionsInBranch } from '@/server/auth/permissions'
 import { hashPassword } from '@/server/auth/password'
-import { databaseAvailable } from './setup'
+import { databaseAvailable, expectDatabaseRefusal } from './setup'
 
 // Importing the db client does not open a connection - it is lazy
 // (src/server/db/index.ts), which is what lets this file be imported at all
@@ -167,13 +167,15 @@ suite('auth (database-backed)', () => {
         .returning()
     )[0]!
 
-    await expect(
+    await expectDatabaseRefusal(
       db.update(schema.auditLog).set({ summary: 'tampered' }).where(eq(schema.auditLog.id, row.id)),
-    ).rejects.toThrow(/append-only/i)
+      /append-only/i,
+    )
 
-    await expect(
+    await expectDatabaseRefusal(
       db.delete(schema.auditLog).where(eq(schema.auditLog.id, row.id)),
-    ).rejects.toThrow(/append-only/i)
+      /append-only/i,
+    )
   })
 
   it('scopes a branch-limited user to their own branch only', async () => {

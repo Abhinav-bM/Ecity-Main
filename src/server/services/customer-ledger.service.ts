@@ -260,6 +260,65 @@ export async function customerDues(
     byCustomer.set(r.customerId, entry)
   }
 
+  /*
+   * M11 FR-34.3. A balance carried in from before ECITY has no bill behind it,
+   * so it would be invisible to a screen built entirely from sales - and an
+   * opening balance nobody can see is worse than not having imported it.
+   *
+   * Each customer's OPENING entries are aged from the day they were declared,
+   * exactly as an unpaid invoice of that date would be, and only what is still
+   * outstanding after later payments counts.
+   */
+  const opening = await db
+    .select({
+      customerId: customerLedgerEntry.customerId,
+      customerName: customer.name,
+      phone: customer.phone,
+      occurredAt: sql<string>`min(${customerLedgerEntry.occurredAt})`,
+      /*
+       * The whole account, not just the opening line: a payment posted against
+       * an old debt reduces it, and pretending otherwise would show money as
+       * owed twice - once here and once against whatever bill it settled.
+       */
+      balancePaise: sql<string>`(
+        select coalesce(sum(e.amount_paise), 0)
+        from customer_ledger_entry e
+        where e.customer_id = "customer_ledger_entry"."customer_id"
+      )`,
+    })
+    .from(customerLedgerEntry)
+    .innerJoin(customer, eq(customer.id, customerLedgerEntry.customerId))
+    .where(
+      and(
+        eq(customerLedgerEntry.businessId, actor.businessId),
+        eq(customerLedgerEntry.entryType, 'OPENING'),
+      ),
+    )
+    .groupBy(customerLedgerEntry.customerId, customer.name, customer.phone)
+
+  for (const o of opening) {
+    // Already counted through their bills, or since settled.
+    if (byCustomer.has(o.customerId)) continue
+    const owing = BigInt(o.balancePaise)
+    if (owing <= 0n) continue
+
+    const from = new Date(o.occurredAt)
+    const days = daysBetween(from, now)
+    const entry: CustomerDue = {
+      customerId: o.customerId,
+      customerName: o.customerName,
+      phone: o.phone,
+      balancePaise: owing,
+      buckets: emptyBuckets(),
+      oldestDueDate: from,
+      // Carried in from before the system: overdue by definition.
+      overduePaise: owing,
+      openInvoiceCount: 0,
+    }
+    entry.buckets[agingBucket(days)] += owing
+    byCustomer.set(o.customerId, entry)
+  }
+
   let result = [...byCustomer.values()]
   if (filters.overdueOnly) result = result.filter((r) => r.overduePaise > 0n)
   result.sort((a, b) => Number(b.balancePaise - a.balancePaise))

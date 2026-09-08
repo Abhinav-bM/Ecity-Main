@@ -84,3 +84,43 @@ export async function clearMoney(businessId: number) {
   await db.execute(`delete from cash_drawer_day where business_id = ${businessId}`)
   await db.execute(`delete from account where business_id = ${businessId}`)
 }
+
+/**
+ * Assert that a database rule — a trigger or a check constraint — rejected
+ * the write, whatever wrapped the error on the way out.
+ *
+ * Drizzle 0.45 wraps every driver error in one of its own, whose message is
+ * "Failed query: …" with Postgres's actual complaint on `.cause`. A plain
+ * `rejects.toThrow(/append-only/)` therefore passes on 0.38 and fails on
+ * 0.45 while the trigger is working perfectly — which is the worst kind of
+ * test, because the obvious reading of the failure is that the guard has
+ * gone. This walks the cause chain, so the assertion says what it means:
+ * *the database refused this*, not *the error text happened to be flat*.
+ */
+export async function expectDatabaseRefusal(
+  promise: Promise<unknown>,
+  reason: RegExp,
+): Promise<void> {
+  let thrown: unknown
+  try {
+    await promise
+  } catch (error) {
+    thrown = error
+  }
+
+  if (thrown === undefined) {
+    throw new Error(`Expected the database to refuse this (${reason}), but it went through.`)
+  }
+
+  const messages: string[] = []
+  for (let e: unknown = thrown, depth = 0; e instanceof Error && depth < 5; depth += 1) {
+    messages.push(e.message)
+    e = (e as Error & { cause?: unknown }).cause
+  }
+
+  if (!messages.some((m) => reason.test(m))) {
+    throw new Error(
+      `Expected a refusal matching ${reason}, got:\n  ${messages.join('\n  ')}`,
+    )
+  }
+}

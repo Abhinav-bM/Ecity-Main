@@ -24,7 +24,12 @@ import { getStock, setDeviceStatus } from '@/server/services/stock.service'
 import { listDevices } from '@/server/services/device.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
-import { clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
+import {
+  clearMoney,
+  databaseAvailable,
+  expectDatabaseRefusal,
+  withAppendOnlySuspended,
+} from './setup'
 
 const available = await databaseAvailable()
 const suite = available ? describe : describe.skip
@@ -410,9 +415,10 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
     })
 
     it('the supplier ledger cannot be rewritten', async () => {
-      await expect(
+      await expectDatabaseRefusal(
         db.execute(`update supplier_ledger_entry set amount_paise = 0 where business_id = ${businessId}`),
-      ).rejects.toThrow(/append-only/i)
+        /append-only/i,
+      )
     })
   })
 
