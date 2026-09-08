@@ -121,7 +121,7 @@ a blank one.
 - Request-scoped branch context: the selected branch (or "all branches" for those permitted) resolved once and applied to every query.
 - Audit writer invoked from a common data-access layer so that new features are audited by default rather than by remembering.
 - Database migrations, seeding, error handling, structured logging, health check.
-- CI: typecheck, lint, tests, build an image, push to GHCR, deploy over SSH. Provision the Hetzner server, Docker Compose stack (app, Postgres 16, pg-boss worker, Caddy) and the staging stack — follow the Deployment Guide.
+- CI: typecheck, lint, tests, build an image, push to GHCR, deploy over SSH. Provision the Lightsail instance, Docker Compose stack (app, Postgres 16, pg-boss worker, Caddy) and the staging stack — follow the Deployment Guide.
 
 **Done when.**
 - A user can log in, reset a password and log out; sessions expire and can be revoked.
@@ -334,9 +334,9 @@ They stamp at creation and stop there. Correcting a line afterwards does not rew
 - A payment taken at Branch B against a sale made at Branch A records both branches and appears in both branches' cash/collection figures correctly.
 - Customer outstanding recomputed from the ledger equals the displayed balance for every customer in the test data.
 - Aging buckets 0–7 / 8–30 / 31–60 / 60+ are correct against hand-checked dates.
-- **Carried from M0:** the Hetzner server is provisioned, and pushing to `main` deploys to staging automatically. Alpha is the first release someone outside the project sees, so it needs somewhere to live. See the Deployment Guide.
+- **Carried from M0:** the Lightsail instance is provisioned, and pushing to `main` deploys to staging automatically. Alpha is the first release someone outside the project sees, so it needs somewhere to live. See the Deployment Guide.
 
-*Built as:* the pipeline is written, and the deployment guide §6.2 has the half that needs a provider account. **The provider changed:** Hetzner's Singapore region never sold the CX22 this plan assumed (the CX line is EU-only), and their prices rose 144–190% on 15 June 2026, which made them both the dearest option and the furthest away. The recommendation is now an India region — Vultr Mumbai or DigitalOcean Bangalore — which is cheaper, ~20 ms instead of ~150 ms, and keeps the shop's records in India. Nothing in the pipeline was provider-specific, so no code changed; see deployment guide §1.1. Fixing the workflow found three faults that would each have broken a real deploy: it did not wait for CI (`needs: []`), the migration step ran `drizzle-kit` from an image that does not contain it with `|| true` swallowing the failure, and the compose file referenced a `worker.js` that does not exist. It also now runs `db:sync-roles`, without which a module that adds a permission ships a screen nobody can open.
+*Built as:* the pipeline is written, and the deployment guide §6.2 has the half that needs a provider account. **The provider changed:** Hetzner's Singapore region never sold the CX22 this plan assumed (the CX line is EU-only), and their prices rose 144–190% on 15 June 2026, which made them both the dearest option and the furthest away. The choice is now **AWS Lightsail, Mumbai** — an India region at ~20 ms instead of ~150 ms, keeping the shop's records in India, on a flat monthly bill. Its one sharp edge is that it cannot resize in place: growing means snapshot, rebuild larger, move the static IP, and there is no going back down — so staging runs at 1 GB and production is provisioned at 2 GB from the start. Nothing in the pipeline was provider-specific, so no code changed; see deployment guide §1.1. Fixing the workflow found three faults that would each have broken a real deploy: it did not wait for CI (`needs: []`), the migration step ran `drizzle-kit` from an image that does not contain it with `|| true` swallowing the failure, and the compose file referenced a `worker.js` that does not exist. It also now runs `db:sync-roles`, without which a module that adds a permission ships a screen nobody can open.
 
 **Depends on.** M4. **Effort.** 1.5 weeks.
 
@@ -783,7 +783,7 @@ When the real file arrives, the work is: read the columns, fill in `legacy.mappi
 **Delivers.** FR-31.2, FR-31.3, FR-32.1 – FR-32.3, and PRD §9 non-functional requirements.
 
 **Work.**
-- Three backup layers per the Deployment Guide §7: Hetzner snapshots, `pg_dump` to Cloudflare R2 via restic (7 daily / 4 weekly / 6 monthly), and a **restore actually performed** into a scratch database, timed, with the procedure written down.
+- Three backup layers per the Deployment Guide §7: Lightsail snapshots, `pg_dump` to Cloudflare R2 via restic (7 daily / 4 weekly / 6 monthly), and a **restore actually performed** into a scratch database, timed, with the procedure written down.
 - **Decide the acceptable data-loss window.** Nightly dumps alone mean losing up to a full trading day. Two ways to close that: dump every four hours (one crontab line, ~4-hour worst case), or add WAL archiving with `pgBackRest`/`wal-g` to R2 for true point-in-time recovery (~5-minute worst case, about half a day of setup). **Recommended: both** — this is money data.
 - Owner-triggered full business data export.
 - Soft-delete and reversal states audited across all financial and inventory documents; confirm no destructive path remains.

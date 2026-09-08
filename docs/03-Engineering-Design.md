@@ -42,7 +42,7 @@ Constraints that shaped every choice below:
 | Excel / CSV export | **exceljs**, streaming CSV | Handles the export requirements in FR-25.4 and FR-33.3 without loading everything into memory |
 | Testing | **Vitest** (unit), **Playwright** (end-to-end) | One test runner for TS; Playwright to prove the six core business flows in PRD §7 keep working |
 | Error tracking | **Sentry** | Free tier is sufficient at this scale |
-| Hosting | **One Hetzner CX22 VPS**, everything in Docker | App, PostgreSQL, pg-boss worker and Caddy (TLS) as four containers on one machine. ≈ ₹550–750/month all in. See §6 and the Deployment Guide |
+| Hosting | **One AWS Lightsail instance in Mumbai**, everything in Docker | App, PostgreSQL, worker and Caddy (TLS) as four containers on one machine. 1 GB for staging, 2 GB for production; ≈ ₹1,200–1,400/month for both. See §6 and the Deployment Guide |
 | CI/CD | **GitHub Actions** | Typecheck, lint, test, build an image, push to GHCR, SSH to the server and restart. The server never compiles anything |
 
 ### 2.1 Deliberate rejections
@@ -260,7 +260,7 @@ The billing store also carries the bill's **idempotency key** and is persisted t
 
 **Integrating the other billing system.** The shop keeps a second system for NEW items and exports Excel from it daily (PRD §6.22). The column layout is unknown at design time, so isolate it: `external-import/types.ts` defines a canonical row shape that the rest of the pipeline is written against, `adapters/*.adapter.ts` is the only code that knows the real column names, and `mapping/legacy.mapping.json` holds the column-name mapping so a changed header is a config edit rather than a release. Staging and preview before commit, idempotency on `(source, external invoice no, external line id)` plus a file hash, and apply through the *same* service functions as manual entry — never straight into tables. The one rule that makes this safe rather than merely tidy: a device whose `sales_channel` is `EXTERNAL` cannot be sold on the ECITY billing screen at all, so the two systems can never invoice the same IMEI.
 
-**Environments.** `local` (Docker Compose on your laptop) → `staging` → `production`. Staging is either a second small Hetzner server or a second Docker stack on the same box with its own database and port; either way it costs little and it is what stops a bad migration reaching real sales data. Migrations run in CI against staging before they are allowed near production.
+**Environments.** `local` (Docker Compose on your laptop) → `staging` → `production`. Staging is either a second small Lightsail instance or a second Docker stack on the same box with its own database and port; either way it costs little and it is what stops a bad migration reaching real sales data. Migrations run in CI against staging before they are allowed near production.
 
 ---
 
@@ -272,29 +272,58 @@ Prices are indicative for **September 2026**, converted at approximately **₹88
 
 ### 6.1 The recommended setup
 
+> **Revised September 2026.** This section previously recommended Hetzner
+> CX22 in Singapore at ≈₹400–600. That advice was wrong on both counts — the
+> CX line is EU-only, so "CX22 in Singapore" described a machine that does not
+> exist, and Hetzner raised cloud prices 144% in June 2026. See Deployment
+> Guide §1, which carries the full comparison.
+
+**AWS Lightsail, Mumbai.** One instance, everything in Docker.
+
 | Item | Choice | ₹ / month |
 |---|---|---|
-| Server | **Hetzner CX22**, Singapore — 2 vCPU, 4 GB RAM, 40 GB SSD | ~₹400–600 |
-| Automated snapshots | Hetzner backups (+20% of server) | ~₹90 |
+| Server (staging) | **Lightsail Mumbai**, 1 vCPU / 1 GB / 40 GB | ~₹500 + 18% GST |
+| Server (production) | **Lightsail Mumbai**, 2 vCPU / 2 GB / 60 GB | ~₹1,060 + 18% GST |
+| Automated snapshots | Lightsail snapshots (~20% of instance) | ~₹100–200 |
 | Object storage + off-site backups | Cloudflare R2, free tier (10 GB, zero egress) | ₹0 |
 | Transactional email | Resend free tier (3,000/month) | ₹0 |
 | Error tracking | Sentry Developer, free | ₹0 |
 | Domain | `.in`, ~₹800/year | ~₹70 |
-| **Total** | | **≈ ₹550–750** |
+| **Total, both environments** | | **≈ ₹1,200–1,400** |
 
-Hetzner is an independent German hosting company — you buy directly at `hetzner.com/cloud`, not through AWS. Their nearest region to India is **Singapore** at roughly 60–90 ms, comfortably inside the 300 ms interaction target in PRD §9.1. They also bill from the EU without adding 18% GST, which widens the gap against Indian-region providers.
+**Why Mumbai over a cheaper European box.** 20–30 ms from Kerala against
+roughly 150 ms, and the shop's sales records stay in India — one fewer thing
+to explain to a CA. Lightsail bills a flat monthly figure including a generous
+transfer allowance rather than metering every component the way EC2 does.
+
+**What to know before choosing it.** Lightsail has **no in-place resize**: to
+grow you snapshot, build a larger instance from it and move the static IP
+across (Deployment Guide §8b), and you cannot go back down afterwards. Attach
+a static IP on day one or the new instance comes up on a different address and
+DNS breaks. DigitalOcean Bangalore and Vultr Mumbai resize in place at
+comparable prices, and are the alternatives if that matters more than staying
+inside AWS.
+
+**Sizing.** Start staging at 1 GB — the server never compiles anything, it
+pulls a pre-built image, so Postgres, the app and Caddy fit comfortably.
+Provision **production at 2 GB**: Node holds 200–400 MB under load, Postgres
+wants its buffers, and the analytics queries are the memory-hungry part. Since
+Lightsail will not let you shrink later, the safe order is small for staging,
+right-sized for production.
 
 Step-by-step setup, hardening, deployment pipeline, backup scripts and the operational runbook are in the companion **Deployment Guide**.
 
-### 6.2 If an India-region server is wanted
+### 6.2 The alternatives, if Lightsail's resize rule bites
 
-| Provider | Region | 2 vCPU / 4 GB, ₹ / month |
-|---|---|---|
-| DigitalOcean | Bangalore | ≈ ₹1,060 + 18% GST |
-| AWS Lightsail | Mumbai | ≈ ₹1,050 + 18% GST |
-| Linode / Akamai | Mumbai | ≈ ₹1,060 + 18% GST |
+| Provider | Region | 1 vCPU / 2 GB, ₹ / month | Resizes in place |
+|---|---|---|---|
+| Vultr | Mumbai | ≈ ₹880 + 18% GST | Yes |
+| DigitalOcean | Bangalore | ≈ ₹1,060 + 18% GST | Yes |
+| Linode / Akamai | Mumbai | ≈ ₹1,060 + 18% GST | Yes |
 
-Same architecture, same containers, about ₹800 more per month, latency down to roughly 20 ms. Worth it only if counter staff actually complain about responsiveness.
+Same architecture, same containers, same guide — every provider gives you an
+Ubuntu machine and an IP address. Nothing in this design is Lightsail-specific
+except the upgrade procedure.
 
 ### 6.3 Managed hosting, for later
 
@@ -366,8 +395,8 @@ Note what is *not* on this list: the framework, the language, and the fact that 
 
 | Trigger | Response | Downtime |
 |---|---|---|
-| CPU or RAM consistently above 70% | Resize to CX32 (4 vCPU / 8 GB) in the Hetzner console | ~1 minute, one reboot |
-| Database outgrows the disk | Attach a Hetzner volume, or resize | Minutes |
+| CPU or RAM consistently above 70% | Move to the next Lightsail plan — snapshot, rebuild larger, move the static IP (Deployment Guide §8b) | ~20 minutes, after closing |
+| Database outgrows the disk | The same upgrade: Lightsail disk grows with the plan | ~20 minutes |
 | Sustained load above ~100 req/s | Split the database onto its own server | An evening |
 | Second team, separate deploy cadence | Extract `/server/services` as its own API | Weeks — and only then |
 
@@ -414,7 +443,7 @@ The concurrency test and the authorisation matrix are the two suites that repay 
 4. `npm i -D vitest @playwright/test @types/pg eslint prettier`
 5. Docker Compose with Postgres 16 for local development
 6. GitHub repository, GitHub Actions for typecheck + lint + test + build, deploy on `main`
-7. Provision the Hetzner server and Cloudflare R2 bucket, and wire the environment variables — follow the Deployment Guide
+7. Provision the Lightsail instance and Cloudflare R2 bucket, and wire the environment variables — follow the Deployment Guide
 8. Write the M0–M2 schema in full before writing the first screen, `device_identifier` and `imei_slots` included
 9. Add the money helper (`bigint` paise) and forbid `number` amounts by lint rule
 10. Begin Module M0

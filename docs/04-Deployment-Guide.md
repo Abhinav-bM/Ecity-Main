@@ -26,20 +26,30 @@ Verify each of these yourself before paying — as the box above shows, they mov
 
 | Provider | Nearest region | Specs | Per month | Latency from Kerala |
 |---|---|---|---|---|
-| **Vultr** (recommended) | **Mumbai** | 1 vCPU / 2 GB / 55 GB / 2 TB | **$10 ≈ ₹880** + 18% GST | ~20–30 ms |
+| **AWS Lightsail** (chosen) | **Mumbai** | 2 vCPU / 2 GB / 60 GB / 3 TB | $12 ≈ ₹1,060 + 18% GST | ~20–30 ms |
+| Vultr | Mumbai | 1 vCPU / 2 GB / 55 GB / 2 TB | $10 ≈ ₹880 + 18% GST | ~20–30 ms |
 | DigitalOcean | Bangalore | 1 vCPU / 2 GB / 50 GB / 2 TB | $12 ≈ ₹1,060 + 18% GST | ~20–30 ms |
-| AWS Lightsail | Mumbai | 2 vCPU / 2 GB / 60 GB / 3 TB | $12 ≈ ₹1,060 + 18% GST | ~20–30 ms |
 | Hetzner | Helsinki (EU) | 2 vCPU / 4 GB / 40 GB | €19.49 ≈ ₹2,000, no GST | ~150 ms |
 
-**Recommendation: an India region, on Vultr Mumbai or DigitalOcean Bangalore.**
-It is now cheaper than Hetzner, three times closer, and it keeps the shop's
-sales records inside India — which is one fewer thing to explain to a CA. Pick
-Vultr on price, DigitalOcean if you would rather have the friendlier control
-panel and much better beginner documentation; the difference is about ₹200 a
-month.
+**Decision: AWS Lightsail, Mumbai.** An India region either way — 20–30 ms
+from Kerala against roughly 150 ms for Europe, and the shop's sales records
+stay in India, which is one fewer thing to explain to a CA. Lightsail bills a
+flat monthly figure with a generous transfer allowance rather than metering
+every component the way EC2 does, and it is the same AWS account if anything
+else is ever needed.
 
-Nothing in this guide is Hetzner-specific. Every provider gives you the same
-thing: an Ubuntu machine and an IP address. §3 onwards applies unchanged.
+**The one thing to know before you buy.** Lightsail has **no in-place
+resize**. Growing means taking a snapshot, creating a larger instance from it
+and moving the static IP across (§8b) — about twenty minutes, done after the
+shop closes — and you **cannot go back down** to a smaller plan afterwards.
+Attach a static IP on day one, or the rebuilt instance comes up on a different
+address and DNS breaks. Vultr and DigitalOcean resize a running machine in
+place at similar prices; they are the alternatives if that rule matters more
+than staying inside AWS.
+
+Nothing else in this guide is Lightsail-specific. Every provider gives you the
+same thing: an Ubuntu machine and an IP address. §3 onwards applies
+unchanged.
 
 ### 1.2 You do not need production yet
 
@@ -47,11 +57,15 @@ Right now you need **staging** — somewhere the Alpha can be shown. Production
 does not exist until go-live (M14). So buy the smaller machine now and size
 production properly later, when you know the real load:
 
-- **Staging today:** the smallest 1 GB instance (Vultr $5–6 ≈ ₹500 + GST). The
-  server never compiles anything — it pulls a pre-built image — so 1 GB is
-  enough for Postgres, the app and Caddy with room to spare.
-- **Production at go-live:** 2 GB. Revisit then; a year of prices moving means
-  any number written here today will be wrong by then.
+- **Staging today:** the smallest **1 GB** Lightsail instance (~$5–6 ≈ ₹500 +
+  GST). The server never compiles anything — it pulls a pre-built image — so
+  1 GB is enough for Postgres, the app and Caddy with room to spare.
+- **Production at go-live: 2 GB**, not 1 GB. Node holds 200–400 MB under load,
+  Postgres wants its buffers and working memory, and the report and analytics
+  queries are the memory-hungry part. 1 GB *runs* a small shop, but with almost
+  no headroom — and because Lightsail will not let you shrink later, the safe
+  order is small for staging and right-sized for production. Revisit the price
+  then; any figure written here today will have moved.
 
 ### 1.3 Total monthly cost
 
@@ -59,8 +73,8 @@ For **staging only**, which is where the project is now:
 
 | Item | ₹ / month |
 |---|---|
-| 1 GB VPS in an India region | ~₹500 + GST |
-| Provider automated backups (+20%) | ~₹100 |
+| 1 GB Lightsail instance, Mumbai | ~₹500 + GST |
+| Lightsail automated snapshots (+~20%) | ~₹100 |
 | Cloudflare R2 — file storage + off-site backups (free tier, 10 GB) | ₹0 |
 | Resend — transactional email (free tier, 3,000/month) | ₹0 |
 | Sentry — error tracking (free tier) | ₹0 |
@@ -336,9 +350,58 @@ CMD ["node", "server.js"]
 |---|---|---|---|
 | A | `app` | your server IP | **DNS only (grey cloud)** |
 
-Keep the proxy **off** at first so Caddy can obtain its certificate. You can turn Cloudflare's orange-cloud proxy on afterwards if you want, but it is not needed.
+Keep the proxy **off** at first so Caddy can obtain its certificate.
 
 3. Once DNS resolves, `docker compose up -d` and Caddy fetches a Let's Encrypt certificate automatically. `https://app.yourshop.in` is live.
+
+### 5.1 Cloudflare does not replace Caddy
+
+A common and expensive misunderstanding, so it is worth being explicit.
+
+Cloudflare terminates TLS at **its** edge — between the browser and
+Cloudflare. It does nothing about the leg between Cloudflare and your server,
+and that leg crosses the public internet. Something on the machine has to
+terminate TLS on it, and that is Caddy. Caddy is also the reverse proxy that
+puts requests onto the app container; Next.js cannot listen on 443 itself.
+Remove Caddy and nothing answers the port.
+
+Cloudflare's SSL modes make the point:
+
+| Mode | Browser → Cloudflare | Cloudflare → your server | Use it? |
+|---|---|---|---|
+| Flexible | encrypted | **plain HTTP** | **Never.** Bills and customer data in clear across the internet, and it causes redirect loops |
+| Full | encrypted | encrypted, certificate unchecked | Still needs a certificate on the box |
+| **Full (strict)** | encrypted | encrypted and verified | **This one**, if you proxy at all |
+| Off | — | — | No |
+
+Every usable mode needs a certificate on the server. Turning the proxy on
+changes only where Caddy's certificate comes from — never whether Caddy is
+there.
+
+### 5.2 If you turn the orange cloud on
+
+You do not have to. Caddy plus Let's Encrypt is two lines of config and renews
+itself; the proxy buys DDoS protection and caching, neither of which a single
+shop needs for correctness. If you do want it, three things have to be right
+and the third is the one that fails silently.
+
+**1. Set SSL/TLS mode to Full (strict).** Then give Caddy a certificate
+Cloudflare will accept: either keep Let's Encrypt (port 80 must stay reachable
+for the HTTP challenge, or switch Caddy to the DNS challenge with a Cloudflare
+API token), or install a free **Cloudflare Origin Certificate** — fifteen-year
+validity, trusted only by Cloudflare, which is exactly this job.
+
+**2. Restrict the firewall to Cloudflare's IP ranges.** Otherwise anyone who
+discovers the origin IP connects to it directly, bypassing Cloudflare
+completely, and you have paid for nothing.
+
+**3. The rate limiter depends on step 2.** Sign-in throttling identifies the
+caller from `x-forwarded-for` (M14). Cloudflare sets the real client address
+as the leftmost entry, so it keeps working when proxied — but on an origin
+that still accepts direct connections, anyone can send whatever
+`x-forwarded-for` they like and the per-address limit becomes trivial to
+evade. Locking the firewall to Cloudflare is what makes the header
+trustworthy. The two are one change, not two.
 
 ---
 
