@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
+import { BarcodeScanner } from '@/components/barcode-scanner'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
 import { AppSelect } from '@/components/app-select'
 
@@ -41,6 +42,7 @@ type Line = {
   product: PickedProduct | null
   quantity: string
   unitCost: string
+  sellingPrice: string
   discount: string
   mainType: (typeof MAIN_TYPES)[number]
   isNewCut: boolean
@@ -70,6 +72,7 @@ const newLine = (): Line => ({
   product: null,
   quantity: '1',
   unitCost: '',
+  sellingPrice: '',
   discount: '0',
   mainType: 'NEW',
   isNewCut: false,
@@ -179,6 +182,7 @@ export function PurchaseForm({
             productId: product.id,
             quantity: l.quantity,
             unitCost: l.unitCost || 0,
+            sellingPrice: l.sellingPrice,
             discount: l.discount || 0,
             identifiers: [],
             units: product.isSerialised
@@ -349,6 +353,9 @@ export function PurchaseForm({
                         unitCost: p.purchasePricePaise
                           ? String(Number(p.purchasePricePaise) / 100)
                           : line.unitCost,
+                        sellingPrice: p.sellingPricePaise
+                          ? String(Number(p.sellingPricePaise) / 100)
+                          : line.sellingPrice,
                         units: p.isSerialised
                           ? Array.from(
                               { length: Math.max(1, Number(line.quantity) || 1) },
@@ -373,6 +380,23 @@ export function PurchaseForm({
                     inputMode="decimal"
                     value={line.unitCost}
                     onChange={(e) => update(line.key, { unitCost: e.target.value })}
+                  />
+                </Field>
+                {/*
+                  Beside the cost, because the moment stock arrives is when
+                  somebody knows both numbers. Left blank, the till falls back
+                  to the product's list price rather than showing nothing.
+                */}
+                <Field
+                  id={`price-${line.key}`}
+                  label="Selling price (₹)"
+                  hint="Blank uses the product's list price"
+                >
+                  <Input
+                    id={`price-${line.key}`}
+                    inputMode="decimal"
+                    value={line.sellingPrice}
+                    onChange={(e) => update(line.key, { sellingPrice: e.target.value })}
                   />
                 </Field>
               </div>
@@ -537,6 +561,16 @@ export function PurchaseForm({
                                     ;(boxes?.[i + 1] as HTMLInputElement | undefined)?.focus()
                                   }
                                 }}
+                              />
+                              {/*
+                                Booking in a delivery is where the most
+                                identifiers get typed, so it is where a camera
+                                saves the most. Fills this box only — the
+                                person still sees what was read.
+                              */}
+                              <BarcodeScanner
+                                label={`Scan ${label} ${i + 1} on line ${index + 1}`}
+                                onScan={(value) => patch({ identifier: value })}
                               />
                               <Button
                                 type="button"

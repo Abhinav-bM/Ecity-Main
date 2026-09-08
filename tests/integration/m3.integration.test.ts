@@ -293,6 +293,68 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
       expect(line.colour).toBe('Blue')
     })
 
+    /*
+     * Found in use: the till showed a blank price on every handset.
+     *
+     * A purchase booked units in with their *cost* and no selling price, so
+     * there was nothing to prefill — while accessories prefilled fine from
+     * the product's default, which is what made it look like a bug in
+     * billing rather than in booking in.
+     */
+    it('prices the units it books in, so the till has something to show', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 2,
+            unitCostPaise: rs(18000),
+            sellingPricePaise: rs(24000),
+            mainType: 'USED',
+            identifiers: [imei(80), imei(81)],
+          },
+        ],
+      })
+
+      const devices = await db
+        .select()
+        .from(schema.deviceUnit)
+        .where(inArray(schema.deviceUnit.id, result.deviceIds))
+
+      expect(devices).toHaveLength(2)
+      for (const d of devices) {
+        expect(d.sellingPricePaise).toBe(rs(24000))
+        // ...and the cost is still the cost.
+        expect(d.purchasePricePaise).toBe(rs(18000))
+      }
+    })
+
+    it('leaves the price unset when the line does not give one', async () => {
+      // Not zero: an unset price falls back to the product's list price at
+      // the till, and zero would mean "give it away".
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 1,
+            unitCostPaise: rs(18000),
+            mainType: 'USED',
+            identifiers: [imei(82)],
+          },
+        ],
+      })
+      const device = (
+        await db
+          .select()
+          .from(schema.deviceUnit)
+          .where(inArray(schema.deviceUnit.id, result.deviceIds))
+      )[0]!
+      expect(device.sellingPricePaise).toBeNull()
+    })
+
     it('takes no specs on a counted line', async () => {
       const result = await createPurchase(actor, ctx, {
         supplierId,

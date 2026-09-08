@@ -20,11 +20,14 @@
     "restart": "bash scripts/restart-app.sh",
     "docs:pdf": "bash scripts/build-docs.sh",
     "db:sync-roles": "tsx src/server/db/sync-roles.ts",
-    "test:e2e:clean": "bash scripts/test-clean-db.sh"
+    "test:e2e:clean": "bash scripts/test-clean-db.sh",
+    "prebuild": "node scripts/copy-scanner-wasm.mjs",
+    "predev": "node scripts/copy-scanner-wasm.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@react-pdf/renderer": "^4.9.0",
+    "barcode-detector": "^3.2.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

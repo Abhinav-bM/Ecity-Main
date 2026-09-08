@@ -5,6 +5,7 @@ import { Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { BarcodeScanner } from '@/components/barcode-scanner'
 import { MainTypeBadge } from '@/components/main-type-badge'
 import { formatMoney } from '@/lib/money'
 import type { MainType } from '@/server/db/schema'
@@ -90,7 +91,13 @@ export function BillSearch({
 
   return (
     <div className="space-y-2">
-      <div className="relative">
+      {/*
+        The counter has a laser scanner, which types into this box and ends
+        with Enter. A salesperson on the floor has a phone, so the camera
+        button feeds the same box — a scan is only a faster way of typing.
+      */}
+      <div className="flex gap-2">
+      <div className="relative flex-1">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           ref={inputRef}
@@ -110,6 +117,14 @@ export function BillSearch({
             else if (products.length === 1 && devices.length === 0) {
               take(() => onPickProduct(products[0]!))
             }
+          }}
+        />
+      </div>
+        <BarcodeScanner
+          label="Scan an IMEI with the camera"
+          onScan={(value) => {
+            setQuery(value)
+            inputRef.current?.focus()
           }}
         />
       </div>

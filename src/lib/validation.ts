@@ -239,7 +239,7 @@ export const partySchema = z.object({
  * `?serialised=false` silently meaning "serialised only" is a trap the next
  * screen would fall into. This reads the words people actually send.
  */
-const queryBoolean = z.preprocess((value) => {
+export const queryBoolean = z.preprocess((value) => {
   if (typeof value !== 'string') return value
   const text = value.trim().toLowerCase()
   if (['false', '0', 'no', ''].includes(text)) return false
@@ -461,6 +461,8 @@ export const purchaseLineSchema = z.object({
     .union([z.coerce.number().int().min(0).max(120), z.literal('')])
     .optional(),
   warrantyProvider: optionalText(60),
+  /** What it will be sold for. Blank leaves the product's list price to stand. */
+  sellingPrice: z.union([z.coerce.number().min(0).max(100_000_000), z.literal('')]).optional(),
 })
 
 export const purchaseSchema = z.object({

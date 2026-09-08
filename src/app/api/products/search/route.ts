@@ -1,10 +1,13 @@
 import { z } from 'zod'
+import { queryBoolean } from '@/lib/validation'
 import { listProducts } from '@/server/services/product.service'
 import { route } from '@/server/http'
 
 const schema = z.object({
   q: z.string().trim().max(120).optional(),
-  serialised: z.coerce.boolean().optional(),
+  // Not z.coerce.boolean(): "false" is a non-empty string and would arrive
+  // as true, so ?serialised=false would mean "serialised only".
+  serialised: queryBoolean.optional(),
 })
 
 /**
@@ -29,5 +32,8 @@ export const GET = route({ permission: 'product.view', branchFrom: 'none', schem
     identifierType: r.identifierType,
     quantity: r.quantity,
     purchasePricePaise: r.purchasePricePaise ? String(r.purchasePricePaise) : null,
+    // So a purchase line can prefill what the shop sells it for, not only
+    // what it pays.
+    sellingPricePaise: r.sellingPricePaise ? String(r.sellingPricePaise) : null,
   }))
 })

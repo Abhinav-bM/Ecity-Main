@@ -22,6 +22,7 @@ export type PickedProduct = {
   identifierType: 'IMEI' | 'SERIAL' | 'NONE'
   quantity: number
   purchasePricePaise: string | null
+  sellingPricePaise: string | null
 }
 
 /**

@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 443 unit and integration tests, 892
+Automated tests cover the mechanics — 452 unit and integration tests, 904
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -668,6 +668,37 @@ these on **Products, Devices, Customers, Suppliers, Purchases, Sales** and the
 - [ ] On a phone the buttons are big enough to tap and do not overflow sideways
 
 ---
+
+# M4 — Billing · price prefill and camera scanning
+
+*Added after M13. The till showed a blank price on every handset; and the
+counter has a laser scanner but a salesperson on the floor has only a phone.*
+
+## Price
+
+- [ ] A purchase line has **Selling price (₹)** beside the unit cost
+- [ ] Book a handset in at cost 18,000, selling 24,000
+- [ ] Scan it at the till — the price shows **24,000** without typing
+- [ ] Book another in with the selling price **left blank**
+- [ ] At the till it shows the **product's list price**. *Blank means "use the
+      list price", not "free"*
+- [ ] A handset bought before this change also prefills now, from the product
+- [ ] Change the price on the bill — it still saves what you typed
+
+## Camera (on a phone)
+
+- [ ] On a **desktop with no camera**, no camera button appears
+- [ ] On a **phone**, a camera button sits beside the scan box
+- [ ] Tap it — the back camera opens with a frame to aim through
+- [ ] Point at an IMEI barcode: it fills the box and closes by itself
+- [ ] The item goes on the bill exactly as if you had typed it
+- [ ] Scan the **serial** barcode next to it — it does *not* auto-add; it
+      shows what it read and asks. *Putting the wrong handset on a bill is
+      worse than a slow scan*
+- [ ] Deny camera permission — it says so plainly instead of hanging
+- [ ] Over plain **http** it explains that the camera needs a secure address
+- [ ] The purchase form's IMEI boxes each have the same camera button
+- [ ] The **laser scanner still works** on the desktop till, unchanged
 
 # M5 — Payments, Credit Sales & Customer Dues
 

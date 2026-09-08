@@ -24,6 +24,7 @@ async function purchase(page: Page, opts: {
   cost: string
   identifiers?: string[]
   mainType?: string
+  sellingPrice?: string
 }) {
   await page.goto('/suppliers/new')
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill(opts.supplier)
@@ -43,6 +44,11 @@ async function purchase(page: Page, opts: {
   await page.getByTestId('product-picker-list').getByRole('option', { name: new RegExp(opts.product) }).first().click()
   await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill(opts.quantity)
   await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill(opts.cost)
+  if (opts.sellingPrice) {
+    await page
+      .getByRole('textbox', { name: 'Selling price (₹)', exact: true })
+      .fill(opts.sellingPrice)
+  }
   if (opts.mainType) {
     await page.getByRole('button', { name: opts.mainType, exact: true }).click()
   }
@@ -548,5 +554,94 @@ test.describe('permissions', () => {
     await expect(
       page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Billing' }),
     ).toBeVisible()
+  })
+})
+
+/**
+ * The camera scanner, and the price the till offers.
+ *
+ * The counter's laser scanner types into the same box and is covered by the
+ * tests above; these cover the phone in a salesperson's hand, and the prefill
+ * that was missing on every handset.
+ */
+test.describe('scanning and pricing', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('a handset booked in with a price arrives on the bill with it', async ({ page }) => {
+    const id = unique()
+    const name = `E2E Priced ${id}`
+    const one = imei(60)
+
+    await createProduct(page, name, 'Mobiles (IMEI)', '12000')
+    await purchase(page, {
+      supplier: `E2E PriceSup ${id}`,
+      product: name,
+      quantity: '1',
+      cost: '18000',
+      mainType: 'USED',
+      identifiers: [one],
+      sellingPrice: '24000',
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(one)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+
+    // Prefilled from the handset, not left blank for the counter to type.
+    await expect(
+      page.getByTestId('cart-lines').getByLabel('Price (₹)').first(),
+    ).toHaveValue('24000')
+  })
+
+  /*
+   * The bug this fixes: a purchase books a handset in with its cost and no
+   * selling price, so the till had nothing to show — while accessories
+   * prefilled fine from the product's default.
+   */
+  test('a handset with no price of its own falls back to the product list price', async ({
+    page,
+  }) => {
+    const id = unique()
+    const name = `E2E Fallback ${id}`
+    const one = imei(61)
+
+    await createProduct(page, name, 'Mobiles (IMEI)', '15000')
+    await purchase(page, {
+      supplier: `E2E FallSup ${id}`,
+      product: name,
+      quantity: '1',
+      cost: '11000',
+      mainType: 'USED',
+      identifiers: [one],
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(one)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+
+    await expect(
+      page.getByTestId('cart-lines').getByLabel('Price (₹)').first(),
+    ).toHaveValue('15000')
+  })
+
+  test('offers the camera where there is one, and not where there is not', async ({
+    page,
+  }, testInfo) => {
+    await page.goto('/billing')
+    const button = page.getByTestId('scan-button')
+
+    // Playwright's Chromium reports a fake camera, so the button should be
+    // there; what matters is that it is never rendered without one.
+    const hasCamera = await page.evaluate(
+      () => typeof navigator.mediaDevices?.getUserMedia === 'function',
+    )
+    if (hasCamera) {
+      await expect(button.first()).toBeVisible()
+    } else {
+      await expect(button).toHaveCount(0)
+    }
+    expect(testInfo.project.name).toBeTruthy()
   })
 })

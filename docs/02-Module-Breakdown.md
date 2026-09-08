@@ -296,6 +296,14 @@ They stamp at creation and stop there. Correcting a line afterwards does not rew
 
 **Depends on.** M3. **Effort.** 3.0 weeks. *OQ-4 and OQ-7 both answered during M4 — see below.*
 
+*Built as (revised after M13): the till prefills a price, and the camera can scan.*
+
+**The price.** Found in use: every handset arrived at the till with a blank price while accessories prefilled fine. The till had always tried — it reads the handset's own selling price — but nothing ever set one: a purchase booked units in with their *cost* and no price, and the product branch of the same search had always fallen back to the product's default. Two halves to the fix. The till now falls back to the product's list price when the handset has none, which repairs every handset already in the database with nothing to re-enter; and a purchase line carries a selling price beside the cost, because the moment stock arrives is when somebody knows both numbers. The unit still wins where it has its own price — used stock is priced piece by piece, and the product default is a starting point, not an override. A line left blank stores *nothing* rather than zero: zero would mean "give it away".
+
+**The camera.** The counter is a desktop with a laser scanner, which types into the search box and ends with Enter — that already worked. A salesperson on the floor has a phone and nothing else, so a camera button feeds the same box: a scan is only a faster way of typing. Android's Chrome has a barcode reader built into the browser, free and fast; Safari does not, so a WebAssembly decoder loads **only there**, and only when the camera is actually opened — the billing screen is the busiest in the product and should not carry a megabyte for a button most tills never press. That wasm is served from our own origin: the library defaults to a public CDN, which would leave a shop's till depending on a third party being reachable. The same button sits on the purchase form's identifier grid, where the most IMEIs get typed.
+
+**Guarding against a misread.** An IMEI label sits beside a near-identical serial barcode, and putting the wrong handset on a bill is worse than a slow scan. IMEIs end in a Luhn check digit, so a scan that passes is acted on immediately and one that fails is shown to a person to accept or retry. This checks the *scan*, deliberately not what the system accepts, so nothing already in the database becomes invalid. Found by its own test: stripping every non-digit first would have found a valid IMEI inside `SN490154203237518X` and accepted the serial barcode as the IMEI.
+
 ---
 
 ## M5 — Payments, Credit Sales & Customer Dues

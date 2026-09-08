@@ -38,7 +38,24 @@ export const GET = route(
         mainType: deviceUnit.mainType,
         isNewCut: deviceUnit.isNewCut,
         salesChannel: deviceUnit.salesChannel,
-        sellingPricePaise: deviceUnit.sellingPricePaise,
+        /*
+         * The handset's own price if it has one, otherwise the product's list
+         * price.
+         *
+         * Found in use: a purchase books a handset in with its *cost* and no
+         * selling price, so the till had nothing to prefill and the counter
+         * typed the price on every handset — while accessories prefilled
+         * fine, because the product branch of this same query has always used
+         * the default. The fallback fixes every handset already in the
+         * database, with nothing to re-enter.
+         *
+         * The unit still wins where it has its own price: used stock is
+         * priced piece by piece, and the product default is a starting point,
+         * not an override.
+         */
+        sellingPricePaise: sql<string | null>`coalesce(
+          ${deviceUnit.sellingPricePaise}, ${product.defaultSellingPricePaise}
+        )`,
         taxRateId: deviceUnit.taxRateId,
         colour: deviceUnit.colour,
         storage: deviceUnit.storage,

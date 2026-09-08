@@ -81,6 +81,14 @@ export type PurchaseLineInput = {
    */
   warrantyMonths?: number
   warrantyProvider?: string
+  /**
+   * What the units will be sold for.
+   *
+   * Beside the cost, because the moment stock arrives is when somebody knows
+   * both numbers - and a handset booked in without one leaves the counter
+   * typing a price on every sale.
+   */
+  sellingPricePaise?: bigint
 }
 
 /**
@@ -285,6 +293,7 @@ export async function createPurchase(
               warrantyMonths: line.warrantyMonths ?? null,
               warrantyProvider: line.warrantyProvider,
               purchasePricePaise: unitCost,
+              sellingPricePaise: line.sellingPricePaise ?? null,
               supplierId: input.supplierId,
               purchaseDate: input.purchaseDate ?? new Date(),
               receivedAt: input.purchaseDate ?? undefined,

@@ -45,6 +45,10 @@ export const POST = route(
             ? undefined
             : l.warrantyMonths,
         warrantyProvider: l.warrantyProvider || undefined,
+        sellingPricePaise:
+          l.sellingPrice === '' || l.sellingPrice === undefined
+            ? undefined
+            : rupeesToPaise(l.sellingPrice),
       })),
     })
   },
