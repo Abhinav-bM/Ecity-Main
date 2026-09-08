@@ -744,12 +744,27 @@ When the real file arrives, the work is: read the columns, fill in `legacy.mappi
 
 **Server work.** A scheduled job evaluating the rules — low stock, overdue customer payments, supplier dues, cash mismatch, unclosed day, stock adjustment, warranty expiry — writing notifications scoped to branch users, with consolidated versions for owners/admins. Deduplicate so the same condition does not notify daily forever.
 
+*Built as:*
+- **A notification is a condition, not a message to a person.** One row per condition, scoped to a branch, read through the same `branchScope` as every other query — so who sees it is decided when it is *read*, not when it was written. Fanning rows out per user would have frozen the audience at write time, and a transfer, a new hire or a role change would leave alerts addressed to people who have moved on, or to nobody.
+- **Read state is personal, in its own table.** One manager clearing the bell must not hide a till shortage from the owner.
+- **The same condition does not shout twice.** The evaluator runs hourly; without a dedupe key a shop short of cables would be told so every hour until it reordered, and a wall of repeats is how people learn to ignore the bell. A key stays open until the condition clears — and clearing matters as much as raising, because a key that never closed would block the *next* genuine occurrence forever.
+- **An alert nobody may act on is never shown.** Each kind carries the permission its own screen needs, so counter staff are not told about supplier dues they cannot open — which would be noise *and* a leak. It also decides the settings list: staff see the three kinds they can act on, not seven with four greyed out.
+- **Muting is yours; turning a rule off is the shop's.** One table with a nullable `user_id`: null is the shop's setting, a row with an id is that person's override. "Is this on for me" is one question with a fallback, and splitting it across two tables would mean asking it twice everywhere.
+- **Found while building: a nullable column cannot carry a unique index.** Postgres treats NULLs as distinct, so the obvious unique index on `(business, user, kind)` neither stopped a second shop-wide row nor matched an `on conflict` — every save inserted another row, and which one won was whichever the query happened to read first. Two partial indexes fixed it. The test that caught it was the one asserting a muted rule leaves the shop's setting alone.
+- **No pg-boss yet.** M13 planned to introduce it. The two jobs — tidy sessions, evaluate the rules — are idempotent, cheap, and safe to miss and repeat; a queue buys retries, scheduling and a jobs dashboard for problems these do not have, and costs a table, a migration and a second thing to keep running. The interval loop stays until the first job that must not be lost.
+- **The dashboard keeps its own alert cards.** They count conditions ("3 products below minimum") and are computed live, so they are right even if the worker has not run; the centre names *which* three and remembers whether anyone dealt with them. Two questions, not one duplicated.
+- **Found in the spec audit: warranty tracking without the customer.** FR-29.1 lists the customer among what warranty must carry, and the expiring list had every other fact but that one — which is the fact the list exists for. "This is still covered" is only useful next to "whose is it?". The list now names the owner, taken from the handset's most recent sale, because one that came back and went out again belongs to whoever bought it last, and says *In stock* or *Walk-in* rather than leaving the column blank to be guessed at.
+- **Found in the spec audit: the importer could not bring warranty in.** Warranty had been added to the purchase line and the device forms but not to the device import — so a shop loading its stock at go-live (docs/04 §10) would lose the cover on exactly the handsets nobody can re-derive it for. Both columns are now read, and the guesser knows "Warranty", "Warranty By" and "Warranty Period".
+- **Warranty is captured where stock arrives.** A purchase line carries the months and the provider, so a handset knows its cover the moment it is booked in — the same lesson as the specs, one module earlier. `warranty_provider` is new: the customer's first question when something fails is *who do I take it to*, and without it the answer was a phone call to whoever sold it.
+
 **Done when.**
 - Each of the seven triggers fires on a constructed test condition and reaches exactly the right users.
 - A branch user sees only their branch's alerts; the owner sees all, grouped by branch.
 - Warranty details appear on the device history page and an expiring-soon list is available.
 
-**Depends on.** M7. **Effort.** 1.5 weeks. *Blocked on PRD OQ-6 if external channels are wanted.*
+**Depends on.** M7. **Effort.** 1.5 weeks.
+
+*On OQ-6.* Still open, and deliberately not blocking: FR-27.3 asks for an in-app centre in v1, which is what this is. Email and WhatsApp are a decision about cost, a provider and consent rather than a screen, and every alert already exists as a row with a branch and a kind — a channel would read that table, not change it.
 
 ---
 

@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DeviceStatusBadge, MainTypeBadge } from '@/components/main-type-badge'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -149,8 +149,26 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
               <dd>{supplierName ?? '—'}</dd>
               <dt className="text-muted-foreground">Purchased</dt>
               <dd>{device.purchaseDate ? formatDateTime(device.purchaseDate) : '—'}</dd>
-              <dt className="text-muted-foreground">Warranty until</dt>
-              <dd>{device.warrantyExpiresAt ? formatDateTime(device.warrantyExpiresAt) : '—'}</dd>
+              {/*
+                PRD FR-29.1 – FR-29.2. Everything a warranty claim needs, in
+                one place: how long, until when, and *who honours it* — the
+                customer's first question is "who do I take it to", and
+                without the provider the answer is a phone call to whoever
+                happened to sell it.
+              */}
+              <dt className="text-muted-foreground">Warranty</dt>
+              <dd data-testid="device-warranty">
+                {device.warrantyExpiresAt ? (
+                  <>
+                    {formatDateShort(device.warrantyExpiresAt)}
+                    {device.warrantyMonths ? ` · ${device.warrantyMonths} months` : ''}
+                    {device.warrantyProvider ? ` · ${device.warrantyProvider}` : ''}
+                    <WarrantyState expiresAt={device.warrantyExpiresAt} />
+                  </>
+                ) : (
+                  '—'
+                )}
+              </dd>
             </dl>
           </CardContent>
         </Card>
@@ -280,4 +298,23 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
 
     </div>
   )
+}
+
+/**
+ * Whether the cover is still good, said plainly.
+ *
+ * A date alone makes the reader do the arithmetic, and the whole point of
+ * showing warranty on this page is answering "is this still covered?" without
+ * one.
+ */
+function WarrantyState({ expiresAt }: { expiresAt: Date }) {
+  const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000)
+  if (days < 0) return <Badge variant="muted" className="ml-2">expired</Badge>
+  if (days <= 30)
+    return (
+      <Badge variant="destructive" className="ml-2">
+        {days} days left
+      </Badge>
+    )
+  return <Badge variant="secondary" className="ml-2">in warranty</Badge>
 }

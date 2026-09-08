@@ -74,6 +74,13 @@ export type PurchaseLineInput = {
   ram?: string
   storage?: string
   colour?: string
+  /**
+   * Cover for what is arriving (PRD FR-29.1). Here rather than only on the
+   * device screen for the same reason the specs are: a warranty recorded a
+   * month later is a warranty nobody recorded.
+   */
+  warrantyMonths?: number
+  warrantyProvider?: string
 }
 
 /**
@@ -275,6 +282,8 @@ export async function createPurchase(
                * be typed in afterwards, one device screen at a time.
                */
               ...specFor(line, unit),
+              warrantyMonths: line.warrantyMonths ?? null,
+              warrantyProvider: line.warrantyProvider,
               purchasePricePaise: unitCost,
               supplierId: input.supplierId,
               purchaseDate: input.purchaseDate ?? new Date(),

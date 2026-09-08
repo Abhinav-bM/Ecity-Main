@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 421 unit and integration tests, 856
+Automated tests cover the mechanics — 443 unit and integration tests, 892
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -1565,3 +1565,100 @@ Then save the same list as **.xlsx** and do it again:
   is — by voiding or adjusting what it created
 - **OQ-9 is closed**: the go-live loading order, the checks after each step,
   and what is deliberately not migrated are in **docs/04 §10**
+
+# M13 — Notifications, Alerts & Warranty
+
+**Delivers.** PRD FR-27.1 – FR-27.3, FR-29.1, FR-29.2.
+
+Sign in as **admin** unless a step says otherwise. Alerts are evaluated hourly
+by the worker; **Check now** on the alerts page does it immediately, which is
+what these steps use.
+
+## 1. The bell and the centre (FR-27.3)
+
+- [ ] A bell sits in the header, next to the search
+- [ ] With nothing outstanding it shows no number
+- [ ] **Alerts** appears in the sidebar under Dashboard
+- [ ] The page opens with two tabs: the alerts, and what you are told about
+
+## 2. Each of the seven triggers (FR-27.1)
+
+Make each condition, then press **Check now**.
+
+- [ ] **Low stock** — set a product's minimum above what is on the shelf. The
+      alert names the product, the branch and the minimum
+- [ ] A product at **zero** is marked more urgently than one merely low
+- [ ] **Customer overdue** — a credit bill past its due date. The alert names
+      the customer, the amount and how many days
+- [ ] **Supplier due** — money owed for longer than the threshold. *No branch
+      on this one: owing a supplier is the business's problem*
+- [ ] **Cash mismatch** — close a day with the counted cash deliberately
+      wrong. The alert is marked critical
+- [ ] **Day not closed** — a branch that took money on a past day with no
+      closing. *Today never appears: it is still open by definition*
+- [ ] **Stock adjusted** — make an adjustment; the alert carries the reason
+      and the note
+- [ ] **Warranty expiring** — a handset in stock whose cover ends within 30
+      days
+
+## 3. It does not shout (FR-27.1)
+
+- [ ] Press **Check now** twice more — no duplicates appear
+- [ ] Fix one condition (restock the product), then **Check now** — the alert
+      disappears
+- [ ] Break it again and **Check now** — it comes back. *An alert that could
+      only ever fire once would be worse than none*
+
+## 4. Who sees what (FR-27.2)
+
+- [ ] As **admin**, alerts are grouped by branch
+- [ ] As a **branch manager**, only their branch appears — and no heading,
+      because there is only one
+- [ ] As **staff**, low stock and adjustments appear; supplier dues, customer
+      dues and cash mismatches do not. *An alert nobody may act on is noise
+      and a leak*
+- [ ] On the settings tab, staff see only the kinds they can act on
+- [ ] Staff cannot turn a rule off for the shop — only mute it for themselves
+
+## 5. Reading is personal
+
+- [ ] Mark one alert read — the bell's count drops
+- [ ] **Mark all read** — the count goes
+- [ ] Sign in as another user: **their** count is unchanged. *One manager
+      clearing the bell must not hide a till shortage from the owner*
+- [ ] **Everything, including dealt with** shows what was read and resolved
+
+## 6. What you are told about
+
+- [ ] **Mute** a kind — the button changes and the shop's setting is untouched
+- [ ] As admin, turn a kind **off for the shop** — its existing alerts
+      disappear
+- [ ] Change a threshold (say overdue from 7 days to 30) and **Check now** —
+      fewer alerts
+
+## 7. Warranty (FR-29)
+
+- [ ] A purchase line asks for **Warranty (months)** and **Warranty by**
+- [ ] Book in a handset with 12 months from a named provider
+- [ ] Its device page shows the expiry, the length, the provider and whether
+      it is **still in warranty** — without you doing the arithmetic
+- [ ] **Inventory → Warranty** lists handsets by how soon cover ends
+- [ ] An unsold handset shows **In stock** as its owner
+- [ ] Sell it, refresh, and the same row now names the **customer**, linking
+      to them. *"Still covered" is only useful beside "whose is it?"*
+- [ ] A handset imported from a file with `Warranty` and `Warranty By`
+      columns carries both
+- [ ] The window (7 / 30 / 60 / 90 days / a year) is in the URL and can be
+      shared
+- [ ] One already expired is marked as such
+- [ ] A branch user sees only their branch's handsets
+
+## What M13 does not do
+
+- **No email or WhatsApp** (PRD OQ-6). In-app only in v1, as FR-27.3 asks. A
+  channel that leaves the building is a decision about cost, a provider and
+  consent — every alert is already a row a channel could read
+- **No per-alert snooze**; mute is per kind, for you
+- **No job queue.** The worker is an interval loop: both jobs are idempotent
+  and safe to miss and repeat. The first job that must not be lost is when
+  that changes

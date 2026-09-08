@@ -49,6 +49,7 @@ export const POST = route(
         body.warrantyMonths === '' || body.warrantyMonths === undefined
           ? null
           : body.warrantyMonths,
+      warrantyProvider: body.warrantyProvider || undefined,
       branchId: body.branchId,
     })
   },

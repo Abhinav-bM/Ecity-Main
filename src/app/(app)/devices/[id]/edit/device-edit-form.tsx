@@ -27,6 +27,7 @@ export type DeviceEditValues = {
   taxRateId: string
   supplierId: string
   warrantyMonths: string
+  warrantyProvider: string
   salesChannel: 'ECITY' | 'EXTERNAL' | 'BOTH'
   notes: string
 }
@@ -179,6 +180,13 @@ export function DeviceEditForm({
               inputMode="numeric"
               value={v.warrantyMonths}
               onChange={(e) => set('warrantyMonths', e.target.value)}
+            />
+          </Field>
+          <Field id="warrantyProvider" label="Warranty by" hint="Who honours it">
+            <Input
+              id="warrantyProvider"
+              value={v.warrantyProvider}
+              onChange={(e) => set('warrantyProvider', e.target.value)}
             />
           </Field>
         </CardContent>

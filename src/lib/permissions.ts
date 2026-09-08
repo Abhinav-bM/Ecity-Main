@@ -146,6 +146,20 @@ export const PERMISSIONS = {
     label: 'Correct a purchase’s invoice number, date or notes',
     description: 'Lines, quantities and costs stay uneditable — reversal handles those.',
   },
+
+  // --- M13 notifications and warranty ---
+  'notification.view': {
+    group: 'Notifications',
+    label: 'See alerts',
+    description:
+      'What needs attention: low stock, money overdue, an unclosed day. Each alert is still scoped to the branches the person can see.',
+  },
+  'notification.manage': {
+    group: 'Notifications',
+    label: 'Change what the shop is alerted about',
+    description:
+      'Turning a rule off, or moving its threshold, for everyone. Muting an alert for yourself needs no permission.',
+  },
 } as const satisfies Record<string, { group: string; label: string; description?: string }>
 
 export type PermissionCode = keyof typeof PERMISSIONS
@@ -217,6 +231,7 @@ export const SYSTEM_ROLES = {
       'adjustment.create',
       'analytics.view',
       'analytics.view_profit',
+      'notification.view',
     ],
   },
   STAFF: {
@@ -271,6 +286,14 @@ export const SYSTEM_ROLES = {
        * the same line as `inventory.view_cost`, which they also do not have.
        */
       'analytics.view',
+      /*
+       * The counter is who notices a shelf is empty and who is standing there
+       * when a day has not been closed. Alerts are scoped to their branches
+       * like everything else, so this shows them their own shop, not the
+       * business - and money alerts they cannot act on are hidden by the
+       * permission each alert already carries.
+       */
+      'notification.view',
     ],
   },
 } as const satisfies Record<

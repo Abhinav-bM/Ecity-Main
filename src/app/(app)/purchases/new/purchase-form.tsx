@@ -49,6 +49,8 @@ type Line = {
   ram: string
   storage: string
   colour: string
+  warrantyMonths: string
+  warrantyProvider: string
   /** One per unit. Length must equal quantity for a serialised line. */
   units: Unit[]
 }
@@ -75,6 +77,8 @@ const newLine = (): Line => ({
   ram: '',
   storage: '',
   colour: '',
+  warrantyMonths: '',
+  warrantyProvider: '',
   units: [newUnit()],
 })
 
@@ -197,6 +201,8 @@ export function PurchaseForm({
                   ram: l.ram,
                   storage: l.storage,
                   colour: l.colour,
+                  warrantyMonths: l.warrantyMonths,
+                  warrantyProvider: l.warrantyProvider,
                 }
               : {}),
           }
@@ -445,6 +451,28 @@ export function PurchaseForm({
                           placeholder="Pro Max"
                           value={line.variant}
                           onChange={(e) => update(line.key, { variant: e.target.value })}
+                        />
+                      </Field>
+                      {/*
+                        PRD FR-29.1. A warranty typed in a month later is a
+                        warranty nobody typed in — and the expiry is counted
+                        from the purchase date, which is on this form already.
+                      */}
+                      <Field id={`warranty-${line.key}`} label="Warranty (months)">
+                        <Input
+                          id={`warranty-${line.key}`}
+                          inputMode="numeric"
+                          placeholder="12"
+                          value={line.warrantyMonths}
+                          onChange={(e) => update(line.key, { warrantyMonths: e.target.value })}
+                        />
+                      </Field>
+                      <Field id={`warrantyBy-${line.key}`} label="Warranty by">
+                        <Input
+                          id={`warrantyBy-${line.key}`}
+                          placeholder="Brand"
+                          value={line.warrantyProvider}
+                          onChange={(e) => update(line.key, { warrantyProvider: e.target.value })}
                         />
                       </Field>
                     </div>

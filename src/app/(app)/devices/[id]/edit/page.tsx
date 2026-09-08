@@ -63,6 +63,7 @@ export default async function EditDevicePage({ params }: { params: Promise<{ id:
           taxRateId: str(d.taxRateId),
           supplierId: str(d.supplierId),
           warrantyMonths: str(d.warrantyMonths),
+          warrantyProvider: str(d.warrantyProvider),
           salesChannel: d.salesChannel,
           notes: str(d.notes),
         }}

@@ -58,6 +58,8 @@ export const IMPORT_FIELDS: Record<
       'purchasePrice',
       'sellingPrice',
       'receivedAt',
+      'warrantyMonths',
+      'warrantyProvider',
     ],
     description: 'Handsets, one per row. A row may carry several IMEIs.',
   },
@@ -162,6 +164,8 @@ export function suggestMapping(headers: string[], kind: ImportKind): Record<stri
     amount: ['balance', 'outstanding', 'due'],
     phone: ['mobile', 'contact', 'phoneno'],
     ram: ['memory'],
+    warrantyMonths: ['warranty', 'warrantymonths', 'warrantyperiod'],
+    warrantyProvider: ['warrantyby', 'warrantyprovider'],
     storage: ['rom', 'internalstorage', 'capacity'],
     colour: ['color'],
     purchasePrice: ['cost', 'costprice', 'buyprice'],
@@ -599,6 +603,13 @@ async function applyRow(
         storage: text('storage'),
         colour: text('colour'),
         batteryHealthPercent: p.batteryHealth ? Number(p.batteryHealth) : undefined,
+        /*
+         * A shop migrating its stock at go-live has warranties running on it
+         * (docs/04 §10). Without these the cover would be lost on exactly the
+         * handsets nobody can re-derive it for.
+         */
+        warrantyMonths: p.warrantyMonths ? Number(p.warrantyMonths) : undefined,
+        warrantyProvider: text('warrantyProvider'),
         purchasePricePaise: paise('purchasePricePaise'),
         sellingPricePaise: paise('sellingPricePaise'),
         branchId: job.branchId!,

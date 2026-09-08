@@ -42,6 +42,8 @@ export type DeviceInput = {
   supplierId?: number | null
   purchaseDate?: Date | null
   warrantyMonths?: number | null
+  /** Who honours it (PRD FR-29.1): the brand, the shop, or a third party. */
+  warrantyProvider?: string
   branchId: number
   salesChannel?: 'ECITY' | 'EXTERNAL' | 'BOTH'
   source?: 'ECITY' | 'LEGACY'
@@ -231,6 +233,7 @@ export async function createDevice(
           supplierId: input.supplierId ?? null,
           purchaseDate: input.purchaseDate ?? null,
           warrantyMonths: input.warrantyMonths ?? null,
+          warrantyProvider: input.warrantyProvider?.trim() || null,
           warrantyExpiresAt,
           currentBranchId: input.branchId,
           status: 'IN_STOCK',
@@ -520,6 +523,7 @@ export type DeviceUpdateInput = {
   taxRateId?: number | null
   supplierId?: number | null
   warrantyMonths?: number | null
+  warrantyProvider?: string | null
   salesChannel?: 'ECITY' | 'EXTERNAL' | 'BOTH'
   notes?: string | null
 }
@@ -559,7 +563,7 @@ export async function updateDevice(
   const fields = [
     'mainType', 'isNewCut', 'newCutNotes', 'variant', 'ram', 'storage', 'colour',
     'batteryHealthPercent', 'purchasePricePaise', 'sellingPricePaise', 'taxRateId',
-    'supplierId', 'warrantyMonths', 'salesChannel', 'notes',
+    'supplierId', 'warrantyMonths', 'warrantyProvider', 'salesChannel', 'notes',
   ] as const
 
   for (const field of fields) {

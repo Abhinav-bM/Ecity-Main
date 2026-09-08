@@ -21,6 +21,7 @@ const schema = z.object({
   taxRateId: z.union([z.coerce.number().int().positive(), z.literal('')]).nullable().optional(),
   supplierId: z.union([z.coerce.number().int().positive(), z.literal('')]).nullable().optional(),
   warrantyMonths: z.union([z.coerce.number().int().min(0).max(120), z.literal('')]).optional(),
+  warrantyProvider: z.string().trim().max(60).optional(),
   salesChannel: z.enum(['ECITY', 'EXTERNAL', 'BOTH']).optional(),
   notes: text(1000),
 })
@@ -62,6 +63,7 @@ export const PATCH = route(
       taxRateId: orNull(body.taxRateId ?? undefined),
       supplierId: orNull(body.supplierId ?? undefined),
       warrantyMonths: orNull(body.warrantyMonths),
+      warrantyProvider: orNull(body.warrantyProvider),
       salesChannel: body.salesChannel,
       notes: orNull(body.notes),
     })

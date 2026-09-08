@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Bell } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
+import { unreadCount } from '@/server/services/notification.service'
 import { hasPermission } from '@/server/auth/permissions'
 import { dashboard } from '@/server/services/dashboard.service'
 
@@ -25,6 +26,9 @@ export default async function DashboardPage() {
   const branchIds = session.activeBranchId ? [session.activeBranchId] : undefined
   const d = await dashboard(session.user, branchIds)
   const canSeeAnalytics = hasPermission(session.user, 'analytics.view')
+  const unread = hasPermission(session.user, 'notification.view')
+    ? await unreadCount(session.user)
+    : 0
 
   const figures: { label: string; value: string; href?: string; hint?: string }[] = [
     {
@@ -102,7 +106,31 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {/* FR-15.3. The four things worth interrupting someone about. */}
+      {/*
+        FR-15.3 and FR-27. Two different questions, deliberately both here.
+        These cards count conditions — "3 products below minimum" — and are
+        computed live, so they are right even if the worker has not run. The
+        line beneath goes to the alert centre, which names *which* three and
+        remembers whether anyone dealt with them.
+      */}
+      {unread > 0 ? (
+        <Link href="/notifications" className="block" data-testid="dashboard-alert-link">
+          <Card className="transition-colors hover:bg-accent">
+            <CardContent className="flex items-center gap-3 py-3 text-sm">
+              <Bell className="size-4 shrink-0 text-muted-foreground" />
+              <span>
+                <span className="font-medium">
+                  {unread} alert{unread === 1 ? '' : 's'} you have not looked at
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  Which product, which bill, which day — and whether it has been dealt with.
+                </span>
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
+      ) : null}
+
       {d.alerts.length > 0 ? (
         <div className="grid gap-2" data-testid="dashboard-alerts">
           {d.alerts.map((a) => (

@@ -221,6 +221,10 @@ Where the paging happens depends on what the list *is*. Users, roles and branche
 
 The control itself has to survive the layout. These tables become cards below `md`, so column headings alone would have meant *sorting does not exist on a phone* — on an app whose smallest tested screen is 320px and whose owner checks stock from the shop floor. The cards get a scrollable strip of the same links instead, which is how it was caught: the sorting tests passed on desktop and tablet and failed on both phone widths, because there was nothing there to click.
 
+**4.17 An alert is a condition, and its audience is decided when it is read.** The tempting shape for notifications is a row per person — it makes "my unread list" a single indexed query. It is also wrong here, because it fixes the audience at write time: a user assigned to another branch, a new hire, a role that gains `closing.view` next week, and the shop is left with alerts addressed to people who have moved on, or with none at all for the person now responsible. So one row per *condition*, carrying a branch, and read through the same `branchScope` and permission checks as every other query (§4.11, §4.13) — a branch user sees their branches plus what is business-wide, an owner sees all of it grouped, and a kind whose screen the reader cannot open is filtered out before the query returns. Read state is the one genuinely personal thing, so it is its own table: one manager clearing the bell must not hide a till shortage from the owner.
+
+The second half is not shouting. The evaluator runs on a schedule, so every notification carries a **dedupe key** identifying the condition (`LOW_STOCK:branch:product`), and the same key is not raised while it is still open. Resolving matters as much as raising: a key that never closed would leave a dealt-with alert on the screen *and* block the next genuine occurrence forever, so each pass reports which conditions still hold and everything else is closed. That is also why turning a rule off clears what it had already raised — an alert nobody can explain the origin of is worse than no alert.
+
 ---
 ## 5. Cross-Cutting Implementation Notes
 

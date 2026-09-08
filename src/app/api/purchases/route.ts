@@ -40,6 +40,11 @@ export const POST = route(
         ram: l.ram || undefined,
         storage: l.storage || undefined,
         colour: l.colour || undefined,
+        warrantyMonths:
+          l.warrantyMonths === '' || l.warrantyMonths === undefined
+            ? undefined
+            : l.warrantyMonths,
+        warrantyProvider: l.warrantyProvider || undefined,
       })),
     })
   },

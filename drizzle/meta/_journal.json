@@ -176,6 +176,13 @@
       "when": 1788866081617,
       "tag": "0024_purchase_line_specs",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788871420271,
+      "tag": "0025_m13_notifications",
+      "breakpoints": true
     }
   ]
 }

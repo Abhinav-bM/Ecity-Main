@@ -928,6 +928,13 @@ export const deviceUnit = pgTable(
     purchaseDate: timestamp('purchase_date', { withTimezone: true }),
     warrantyMonths: smallint('warranty_months'),
     warrantyExpiresAt: timestamp('warranty_expires_at', { withTimezone: true }),
+    /**
+     * Who honours it (PRD FR-29.1) - the brand, the shop itself, or a
+     * third-party plan. The customer's first question when something fails is
+     * "who do I take it to", and without this the answer is a phone call to
+     * whoever sold it.
+     */
+    warrantyProvider: text('warranty_provider'),
 
     currentBranchId: bigint('current_branch_id', { mode: 'number' }).references(() => branch.id),
     status: deviceStatusEnum('status').notNull().default('IN_STOCK'),
@@ -2265,5 +2272,141 @@ export const savedReport = pgTable(
   (t) => [
     uniqueIndex('saved_report_owner_name_uq').on(t.userId, t.name),
     index('saved_report_business_idx').on(t.businessId),
+  ],
+)
+
+/* ------------------------------------------------- notifications (M13) --- */
+
+/**
+ * The conditions the system watches for (PRD FR-27.1).
+ *
+ * A closed set, not user-defined text: each one is a query somebody had to
+ * write, and a rule nobody can evaluate is worse than no rule at all.
+ */
+export const notificationKindEnum = pgEnum('notification_kind', [
+  'LOW_STOCK',
+  'CUSTOMER_OVERDUE',
+  'SUPPLIER_DUE',
+  'CASH_MISMATCH',
+  'UNCLOSED_DAY',
+  'STOCK_ADJUSTMENT',
+  'WARRANTY_EXPIRY',
+])
+
+export const notificationSeverityEnum = pgEnum('notification_severity', [
+  'INFO',
+  'WARNING',
+  'CRITICAL',
+])
+
+/**
+ * One notification is one *condition*, not one per person (PRD FR-27.2).
+ *
+ * Fanning a row out per user would fix who can see it at the moment it was
+ * written - and then a transfer, a new hire or a changed role would leave a
+ * shop with alerts addressed to the wrong people, or none at all. Instead a
+ * notification is scoped to a branch and read through the same `branchScope`
+ * every other query uses, so a branch user sees their branch and the owner
+ * sees all of them. Read state lives in `notification_read`, per person.
+ */
+export const notification = pgTable(
+  'notification',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** Null means it is about the business as a whole, not one branch. */
+    branchId: bigint('branch_id', { mode: 'number' }).references(() => branch.id),
+    kind: notificationKindEnum('kind').notNull(),
+    severity: notificationSeverityEnum('severity').notNull().default('WARNING'),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    /** Where to go to do something about it. */
+    href: text('href'),
+    entityType: text('entity_type'),
+    entityId: bigint('entity_id', { mode: 'number' }),
+    /**
+     * What makes this notification *this condition* rather than any other.
+     *
+     * The evaluator runs on a schedule, so without this a shop short of
+     * cables would be told so every hour until it reordered - and a wall of
+     * repeats is how people learn to ignore the bell. The key identifies the
+     * condition (`LOW_STOCK:branch:product`), and the same key is not raised
+     * again while it is still open, or within the quiet window after it was
+     * dealt with.
+     */
+    dedupeKey: text('dedupe_key').notNull(),
+    /** Cleared when the condition is no longer true, so it can raise again. */
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('notification_business_idx').on(t.businessId, t.createdAt),
+    index('notification_branch_idx').on(t.branchId),
+    index('notification_dedupe_idx').on(t.businessId, t.dedupeKey, t.resolvedAt),
+  ],
+)
+
+/** Per person, per notification. Absence means unread. */
+export const notificationRead = pgTable(
+  'notification_read',
+  {
+    notificationId: bigint('notification_id', { mode: 'number' })
+      .notNull()
+      .references(() => notification.id, { onDelete: 'cascade' }),
+    userId: bigint('user_id', { mode: 'number' }).notNull(),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.notificationId, t.userId] }),
+    index('notification_read_user_idx').on(t.userId),
+  ],
+)
+
+/**
+ * What is watched, how hard, and by whom (PRD FR-27.2).
+ *
+ * A row with a null `user_id` is the shop's setting for that kind; a row with
+ * one is that person's override. One table rather than two, because "is this
+ * on for me" is a single question with a fallback, and splitting it would
+ * mean asking it twice everywhere.
+ */
+export const notificationRule = pgTable(
+  'notification_rule',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    businessId: bigint('business_id', { mode: 'number' })
+      .notNull()
+      .references(() => business.id),
+    /** Null is the shop-wide setting. */
+    userId: bigint('user_id', { mode: 'number' }),
+    kind: notificationKindEnum('kind').notNull(),
+    isEnabled: boolean('is_enabled').notNull().default(true),
+    /**
+     * The one number each rule needs: days overdue, days before expiry, days
+     * a day may stay unclosed. Rules that need no number ignore it.
+     */
+    thresholdDays: integer('threshold_days'),
+    /** Below this, a mismatch is a rounding annoyance rather than an alert. */
+    thresholdPaise: bigint('threshold_paise', { mode: 'bigint' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /*
+     * Two partial indexes, not one over all three columns.
+     *
+     * Postgres treats NULLs as distinct in a unique index, so a single index
+     * on (business, user, kind) would not stop a second shop-wide row for the
+     * same kind - and `on conflict` against it never matches when user_id is
+     * null, so every save would insert another row instead of updating. The
+     * shop's setting would then depend on which duplicate was read first.
+     */
+    uniqueIndex('notification_rule_shop_uq')
+      .on(t.businessId, t.kind)
+      .where(sql`${t.userId} is null`),
+    uniqueIndex('notification_rule_user_uq')
+      .on(t.businessId, t.userId, t.kind)
+      .where(sql`${t.userId} is not null`),
   ],
 )

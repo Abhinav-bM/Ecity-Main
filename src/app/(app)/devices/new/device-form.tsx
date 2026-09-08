@@ -357,6 +357,14 @@ export function DeviceForm({
             >
               <Input id="warrantyMonths" inputMode="numeric" {...register('warrantyMonths')} />
             </Field>
+            <Field
+              id="warrantyProvider"
+              label="Warranty by"
+              hint="Who honours it — the brand, the shop, or a plan"
+              error={errors.warrantyProvider?.message}
+            >
+              <Input id="warrantyProvider" {...register('warrantyProvider')} />
+            </Field>
           </CardContent>
         </Card>
 

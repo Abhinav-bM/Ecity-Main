@@ -7,6 +7,7 @@ import {
   HandCoins,
   Undo2,
   AlertTriangle,
+  Bell,
   Boxes,
   Building2,
   LayoutDashboard,
@@ -42,6 +43,7 @@ import {
 } from '@/components/ui/sheet'
 import { BranchSwitcher } from './branch-switcher'
 import { GlobalSearch } from './global-search'
+import { NotificationBell } from './notification-bell'
 import { UserMenu } from './user-menu'
 
 type NavItem = {
@@ -59,6 +61,12 @@ const NAV: NavGroup[] = [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.view' },
       { href: '/reports', label: 'Reports', icon: ScrollText, permission: 'analytics.view' },
+      {
+        href: '/notifications',
+        label: 'Alerts',
+        icon: Bell,
+        permission: 'notification.view',
+      },
     ],
   },
   {
@@ -96,6 +104,12 @@ const NAV: NavGroup[] = [
         href: '/inventory/low-stock',
         label: 'Low stock',
         icon: AlertTriangle,
+        permission: 'inventory.view',
+      },
+      {
+        href: '/inventory/warranty',
+        label: 'Warranty',
+        icon: ShieldCheck,
         permission: 'inventory.view',
       },
     ],
@@ -241,11 +255,13 @@ export function AppShell({
   user,
   branches,
   activeBranchId,
+  unreadAlerts,
   children,
 }: {
   user: ShellUser
   branches: { id: number; code: string; name: string }[]
   activeBranchId: number | null
+  unreadAlerts: number
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -322,6 +338,9 @@ export function AppShell({
           <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-2">
             {/* PRD FR-30.1 — reachable from every screen, ⌘K or /. */}
             <GlobalSearch />
+            {user.permissions.includes('notification.view') ? (
+              <NotificationBell unread={unreadAlerts} />
+            ) : null}
             <BranchSwitcher
               branches={branches}
               activeBranchId={activeBranchId}

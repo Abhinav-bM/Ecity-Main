@@ -357,6 +357,8 @@ export const deviceSchema = z
     warrantyMonths: z
       .union([z.coerce.number().int().min(0).max(120), z.literal('')])
       .optional(),
+    /** PRD FR-29.1. Who honours it — the brand, the shop, or a third party. */
+    warrantyProvider: optionalText(60),
     branchId: z.coerce.number().int().positive('Choose a branch.'),
   })
   .refine((v) => v.identifiers.length > 0, {
@@ -455,6 +457,10 @@ export const purchaseLineSchema = z.object({
   ram: optionalText(30),
   storage: optionalText(30),
   colour: optionalText(40),
+  warrantyMonths: z
+    .union([z.coerce.number().int().min(0).max(120), z.literal('')])
+    .optional(),
+  warrantyProvider: optionalText(60),
 })
 
 export const purchaseSchema = z.object({
