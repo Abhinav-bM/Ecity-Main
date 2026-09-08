@@ -19,6 +19,7 @@ import {
   Smartphone,
   ArrowLeftRight,
   Banknote,
+  BarChart3,
   CalendarCheck,
   Landmark,
   SlidersHorizontal,
@@ -52,7 +53,10 @@ type NavGroup = { heading?: string; items: NavItem[] }
 
 const NAV: NavGroup[] = [
   {
-    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.view' },
+    ],
   },
   {
     heading: 'Sell',

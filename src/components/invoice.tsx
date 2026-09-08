@@ -51,6 +51,8 @@ export type InvoiceData = {
     id: number;
     description: string | null;
     identifierSnapshot: string | null;
+    /** M10 FR-36.4. The last hop of Business → Branch → Transaction → IMEI. */
+    deviceId: number | null;
     hsnCodeSnapshot: string | null;
     mainTypeSnapshot: MainType | null;
     isNewCutSnapshot: boolean;
@@ -240,7 +242,21 @@ export function Invoice({
                     {i.description}
                     {i.identifierSnapshot ? (
                       <span className="block font-mono text-[11px] text-muted-foreground">
-                        {i.identifierSnapshot}
+                        {/*
+                          On screen the IMEI is the way into the handset's
+                          history; on paper it is just the number, because a
+                          printed invoice has nowhere to click.
+                        */}
+                        {i.deviceId ? (
+                          <a
+                            href={`/devices/${i.deviceId}`}
+                            className="underline-offset-4 hover:underline print:no-underline"
+                          >
+                            {i.identifierSnapshot}
+                          </a>
+                        ) : (
+                          i.identifierSnapshot
+                        )}
                       </span>
                     ) : null}
                     {i.mainTypeSnapshot ? (

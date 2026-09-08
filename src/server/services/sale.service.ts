@@ -442,6 +442,9 @@ export async function createSale(
             actorId: actor.id,
             refType: 'sale',
             refId: created.id,
+            // A backdated bill dates its stock movement too, or M10's
+            // movement report and the sales report disagree about the day.
+            occurredAt: soldAt,
           },
           {
             deviceId: device.id,
@@ -460,6 +463,7 @@ export async function createSale(
             actorId: actor.id,
             refType: 'sale',
             refId: created.id,
+            occurredAt: soldAt,
           },
           {
             productId: line.productId,

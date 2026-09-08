@@ -26,6 +26,7 @@ import { accountLedger } from '@/server/services/cash.service'
 import { closeDay, daySummary, listClosings, voidClosing } from '@/server/services/closing.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
+import { shopDateString } from '@/lib/date'
 import { clearCustomerCredit, clearMoney, databaseAvailable, withAppendOnlySuspended } from './setup'
 
 const available = await databaseAvailable()
@@ -517,7 +518,14 @@ suite('M7 cash drawer, expenses, accounts and daily closing (database-backed)', 
     })
 
     it('will not close a day that has not happened yet', async () => {
-      const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+      /*
+       * Tomorrow in the SHOP's calendar. Computing it in UTC made this test
+       * pass by luck for most of the day and fail after midnight IST, when
+       * UTC's "tomorrow" is the shop's today - which the server rightly
+       * allows. The same slip was a real bug in the expense form (docs/03
+       * §4.12).
+       */
+      const tomorrow = shopDateString(new Date(Date.now() + 86_400_000))
       await expect(
         closeDay(actor, ctx, {
           branchId: branchA,

@@ -46,6 +46,14 @@ export type DeviceInput = {
   salesChannel?: 'ECITY' | 'EXTERNAL' | 'BOTH'
   source?: 'ECITY' | 'LEGACY'
   notes?: string
+  /**
+   * When the handset actually arrived. Defaults to now.
+   *
+   * A backdated purchase must date its PURCHASED event too, or M10's movement
+   * report shows the stock arriving on the wrong day - and an opening-balance
+   * import (M11) would put every device on the day it was uploaded.
+   */
+  receivedAt?: Date
 }
 
 /** PRD FR-5.2: NEW CUT belongs to GLOBAL and nowhere else. */
@@ -248,7 +256,12 @@ export async function createDevice(
     )
 
     await appendDeviceEvent(
-      { businessId: actor.businessId, actorId: actor.id, refType: ctx.branchId ? 'manual' : undefined },
+      {
+        businessId: actor.businessId,
+        actorId: actor.id,
+        refType: ctx.branchId ? 'manual' : undefined,
+        occurredAt: input.receivedAt,
+      },
       {
         deviceId: created.id,
         eventType: 'PURCHASED',

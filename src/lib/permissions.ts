@@ -128,6 +128,19 @@ export const PERMISSIONS = {
       'Correcting the system to match the shelf. Always recorded with a reason and never edited.',
   },
 
+  // --- M10 dashboards and analytics ---
+  'analytics.view': {
+    group: 'Reporting',
+    label: 'View analytics',
+    description: 'Sales, product, brand, customer, credit, inventory, payment and supplier figures.',
+  },
+  'analytics.view_profit': {
+    group: 'Reporting',
+    label: 'See profit and margin',
+    description:
+      'Profit needs cost prices. Kept separate from analytics.view so a branch manager can be shown revenue without margins.',
+  },
+
   'purchase.edit': {
     group: 'Purchases',
     label: 'Correct a purchase’s invoice number, date or notes',
@@ -202,6 +215,8 @@ export const SYSTEM_ROLES = {
       'transfer.cancel',
       'adjustment.view',
       'adjustment.create',
+      'analytics.view',
+      'analytics.view_profit',
     ],
   },
   STAFF: {
@@ -251,6 +266,11 @@ export const SYSTEM_ROLES = {
       'transfer.request',
       'transfer.receive',
       'adjustment.view',
+      /*
+       * Staff see the numbers for the counter they work, but not margins -
+       * the same line as `inventory.view_cost`, which they also do not have.
+       */
+      'analytics.view',
     ],
   },
 } as const satisfies Record<

@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 341 unit and integration tests, 704
+Automated tests cover the mechanics — 368 unit and integration tests, 756
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -1233,3 +1233,131 @@ credit → return → inspect → correct something.
 - **No search across voided documents** unless you open them directly
 - **The timeline shows events, not field-level diffs** beyond naming what a
   reclassification changed; the audit log has the full before-and-after
+
+# M10 — Dashboards & Analytics
+
+Sign in as **admin** unless a step says otherwise. Do a day's trading first —
+a few bills, a return, an expense — so the numbers have something to say.
+
+## 1. The dashboard (FR-15)
+
+- [ ] **Today** shows sales, **purchases**, estimated profit, cash in the till,
+      accounts, customer dues, supplier dues, stock value and returns
+- [ ] Sales says how many bills and how many items
+- [ ] Every figure is **clickable** and lands somewhere sensible
+- [ ] The header's branch switcher changes the figures; "All branches" adds
+      them up
+- [ ] Signed in as **staff**, there is no estimated profit. *Profit needs cost
+      prices, which staff do not see*
+
+## 2. Alerts (FR-15.3)
+
+- [ ] Set a product's minimum above its stock → a **low stock** alert appears
+- [ ] Leave a bill past its due date → an **overdue** alert
+- [ ] Leave yesterday unclosed → an **unclosed day** alert
+- [ ] Close a day with a shortage → a **cash mismatch** alert
+- [ ] Each alert links to the screen that answers it
+- [ ] With nothing wrong, it says **All clear**
+
+## 3. Getting around the analytics
+
+- [ ] **Analytics** in the sidebar opens the overview
+- [ ] Eleven tabs: Overview, Insights, Sales, Products, Brands, Customers,
+      Credit, Inventory, Profit, Payments, Suppliers
+- [ ] Every page has From, To, a branch picker and a comparison button
+- [ ] The presets — Today, 7 days, 30 days, 90 days, This year — set the range
+- [ ] Every area shows a **chart and a table**
+- [ ] **Compare to previous** appears everywhere except Inventory and Credit,
+      whose headline figures are a position rather than a period
+- [ ] Changing area **keeps** the range and branch
+- [ ] The range is in the URL, so a view can be copied to someone else
+
+## 4. The figures are right (criterion 1)
+
+Pick a day you can add up by hand.
+
+- [ ] **Sales**: revenue, bills, units and average bill match your arithmetic
+- [ ] Revenue on the dashboard for today equals the Sales page for today
+- [ ] **Profit**: revenue − cost of goods = gross; gross − expenses = estimated
+      net
+- [ ] **Payments**: what was taken at the counter plus what went on credit
+      equals revenue
+- [ ] **Brands** and **Products** add up to the same revenue as Sales
+
+## 5. The branch selector (criterion 2)
+
+- [ ] One branch, then the other → two different sets of figures
+- [ ] Every branch → the two add up to the total
+- [ ] Signed in as the **branch manager**, the other branch is not in the
+      picker, and its figures never appear
+
+## 6. Main type and NEW CUT (criterion 3)
+
+- [ ] **Products → By main type** lists each type separately
+- [ ] GLOBAL appears **twice**: once plain, once as **GLOBAL · NEW CUT**
+- [ ] Their margins differ — which is the point of splitting them
+- [ ] **Inventory** shows stock by type the same way
+- [ ] **Profit** offers a main-type filter; **NEW CUT only** appears *after*
+      choosing GLOBAL and disappears when you pick another type. *NEW CUT is
+      a designation inside GLOBAL, never a sixth type*
+
+## 6b. Insights (FR-35)
+
+- [ ] **Insights** shows revenue, average bill, margin and collection rate,
+      each against the period before — with a direction, not just a figure
+- [ ] **Which days earn** groups by weekday. *"Dead on Tuesdays" is
+      actionable; "the 14th was slow" is not*
+- [ ] Top products, brands and branches are listed
+- [ ] The five main types are compared, GLOBAL split by NEW CUT
+- [ ] Slow-moving stock is listed, each linking to its device
+- [ ] Signed in as **staff**, margin is absent but everything else is there
+
+## 6c. The rest of the measures
+
+- [ ] **Inventory** shows **turnover**, **low stock** and **out of stock**
+- [ ] Set a product's minimum above its stock → it appears under *Needs
+      reordering*; drop the stock to zero → it moves to out of stock
+- [ ] **Credit** shows **collected in this period** and a **collection rate**,
+      and lists customers **late more than once**
+- [ ] A rate above 100% is not a bug — money arrives for older bills
+- [ ] **Suppliers** shows *What we buy, and from whom*
+- [ ] The **Overview** shows cash, accounts, customer dues and stock value
+      beside the trade figures
+
+## 7. Inventory movement (FR-21)
+
+- [ ] The movement table reads Opening → Purchases → Sales → Returns →
+      Transfers → Adjustments → Current
+- [ ] **Opening + in − out = Current.** *A movement report that does not
+      reconcile is worse than none*
+- [ ] **Handsets are counted, not just accessories.** Register a phone and sell
+      it inside the period → purchases and sales each go up by one. *The stock
+      ledger covers accessories; a phone shop's movement has to read the device
+      history too*
+- [ ] **Dead stock** lists handsets that were in stock before the period and
+      are still here, oldest first
+
+## 8. Reaching a handset (criterion 5)
+
+- [ ] From the dashboard, click **Stock value** → Inventory
+- [ ] Click **Handsets** → the device list
+- [ ] Click a device → its full history
+- [ ] That is **three clicks** from the dashboard to one IMEI
+- [ ] The other route also works: Overview → a branch → a bill → the IMEI on
+      that bill opens the handset's history. *On a printed invoice the IMEI is
+      plain text — paper has nowhere to click*
+
+## 9. Speed (criterion 4)
+
+- [ ] Set the range to a whole year with every branch selected
+- [ ] Every page answers in a couple of seconds at most
+
+## What M10 does not do
+
+- **No nightly rollups.** Every figure is live from the documents. Fast enough
+  at this size; revisit if the data grows
+- **No exports yet** — that is M11
+- **No automated recommendations** (PRD FR-35.4 puts them in a later version)
+- **Charts are simple bars**, with no axes, tooltips or zoom
+- **Estimated net profit is gross less recorded expenses.** Salaries and rent
+  count only if somebody booked them as expenses

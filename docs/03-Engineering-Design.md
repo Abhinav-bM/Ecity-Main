@@ -111,7 +111,7 @@ Constraints that shaped every choice below:
 
 ## 4. Data Layer Decisions
 
-These twelve decisions are the difference between a system that reconciles and one that does not.
+These thirteen decisions are the difference between a system that reconciles and one that does not.
 
 **4.1 Money is `bigint` paise.** Every amount column is integer minor units. A `Money` helper type handles arithmetic, and formatting to `₹` happens only at the display edge. No `float`, no `number` arithmetic on amounts in JavaScript.
 
@@ -206,6 +206,8 @@ returning id;   -- zero rows returned  =>  abort the sale with a clear message
 **4.11 Search re-applies every rule the rest of the application enforces.** Global search (M9, FR-30) touches every table at once, which makes it the single easiest place to leak something every other screen is careful about. So each branch of it re-applies the caller's branch scope *and* checks the permission for the kind of record it is about to return — there is deliberately no blanket permission on the endpoint, because one would either lock out staff who legitimately search or hand them rows they cannot open. Where two rules appear to conflict, both are satisfied rather than one dropped: a customer record is business-wide (FR-6.7) but a branch-limited user must not reach another branch's customer (FR-30.7), so visibility follows the trade — reachable if they have bought at a visible branch, or have not bought anywhere yet.
 
 **4.12 "Today" is the shop's day, never the browser's or the server's.** `new Date().toISOString().slice(0, 10)` is UTC, which in India is a *different day* between midnight and 05:30 — the till is open, the drawer is on today's business date, and the browser thinks it is yesterday. Found when a test run crossed midnight IST: the expense form defaulted to the previous day, and capped its own date picker below the day the shop was standing in, so nobody could record that evening's expense at all. `src/lib/date.ts` holds one definition of the shop's calendar day and both sides use it — the server's `businessDateFor` and every form default — so a form and the drawer it posts into cannot drift apart. Anything user-facing that means "today at the shop" comes from there.
+
+**4.13 Analytics read one query layer, and a limited user gets nothing rather than everything.** Nine areas (M10, FR-16 – FR-24) share one shape — range, branch set, comparison — so two screens cannot disagree about the same month. The branch resolver returns a *concrete list* whenever the caller is limited, never "no filter": an empty filter meaning *unfiltered* is the leak that matters, so a branch-limited user asking for a branch they cannot see gets zero, not the whole business. Margins sit behind their own permission (`analytics.view_profit`), the same line `inventory.view_cost` already drew. No rollup tables: live queries answer a twelve-month range well inside PRD §9.1's five seconds, and a nightly rollup would add a refresh to keep honest and a staleness window to explain.
 
 ---
 ## 5. Cross-Cutting Implementation Notes

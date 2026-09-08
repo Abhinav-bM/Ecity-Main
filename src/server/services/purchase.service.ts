@@ -212,6 +212,7 @@ export async function createPurchase(
               purchasePricePaise: unitCost,
               supplierId: input.supplierId,
               purchaseDate: input.purchaseDate ?? new Date(),
+              receivedAt: input.purchaseDate ?? undefined,
               branchId: input.branchId,
             },
             tx,
@@ -230,6 +231,9 @@ export async function createPurchase(
             actorId: actor.id,
             refType: 'purchase',
             refId: created.id,
+            // A backdated purchase dates its stock movement too, or M10's
+            // movement report puts the goods on the wrong day.
+            occurredAt: input.purchaseDate ?? undefined,
           },
           {
             productId: line.productId,
