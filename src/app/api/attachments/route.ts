@@ -6,6 +6,7 @@ import {
   uploadAttachment,
 } from '@/server/services/attachment.service'
 import { getSessionContext } from '@/server/auth/session'
+import { MAX_UPLOAD_BYTES } from '@/server/storage'
 import { requirePermission } from '@/server/auth/permissions'
 import { AppError, route, toResponse } from '@/server/http'
 
@@ -29,6 +30,24 @@ export async function POST(req: Request): Promise<Response> {
       return NextResponse.json({ error: 'Not signed in.', code: 'UNAUTHENTICATED' }, { status: 401 })
     }
     requirePermission(session.user, 'attachment.upload', null)
+
+    /*
+     * Refuse an oversized upload before reading it.
+     *
+     * `req.formData()` buffers the whole body first, so without this a 500 MB
+     * post is held in memory and only then rejected by the 5 MB rule — which
+     * on a 1 GB server is a way to take the shop offline by uploading a film.
+     * The header is a hint, not a guarantee, so the real check still runs
+     * below on the actual bytes; this one just stops the obvious case cheaply.
+     */
+    const declared = Number(req.headers.get('content-length') ?? 0)
+    if (declared > MAX_UPLOAD_BYTES * 1.1) {
+      throw new AppError(
+        `That file is too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`,
+        413,
+        'FILE_TOO_LARGE',
+      )
+    }
 
     const form = await req.formData()
     const entityType = String(form.get('entityType') ?? '')

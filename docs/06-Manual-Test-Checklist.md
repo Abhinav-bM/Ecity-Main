@@ -1784,10 +1784,13 @@ go-live):
 
 ## 7. Go-live
 
-- [ ] **Uploads are sorted** — either the S3 driver is implemented, or
-      `.storage/` is a named volume *and* is in the backup. See docs/04 §3b.1.
-      *On the default settings, attachments are destroyed by the next deploy*
+- [ ] **Uploads point at R2** — `STORAGE_DRIVER=s3` and the four S3 variables
+      are in `.env` (docs/04 §3b.1). *Left unset, attachments are written to
+      the container and destroyed by the next deploy*
 - [ ] Attach a photo, deploy, and check it is **still there**
+- [ ] A file over 5 MB is refused with a message saying how big it was
+- [ ] With `STORAGE_DRIVER=s3` and a variable deliberately blanked, the first
+      upload fails **naming that variable** — it does not silently fall back
 - [ ] Everything in the Go-Live Checklist (docs/04 §11)
 - [ ] Existing data loaded in the order in docs/04 §10, each step checked
 - [ ] Staff trained: billing, returns, dues, the daily closing

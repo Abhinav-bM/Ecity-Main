@@ -71,14 +71,21 @@ if [[ "$LOCAL_ONLY" == true ]]; then
   exit 0
 fi
 
+# The same R2 token the application uses. Accepted under either name so a
+# .env does not have to carry one credential twice: the app calls them
+# S3_* because that is the protocol, and this script grew up calling them
+# R2_*. Two names for one secret is how they drift apart.
+ACCESS_KEY="${R2_ACCESS_KEY_ID:-${S3_ACCESS_KEY_ID:-}}"
+SECRET_KEY="${R2_SECRET_ACCESS_KEY:-${S3_SECRET_ACCESS_KEY:-}}"
+
 : "${R2_ACCOUNT_ID:?set R2_ACCOUNT_ID}"
-: "${R2_ACCESS_KEY_ID:?set R2_ACCESS_KEY_ID}"
-: "${R2_SECRET_ACCESS_KEY:?set R2_SECRET_ACCESS_KEY}"
+: "${ACCESS_KEY:?set S3_ACCESS_KEY_ID (or R2_ACCESS_KEY_ID)}"
+: "${SECRET_KEY:?set S3_SECRET_ACCESS_KEY (or R2_SECRET_ACCESS_KEY)}"
 : "${RESTIC_PASSWORD:?set RESTIC_PASSWORD — without it the repository cannot be read back}"
 
 export RESTIC_REPOSITORY="s3:https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com/${R2_BACKUP_BUCKET:-ecity-backups}"
-export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+export AWS_ACCESS_KEY_ID="$ACCESS_KEY"
+export AWS_SECRET_ACCESS_KEY="$SECRET_KEY"
 export RESTIC_PASSWORD
 
 echo "› sending off-site"

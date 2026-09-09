@@ -200,7 +200,7 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
         entityId={id}
         rows={files}
         canManage={hasPermission(session.user, 'attachment.upload')}
-        description="The supplier's bill, delivery note or photos. Images or PDF, up to 8 MB."
+        description="The supplier's bill, delivery note or photos. Images or PDF, up to 5 MB."
       />
     </div>
   )

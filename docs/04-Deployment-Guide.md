@@ -297,43 +297,45 @@ restic init
 Then run `./scripts/backup.sh` by hand once and confirm `restic snapshots`
 lists it, before trusting the cron entry.
 
-### 3b.1 Uploads are not ready for production yet
+### 3b.1 Wiring uploads to R2
 
-**Read this before go-live.** The app has an attachment feature — bill photos,
-supplier invoices, product images — and it works. What is not finished is
-where those files go on a server.
+Attachments — bill photos, supplier invoices, product images — are stored in
+the `ecity-uploads` bucket. Four variables in `.env`:
 
-`src/server/storage/index.ts` has two drivers:
+```
+STORAGE_DRIVER=s3
+R2_ACCOUNT_ID=<the long hex id from the R2 dashboard>
+S3_BUCKET=ecity-uploads
+S3_ACCESS_KEY_ID=<from the API token>
+S3_SECRET_ACCESS_KEY=<from the API token>
+```
 
-- **`local`** writes under `.storage/`, and is what development uses.
-- **`s3`** is a stub. Every method throws
-  `S3 storage driver not implemented yet`.
+`S3_ENDPOINT` can replace `R2_ACCOUNT_ID` if you ever move to another
+provider — "S3" here is the *protocol*, not Amazon. R2 speaks it, and so do
+Backblaze B2 and MinIO.
 
-That leaves two ways to be wrong in production, and both are worth naming:
+**Leave `STORAGE_DRIVER` unset and uploads go to the container's own disk**,
+where the next deploy destroys them — the container is replaced, and the files
+are not in the database dump either. That is fine on a laptop and wrong on a
+server, which is why the driver refuses to start with a half-filled
+configuration: if `STORAGE_DRIVER=s3` and a variable is missing, the first
+upload fails naming the variable, rather than quietly writing to a disk that
+is about to disappear.
 
-| `STORAGE_DRIVER` | What happens |
-|---|---|
-| `s3` | The first person to attach a photo gets an error. Loud, immediate, obvious |
-| `local` | It appears to work — and every file is written **inside the container**, so the next deploy replaces the container and destroys them. Silent |
+**Uploads are capped at 5 MB**, which fits a phone photo with room to spare
+and keeps a shop inside R2's free 10 GB — roughly two thousand photos.
+Anything larger is refused from the `content-length` header before the file
+is read, so a large upload cannot exhaust the memory of a 1 GB instance.
 
-The second is the dangerous one, and it is the default. The compose file in
-§4.1 gives the `app` service no volume, so uploads live only as long as the
-container does. They are also outside the database dump, so `backup.sh` would
-not have them either.
+To check it works, attach a photo to a purchase, then confirm the object
+appears in the bucket:
 
-**Before go-live, one of these has to happen:**
+```bash
+# in the Cloudflare dashboard: R2 -> ecity-uploads -> Objects
+```
 
-1. **Implement the S3 driver against R2** (recommended). The bucket, the
-   credentials and the env vars all already exist — this is the remaining
-   piece, and it puts uploads off-box where the backups already are.
-2. **Or**, as a stopgap: mount a named volume at `.storage/` in the `app`
-   service so files survive a deploy, and add that path to the backup script.
-   Files then live only on the instance, so they are protected by the
-   Lightsail snapshot (layer 1) but not by the off-site copy.
-
-Until one is done, treat attachments as a development feature. The failure
-mode of doing nothing is a shop that photographs supplier bills for three
-months and finds them gone after a Tuesday deploy.
+Then deploy again and confirm the photo is **still there** — that is the whole
+point, and the one thing the local driver cannot do.
 
 ---
 

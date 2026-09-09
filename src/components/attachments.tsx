@@ -70,7 +70,7 @@ export function Attachments({
       <CardHeader className="pb-3">
         <CardTitle className="text-sm">Attachments</CardTitle>
         <CardDescription>
-          {description ?? 'Bills, photos and PDFs. Images or PDF, up to 8 MB.'}
+          {description ?? 'Bills, photos and PDFs. Images or PDF, up to 5 MB.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

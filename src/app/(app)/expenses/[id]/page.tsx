@@ -85,7 +85,7 @@ export default async function ExpensePage({ params }: { params: Promise<{ id: st
         entityId={id}
         rows={files}
         canManage={hasPermission(session.user, 'attachment.upload') && !expense.voidedAt}
-        description="The receipt or bill for this expense. Images or PDF, up to 8 MB."
+        description="The receipt or bill for this expense. Images or PDF, up to 5 MB."
       />
     </div>
   )

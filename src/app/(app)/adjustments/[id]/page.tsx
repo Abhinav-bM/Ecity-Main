@@ -105,7 +105,7 @@ export default async function AdjustmentPage({ params }: { params: Promise<{ id:
         entityId={id}
         rows={files}
         canManage={hasPermission(session.user, 'attachment.upload')}
-        description="Evidence: a photo of the damage, or the count sheet. Images or PDF, up to 8 MB."
+        description="Evidence: a photo of the damage, or the count sheet. Images or PDF, up to 5 MB."
       />
     </div>
   )

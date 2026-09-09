@@ -61,7 +61,7 @@ export function ProductImage({
         <CardTitle className="text-sm">Image</CardTitle>
         <CardDescription>
           Shown on the product list and at the counter. JPEG, PNG, WebP or HEIC,
-          up to 8 MB.
+          up to 5 MB.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-4">

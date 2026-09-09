@@ -1,6 +1,12 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import { env } from '@/server/env'
 
 /**
@@ -50,20 +56,121 @@ const localDriver: StorageDriver = {
 /* --------------------------------------------------------------- s3 ------ */
 
 /**
- * Deliberately not implemented until it is needed. Failing loudly at startup
- * beats silently writing a customer's bill photos to a laptop in production.
+ * Object storage over the S3 protocol — Cloudflare R2 in production.
+ *
+ * "S3" names the *protocol*, not Amazon. R2 speaks it, and is what this shop
+ * uses: storage is charged, reading files back is not, and a shop whose staff
+ * open bill photos all day would pay for every one of those reads on AWS.
+ * Moving to Backblaze or MinIO is a change of endpoint.
+ *
+ * The alternative to a bucket is the container's own disk, which is what the
+ * local driver does — and a container is replaced on every deploy, taking
+ * three months of supplier invoices with it. That is the failure this exists
+ * to prevent.
  */
+type S3Config = {
+  endpoint: string
+  bucket: string
+  accessKeyId: string
+  secretAccessKey: string
+}
+
+/**
+ * Read the configuration, or say exactly what is missing.
+ *
+ * Checked when the driver is first used rather than at import, so a developer
+ * on the local driver never trips over it — but a server set to `s3` with a
+ * half-filled `.env` fails on the first upload with the name of the variable
+ * it wants, not a 403 from Cloudflare.
+ */
+function s3Config(): S3Config {
+  const e = env()
+  const endpoint =
+    e.S3_ENDPOINT ??
+    (e.R2_ACCOUNT_ID ? `https://${e.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : undefined)
+
+  const missing = [
+    !endpoint && 'S3_ENDPOINT (or R2_ACCOUNT_ID)',
+    !e.S3_BUCKET && 'S3_BUCKET',
+    !e.S3_ACCESS_KEY_ID && 'S3_ACCESS_KEY_ID',
+    !e.S3_SECRET_ACCESS_KEY && 'S3_SECRET_ACCESS_KEY',
+  ].filter(Boolean)
+
+  if (missing.length) {
+    throw new Error(
+      `STORAGE_DRIVER is 's3' but ${missing.join(', ')} ${
+        missing.length === 1 ? 'is' : 'are'
+      } not set. Uploads cannot be stored.`,
+    )
+  }
+
+  return {
+    endpoint: endpoint!,
+    bucket: e.S3_BUCKET!,
+    accessKeyId: e.S3_ACCESS_KEY_ID!,
+    secretAccessKey: e.S3_SECRET_ACCESS_KEY!,
+  }
+}
+
+/**
+ * One client for the process.
+ *
+ * Built on first use and kept: it holds a connection pool, and making a new
+ * one per upload would open a fresh TLS handshake for every bill photo.
+ */
+let client: S3Client | null = null
+let clientBucket = ''
+
+function s3(): { client: S3Client; bucket: string } {
+  if (!client) {
+    const config = s3Config()
+    client = new S3Client({
+      // R2 has no regions in the AWS sense, but the protocol requires one.
+      region: 'auto',
+      endpoint: config.endpoint,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+    })
+    clientBucket = config.bucket
+  }
+  return { client, bucket: clientBucket }
+}
+
 const s3Driver: StorageDriver = {
   name: 's3',
-  async put() {
-    throw new Error('S3 storage driver not implemented yet. Set STORAGE_DRIVER=local.')
+
+  async put(key, body, contentType) {
+    const { client, bucket } = s3()
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    )
   },
-  async get() {
-    throw new Error('S3 storage driver not implemented yet. Set STORAGE_DRIVER=local.')
+
+  async get(key) {
+    const { client, bucket } = s3()
+    const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    if (!result.Body) throw new Error(`Stored file ${key} came back empty.`)
+    // The SDK hands back a stream; the callers want the bytes.
+    return Buffer.from(await result.Body.transformToByteArray())
   },
-  async delete() {
-    throw new Error('S3 storage driver not implemented yet. Set STORAGE_DRIVER=local.')
+
+  async delete(key) {
+    const { client, bucket } = s3()
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
   },
+}
+
+/** For tests: forget the cached client so a changed config is picked up. */
+export function resetStorageClient(): void {
+  client = null
+  clientBucket = ''
 }
 
 export function storage(): StorageDriver {
@@ -109,7 +216,15 @@ export function verifySignature(key: string, expires: string, signature: string)
 
 /* -------------------------------------------------------- validation ----- */
 
-export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+/**
+ * The ceiling on one upload.
+ *
+ * A phone photo is 2–5 MB, so this fits one with a little room. It is also
+ * what keeps the shop inside R2's free 10 GB — about two thousand photos —
+ * and what stops a single upload from being a memory problem on a 1 GB
+ * server.
+ */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
 export const ALLOWED_UPLOAD_TYPES = [
   'image/jpeg',
@@ -122,7 +237,11 @@ export const ALLOWED_UPLOAD_TYPES = [
 export function uploadProblems(file: { size: number; type: string }): string[] {
   const problems: string[] = []
   if (file.size > MAX_UPLOAD_BYTES) {
-    problems.push(`File must be under ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`)
+    problems.push(
+      `That file is ${Math.ceil(file.size / 1024 / 1024)} MB. The limit is ${
+        MAX_UPLOAD_BYTES / 1024 / 1024
+      } MB — a photo taken on a phone is usually well under it.`,
+    )
   }
   if (file.size === 0) problems.push('File is empty.')
   if (!(ALLOWED_UPLOAD_TYPES as readonly string[]).includes(file.type)) {
