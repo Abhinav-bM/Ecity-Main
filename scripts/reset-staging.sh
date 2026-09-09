@@ -19,16 +19,41 @@ set -euo pipefail
 
 MODE="${1:---fresh}"
 
-: "${DATABASE_URL:?set DATABASE_URL to the staging database}"
-
-# The database name, pulled out of the connection string for the confirmation
-# prompt and the drop/create.
-DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+).*|\1|')
+# ---------------------------------------------------------------------------
+# Where is this running?
+#
+# On a developer's machine there is a psql and a Node toolchain, and
+# DATABASE_URL points at a local database. On the server there is neither:
+# the guide puts only docker-compose.yml, the Caddyfile and .env on the box
+# (§4), so every database command has to go through the containers — the same
+# way the deploy runs its migrations.
+#
+# Getting this wrong is not subtle. The first version of this script called
+# `psql` and `npm run db:seed` directly and would simply have said
+# "command not found" on the server.
+# ---------------------------------------------------------------------------
+if command -v docker >/dev/null 2>&1 && docker compose ps db >/dev/null 2>&1; then
+  MODE_HOST="docker"
+  DB_NAME="${POSTGRES_DB:-ecity}"
+  DB_USER="${POSTGRES_USER:-ecity}"
+  WHERE="the db container on this server"
+  psql_run()  { docker compose exec -T db psql -U "$DB_USER" -d "${1:-$DB_NAME}" "${@:2}"; }
+  psql_file() { docker compose exec -T db psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1; }
+  node_run()  { docker compose run --rm migrate "$@"; }
+else
+  MODE_HOST="direct"
+  : "${DATABASE_URL:?no docker compose here, so set DATABASE_URL}"
+  DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+).*|\1|')
+  WHERE=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*@([^/:]+).*|\1|')
+  psql_run()  { psql "${DATABASE_URL%/*}/${1:-$DB_NAME}" "${@:2}"; }
+  psql_file() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1; }
+  node_run()  { "$@"; }
+fi
 
 cat <<BANNER
 
   This empties the database: $DB_NAME
-  On host:                   $(printf '%s' "$DATABASE_URL" | sed -E 's|.*@([^/:]+).*|\1|')
+  Reached through:           $WHERE
   Mode:                      $MODE
 
   Every sale, purchase, payment, device and ledger entry will be gone.
@@ -45,21 +70,21 @@ case "$MODE" in
     echo "› dropping and recreating $DB_NAME"
     # Connect to the maintenance database, not the one being dropped: you
     # cannot drop a database you are connected to.
-    ADMIN_URL="${DATABASE_URL%/*}/postgres"
-    # WITH (FORCE) disconnects anything still attached — the app usually holds
-    # a pool open, and without this the drop fails with "database is being
-    # accessed by other users".
-    psql "$ADMIN_URL" -c "drop database if exists \"$DB_NAME\" with (force);"
-    psql "$ADMIN_URL" -c "create database \"$DB_NAME\";"
+    #
+    # WITH (FORCE) disconnects anything still attached — the app holds a pool
+    # open, and without this the drop fails with "database is being accessed
+    # by other users". Stopping the app first is still the tidier way.
+    psql_run postgres -c "drop database if exists \"$DB_NAME\" with (force);"
+    psql_run postgres -c "create database \"$DB_NAME\";"
 
     echo "› applying migrations"
-    npm run db:migrate
+    node_run npm run db:migrate
 
     # The minimum to sign in: permissions, roles, the business, one admin.
     # No branches, tax rates, payment methods or catalogue — those are the
     # shop's own, and a seeded guess is something the owner has to undo.
     echo "› seeding: permissions, roles, business, admin login"
-    npm run db:seed
+    node_run npm run db:seed
     ;;
 
   --keep-logins)
@@ -69,7 +94,7 @@ case "$MODE" in
     # DELETE would fail on exactly the tables that most need clearing.
     # TRUNCATE does not fire row triggers, and CASCADE follows the foreign
     # keys so the order does not have to be worked out by hand.
-    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+    psql_file <<'SQL'
 truncate table
   sale_payment, sale_item, sale,
   refund, return_item, sales_return, trade_in,
@@ -91,7 +116,7 @@ SQL
     # RESTART IDENTITY resets the id counters, so the first invoice of the
     # test run is INV-00001 rather than continuing from wherever you were.
     echo "› syncing the permission catalogue"
-    npm run db:sync-roles
+    node_run npm run db:sync-roles
     ;;
 
   *)

@@ -51,8 +51,17 @@ SIZE=$(wc -c < "$DUMP" | tr -d ' ')
 # Prove it is a readable archive before trusting it. pg_restore --list reads
 # the table of contents without touching a database; a truncated file fails
 # here rather than on the day of the restore.
-pg_restore --list "$DUMP" > /dev/null 2>&1 || fail "dump is not a readable archive"
-TABLES=$(pg_restore --list "$DUMP" | grep -c 'TABLE DATA' || true)
+#
+# Run wherever pg_restore actually exists. On the server that is inside the
+# db container — the host has no Postgres client tools, only Docker.
+if command -v pg_restore >/dev/null 2>&1; then
+  toc() { pg_restore --list "$DUMP"; }
+else
+  toc() { docker compose exec -T db pg_restore --list < "$DUMP"; }
+fi
+
+toc > /dev/null 2>&1 || fail "dump is not a readable archive"
+TABLES=$(toc | grep -c 'TABLE DATA' || true)
 [[ "$TABLES" -ge 20 ]] || fail "dump holds only ${TABLES} tables — the schema is not all there"
 
 echo "  ${SIZE} bytes, ${TABLES} tables"
