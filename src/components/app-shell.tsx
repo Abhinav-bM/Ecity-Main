@@ -20,7 +20,7 @@ import {
   Settings,
   ShieldCheck,
   Smartphone,
-  ArrowLeftRight,
+  // ArrowLeftRight,
   Banknote,
   BarChart3,
   CalendarCheck,
@@ -89,12 +89,12 @@ const NAV: NavGroup[] = [
     items: [
       { href: '/devices', label: 'Devices', icon: Smartphone, permission: 'inventory.view' },
       { href: '/products', label: 'Products', icon: Boxes, permission: 'product.view' },
-      {
-        href: '/transfers',
-        label: 'Transfers',
-        icon: ArrowLeftRight,
-        permission: 'transfer.view',
-      },
+      // {
+      //   href: '/transfers',
+      //   label: 'Transfers',
+      //   icon: ArrowLeftRight,
+      //   permission: 'transfer.view',
+      // },
       {
         href: '/adjustments',
         label: 'Adjustments',
