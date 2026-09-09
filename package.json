@@ -26,7 +26,8 @@
     "perf:seed": "psql -d ${PERF_DB_NAME:-ecity_perf} -f scripts/perf-seed.sql",
     "perf:check": "PERF_DB=1 vitest run tests/integration/perf.integration.test.ts",
     "backup": "bash scripts/backup.sh",
-    "restore:drill": "bash scripts/restore-drill.sh"
+    "restore:drill": "bash scripts/restore-drill.sh",
+    "db:seed:demo": "tsx src/server/db/seed.ts --demo"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

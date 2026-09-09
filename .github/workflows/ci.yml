@@ -40,7 +40,9 @@ jobs:
       # The app is used on phones, tablets and desktops. Playwright runs every
       # suite at all four viewports; a desktop-only layout fails here.
       - run: npx playwright install --with-deps chromium
-      - run: npm run db:seed
+      # The browser suite bills against the demo branch and catalogue; a
+      # server is seeded with `db:seed`, which creates none of that.
+      - run: npm run db:seed:demo
         env:
           SEED_PASSWORD: ci-test-password-123
       - run: npm start &

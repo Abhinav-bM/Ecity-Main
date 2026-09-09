@@ -20,7 +20,7 @@ createdb "$DB"
 
 export DATABASE_URL="postgres://ecity:ecity@localhost:5432/$DB"
 npm run db:migrate >/dev/null
-npm run db:seed >/dev/null
+npm run db:seed:demo >/dev/null
 echo "  migrated and seeded"
 
 echo "› stopping anything on :$PORT"
