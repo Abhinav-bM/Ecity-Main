@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatMoney } from '@/lib/money'
+import { RankChart, ShareChart, TrendChart } from '@/components/charts'
 import { formatBp } from './shared'
 
 /** A headline figure, optionally with how it compares to the period before. */
@@ -183,6 +184,53 @@ export function BarChart({
               )
             })}
           </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * A chart in a card, with the right chart for the question.
+ *
+ * `BarChart` above stays for rankings — a list of five products with a bar
+ * behind each is honest and needs no library. This is for the two shapes it
+ * could never show: a trend over time, and a share of a whole.
+ */
+export function ChartCard({
+  title,
+  description,
+  kind,
+  rows,
+  testId,
+}: {
+  title: string
+  description?: string
+  kind: 'trend' | 'rank' | 'share'
+  rows: { label: string; valuePaise: bigint }[]
+  testId?: string
+}) {
+  // bigint cannot cross the server/client boundary, so it goes as a string
+  // and is parsed back inside the chart — never converted to a float here.
+  const data = rows.map((r) => ({ label: r.label, valuePaise: r.valuePaise.toString() }))
+
+  return (
+    <Card data-testid={testId}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm">{title}</CardTitle>
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing in this period.</p>
+        ) : kind === 'trend' ? (
+          <TrendChart data={data} />
+        ) : kind === 'share' ? (
+          <ShareChart data={data} />
+        ) : (
+          <RankChart data={data} />
         )}
       </CardContent>
     </Card>

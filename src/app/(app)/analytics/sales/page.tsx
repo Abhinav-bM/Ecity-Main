@@ -11,7 +11,7 @@ import {
   selectableBranches,
 } from '@/server/services/analytics.service'
 import { RangeControls } from '../range-controls'
-import { BarChart, DataTable, Figure } from '../parts'
+import { ChartCard, DataTable, Figure } from '../parts'
 import { rangeFromParams } from '../shared'
 
 export const dynamic = 'force-dynamic'
@@ -70,8 +70,10 @@ export default async function SalesAnalyticsPage({
         />
       </div>
 
-      <BarChart
+      <ChartCard
         title="Revenue by day"
+        description="Where the takings are going, and which days are quiet."
+        kind="trend"
         testId="sales-chart"
         rows={byDay.map((d) => ({ label: d.day, valuePaise: d.revenuePaise }))}
       />

@@ -9,7 +9,7 @@ import {
   supplierPaymentsTotal,
 } from '@/server/services/analytics.service'
 import { RangeControls } from '../range-controls'
-import { BarChart, DataTable, Figure } from '../parts'
+import { ChartCard, DataTable, Figure } from '../parts'
 import { rangeFromParams } from '../shared'
 
 export const dynamic = 'force-dynamic'
@@ -60,7 +60,18 @@ export default async function PaymentAnalyticsPage({
         <Figure label="Paid to suppliers" value={formatMoney(paidOut)} href="/purchases/supplier-dues" />
       </div>
 
-      <BarChart title="How customers paid" testId="payment-chart" rows={rows} />
+      {/*
+        A share, not a ranking. Payment methods add up to everything the shop
+        took, and "cash is 78% of it" is the fact that changes what you do —
+        a ranked list shows cash is biggest without showing it is most.
+      */}
+      <ChartCard
+        title="How customers paid"
+        description="Share of everything taken in this period."
+        kind="share"
+        testId="payment-chart"
+        rows={rows}
+      />
 
       <DataTable
         title="By method"

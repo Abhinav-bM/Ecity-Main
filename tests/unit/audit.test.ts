@@ -37,3 +37,30 @@ describe('audit diff', () => {
     })
   })
 })
+
+describe('absent and empty are the same thing', () => {
+  it('does not record a field that was never set and still is not', () => {
+    /*
+     * A create passes the whole record, so a customer with no email arrives
+     * as `email: null` against nothing at all. Recording that filled the
+     * audit log with "null -> null" and pushed the real change off screen.
+     */
+    expect(diff(null, { name: 'New', email: null, phone: null })).toEqual({
+      name: { from: null, to: 'New' },
+    })
+  })
+
+  it('still records clearing a value that was there', () => {
+    const before: Record<string, unknown> = { phone: '9876543210' }
+    expect(diff(before, { phone: null })).toEqual({
+      phone: { from: '9876543210', to: null },
+    })
+  })
+
+  it('treats undefined and null as equal, whichever side they are on', () => {
+    const undef: Record<string, unknown> = { email: undefined }
+    const nul: Record<string, unknown> = { email: null }
+    expect(diff(undef, { email: null })).toEqual({})
+    expect(diff(nul, { email: undefined })).toEqual({})
+  })
+})

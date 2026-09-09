@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDateTime } from '@/lib/utils'
+import { describeChanges, type Change } from '@/lib/changes'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listAuditLog } from '@/server/services/audit.service'
@@ -76,16 +77,7 @@ export default async function AuditPage({
                 {r.entityType}
                 {r.entityId ? `#${r.entityId}` : ''} · {r.actorLabel ?? 'system'}
               </p>
-              {r.changes ? (
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-xs text-muted-foreground">
-                    {Object.keys(r.changes).length} field(s) changed
-                  </summary>
-                  <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-[11px]">
-                    {JSON.stringify(r.changes, null, 2)}
-                  </pre>
-                </details>
-              ) : null}
+              <ChangeLines changes={r.changes as Record<string, Change> | null} />
             </Card>
           ))
         )}
@@ -126,18 +118,7 @@ export default async function AuditPage({
                   </TableCell>
                   <TableCell>{r.summary ?? '—'}</TableCell>
                   <TableCell className="max-w-xs min-w-[10rem]">
-                    {r.changes ? (
-                      <details>
-                        <summary className="cursor-pointer text-xs text-muted-foreground">
-                          {Object.keys(r.changes).length} field(s)
-                        </summary>
-                        <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-[11px]">
-                          {JSON.stringify(r.changes, null, 2)}
-                        </pre>
-                      </details>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                    <ChangeLines changes={r.changes as Record<string, Change> | null} />
                   </TableCell>
                 </TableRow>
               ))
@@ -155,5 +136,46 @@ export default async function AuditPage({
         noun="entries"
       />
     </div>
+  )
+}
+
+/**
+ * What changed, in words.
+ *
+ * This used to print the stored diff as JSON. That is a developer's view on
+ * the one page an owner opens to ask "who changed this price?" — and
+ * `"sellingPricePaise": { "to": 1400000 }` does not answer it. Same data,
+ * spelled for a person: money as rupees, rates as percentages, enums in
+ * lower case, and a create reading as "set to" rather than "changed from
+ * null".
+ *
+ * Long lists stay collapsed: a role edit can change forty permissions at
+ * once, and that should not push every other row off the screen.
+ */
+function ChangeLines({ changes }: { changes: Record<string, Change> | null }) {
+  const lines = describeChanges(changes)
+  if (lines.length === 0) return <span className="text-muted-foreground">—</span>
+
+  if (lines.length <= 3) {
+    return (
+      <ul className="space-y-0.5 text-xs" data-testid="audit-changes">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    )
+  }
+
+  return (
+    <details data-testid="audit-changes">
+      <summary className="cursor-pointer text-xs text-muted-foreground">
+        {lines.length} changes
+      </summary>
+      <ul className="mt-1 space-y-0.5 text-xs">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </details>
   )
 }

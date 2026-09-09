@@ -26,7 +26,7 @@ import {
   CalendarCheck,
   Landmark,
   SlidersHorizontal,
-  Upload,
+  // Upload,  // used by the Import data entry below, currently hidden
   Truck,
   UserRound,
   Wallet,
@@ -158,12 +158,12 @@ const NAV: NavGroup[] = [
         icon: Boxes,
         permission: 'product.manage',
       },
-      {
-        href: '/imports',
-        label: 'Import data',
-        icon: Upload,
-        permission: 'product.manage',
-      },
+      // {
+      //   href: '/imports',
+      //   label: 'Import data',
+      //   icon: Upload,
+      //   permission: 'product.manage',
+      // },
       {
         href: '/settings/opening-balances',
         label: 'Opening balances',

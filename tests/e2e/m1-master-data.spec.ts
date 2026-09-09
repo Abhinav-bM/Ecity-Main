@@ -156,3 +156,46 @@ test.describe('phone layout', () => {
     }
   })
 })
+
+/**
+ * The audit log is where an owner answers "who changed this price?".
+ *
+ * It printed the stored diff as JSON, which does not answer it — and JSON on
+ * a page the shop is meant to read is a developer's view left in by accident.
+ */
+test.describe('the audit log reads as English', () => {
+  const unique = () => String(Date.now()).slice(-8)
+
+  test('describes a change in words, not as JSON', async ({ page }) => {
+    await signIn(page, USERS.admin)
+
+    // Make something worth auditing.
+    const name = `E2E Audited ${unique()}`
+    const made = await page.request.post('/api/customers', { data: { name } })
+    expect(made.ok()).toBe(true)
+
+    await page.goto('/settings/audit')
+    // Both layouts render this; only one is on screen at a given width.
+    const row = page.getByTestId('audit-changes').and(page.locator(':visible')).first()
+    await expect(row).toBeVisible()
+
+    // The shape of the fix: a sentence, not a brace.
+    await expect(row).toContainText(/set to|cleared|→/)
+    await expect(page.locator('pre')).toHaveCount(0)
+    await expect(page.getByText('"from": null')).toHaveCount(0)
+  })
+
+  test('no longer records fields that were never set', async ({ page }) => {
+    // A customer with no email used to log `email: null -> null`, pushing the
+    // one field that did change off the screen.
+    await signIn(page, USERS.admin)
+    const name = `E2E Quiet ${unique()}`
+    await page.request.post('/api/customers', { data: { name } })
+
+    await page.goto('/settings/audit')
+    const changes = page.getByTestId('audit-changes').and(page.locator(':visible')).first()
+    await expect(changes).toContainText(`Name set to ${name}`)
+    await expect(changes).not.toContainText('Email')
+    await expect(changes).not.toContainText('unchanged')
+  })
+})

@@ -809,6 +809,137 @@ one.
 
 ---
 
+## 8c. Emptying staging to start testing
+
+Wiping staging back to an empty shop, keeping only a login. Everything runs
+through Docker, because the server has no Node and no `psql` — only the
+containers (§4).
+
+**Order matters: deploy first.** `db:seed` runs from the *migrate image on the
+server*, and that image only changes when a deploy pushes a new one. Reset
+before deploying and you reseed from whatever the server last pulled — which
+may still create demo branches and tax rates you have to delete again. Push,
+wait for the green tick in GitHub Actions, and only then do this.
+
+### 1. Get on the server
+
+```bash
+ssh ecity@<staging-ip>
+cd ~/app
+```
+
+The user is `ecity`, not `ubuntu` — §3.3 creates it. `~/app` is where
+`docker-compose.yml` and `.env` live.
+
+### 2. Back up first
+
+```bash
+docker compose exec -T db pg_dump -U ecity -Fc ecity > ~/before-reset.dump
+```
+
+`exec -T db` runs inside the Postgres container; the host has no `pg_dump`.
+`-Fc` is the compressed format `pg_restore` reads.
+
+Then confirm it is real, not an error message in a file:
+
+```bash
+ls -lh ~/before-reset.dump                                    # MB, or at least hundreds of KB
+docker compose exec -T db pg_restore --list < ~/before-reset.dump | grep -c "TABLE DATA"
+```
+
+The second should print roughly the number of tables in the schema (about 57).
+A few hundred **bytes** means the dump failed.
+
+This is a safety net for the next ten minutes, not a backup — it sits on the
+same disk as the database it came from. Real backups are §7.
+
+### 3. Stop the app
+
+```bash
+docker compose stop app
+docker compose ps
+```
+
+The app holds a pool of open connections, and a database cannot be dropped
+while anything is attached. `db` and `caddy` stay running — you need Postgres
+up to reset it.
+
+*Staging has no `worker` service* (§4.1 defines `db`, `app`, `migrate` and
+`caddy`). If you add one later, stop it here too.
+
+### 4. Drop and recreate
+
+```bash
+docker compose exec -T db psql -U ecity -d postgres -c "drop database if exists ecity with (force);"
+docker compose exec -T db psql -U ecity -d postgres -c "create database ecity;"
+```
+
+Connect to `postgres`, the maintenance database — you cannot drop the one you
+are connected to. `with (force)` disconnects anything that reconnected after
+step 3.
+
+### 5. Rebuild the schema
+
+```bash
+docker compose run --rm migrate
+```
+
+Every migration in order, from nothing to current. The migration tooling is a
+separate image; the app image does not carry it. **Wait for
+`Migrations applied.`** — seeding a half-built schema fails confusingly.
+
+If it says there is no such service, add the profile the service sits behind:
+`docker compose --profile tools run --rm migrate`.
+
+### 6. Seed the login
+
+```bash
+docker compose run --rm migrate npm run db:seed
+```
+
+Creates the permission catalogue, the three system roles, the business and
+**one admin**. No branches, tax rates, payment methods or catalogue — those
+belong to the shop.
+
+**Not `db:seed:demo`.** That adds two demo branches, GST rates, a fake
+catalogue and extra logins. It exists so the browser suite has something to
+bill against, and has no place on a server a shop will use.
+
+Note the password it prints; it comes from `SEED_PASSWORD` in `.env`, or falls
+back to `ChangeMe!2026`.
+
+### 7. Start it again and check
+
+```bash
+docker compose start app && docker compose ps
+docker compose exec -T app node -e "fetch('http://localhost:3000/api/health').then(r=>r.json()).then(d=>console.log(JSON.stringify(d)))"
+```
+
+Asked from *inside* the container: the app publishes port 3000 only on the
+Docker network, so `curl` on the host never connects. The health check reports
+whether migrations are current — a half-applied migration looks exactly like a
+broken feature once you start clicking.
+
+### 8. Set the shop up, in this order
+
+Sign in at `https://<ip>.sslip.io` as `admin@ecity.local`. It forces a password
+change on first use — that is the first test.
+
+| Order | Where | Why it is first |
+|---|---|---|
+| 1 | **Settings → Branches** | Nothing can be billed without one. Billing offers an "Add the first branch" button if you forget |
+| 2 | **Settings → Business** | Shop name, the GST toggle, tax rates, and **at least one payment method** — a sale cannot be paid for without one |
+| 3 | **Settings → Catalogue** | Brands and categories. A category decides IMEI-tracked or counted, and that **locks once products exist** |
+| 4 | **Settings → Users** | The real people |
+
+Then a purchase to bring stock in, then a bill.
+
+**Two things to expect.** Bill photos disappear on the next deploy until
+uploads are finished (§3b.1). And alerts only appear when the worker evaluates
+them — with no worker on staging, use **Check now** on the Alerts page.
+
+---
+
 ## 9. Runbook
 
 Common operations, for when you need them and cannot remember.

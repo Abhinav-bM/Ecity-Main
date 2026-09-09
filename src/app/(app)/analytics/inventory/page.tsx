@@ -13,7 +13,7 @@ import {
   stockTurnover,
 } from '@/server/services/analytics.service'
 import { RangeControls } from '../range-controls'
-import { BarChart, DataTable, Figure } from '../parts'
+import { ChartCard, DataTable, Figure } from '../parts'
 import { rangeFromParams } from '../shared'
 
 export const dynamic = 'force-dynamic'
@@ -117,8 +117,15 @@ export default async function InventoryAnalyticsPage({
         ]}
       />
 
-      <BarChart
+      {/*
+        A share: the five main types are all of the stock, and what the owner
+        wants from this is the proportion — how much of the shelf is USED,
+        how much is GLOBAL — not which type happens to be largest.
+      */}
+      <ChartCard
         title="Stock value by main type"
+        description="How the money on the shelf is split."
+        kind="share"
         testId="inventory-chart"
         rows={byType.map((t) => ({ label: t.label, valuePaise: t.valuePaise }))}
       />

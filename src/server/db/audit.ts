@@ -23,14 +23,26 @@ export function diff<T extends Record<string, unknown>>(
   ignore: readonly string[] = ['updatedAt', 'createdAt', 'passwordHash'],
 ): Record<string, { from: unknown; to: unknown }> {
   const changes: Record<string, { from: unknown; to: unknown }> = {}
-  for (const [key, next] of Object.entries(after)) {
+  for (const [key, value] of Object.entries(after)) {
     if (ignore.includes(key)) continue
-    const prev = before ? before[key] : undefined
+
+    /*
+     * Absent and empty are the same thing here.
+     *
+     * A create passes the whole record, so a customer with no email arrives
+     * as `email: null` against a `before` of undefined. Comparing those raw
+     * made them differ, and the audit log filled with "email: null -> null" -
+     * noise that pushed the one field that did change off the screen. Both
+     * normalise to null before the comparison and after it.
+     */
+    const prev = (before ? before[key] : undefined) ?? null
+    const next = value ?? null
+
     const same =
       prev === next ||
       (prev instanceof Date && next instanceof Date && prev.getTime() === next.getTime()) ||
       JSON.stringify(prev) === JSON.stringify(next)
-    if (!same) changes[key] = { from: prev ?? null, to: next ?? null }
+    if (!same) changes[key] = { from: prev, to: next }
   }
   return changes
 }

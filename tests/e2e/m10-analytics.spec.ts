@@ -233,3 +233,51 @@ test.describe('permissions', () => {
     await expect(page.getByText('Estimated profit')).toHaveCount(0)
   })
 })
+
+/**
+ * The charts render, and are the right shape for their data.
+ *
+ * Everything used to be one component: a list of spans with a percentage
+ * width. Fine for a ranking, wrong for a trend — sales by day was ninety
+ * stacked rows, in which no trend, spike or weekly rhythm is visible.
+ */
+test.describe('charts', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('a time series draws as a trend, not as a list of rows', async ({ page }) => {
+    await gotoAnalytics(page, 'sales')
+    const chart = page.getByTestId('sales-chart')
+    await expect(chart).toBeVisible()
+    // Recharts renders SVG; the old version rendered <span> widths.
+    await expect(chart.locator('svg').first()).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  })
+
+  test('a composition draws as a share of the whole', async ({ page }) => {
+    for (const [area, testId] of [
+      ['payments', 'payment-chart'],
+      ['inventory', 'inventory-chart'],
+    ] as const) {
+      await gotoAnalytics(page, area)
+      const chart = page.getByTestId(testId)
+      await expect(chart).toBeVisible()
+      // A donut has arcs; a bar list has none.
+      const drawn = await chart.locator('svg path').count()
+      expect(drawn, `${area} should draw a share chart`).toBeGreaterThan(0)
+    }
+  })
+
+  test('charts still draw in dark mode', async ({ page }) => {
+    /*
+     * The colours come from the same CSS variables as everything else
+     * (theme.spec.ts proves those invert), so what is worth checking here is
+     * that the chart survives the switch at all — a chart that renders once
+     * and blanks on a re-theme is the failure that would actually ship.
+     */
+    await gotoAnalytics(page, 'sales')
+    await page.evaluate(() => document.documentElement.classList.add('dark'))
+    await expect(page.getByTestId('sales-chart').locator('svg').first()).toBeVisible()
+  })
+})
