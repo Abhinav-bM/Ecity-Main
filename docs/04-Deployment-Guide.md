@@ -139,33 +139,57 @@ cat ~/.ssh/id_ed25519.pub     # this prints the PUBLIC key - copy it
 
 The `.pub` file is the **public** key and is safe to paste anywhere. The file without `.pub` is your **private** key — it never leaves your Mac and is never shared, committed or emailed.
 
-### 3.2 Create the server
+### 3.2 Create the server — AWS Lightsail, step by step
 
-In your provider's console, create a project called `ecity` and add a server. The labels differ slightly between providers; the choices are the same:
+Lightsail is deliberately not the EC2 console: one page, a flat price, and no
+VPC to configure. From `lightsail.aws.amazon.com`:
 
-| Setting | Choose |
-|---|---|
-| Location | **Mumbai** or **Bangalore** — whichever your provider offers |
-| Image | **Ubuntu 24.04 LTS** |
-| Type | Shared/Regular vCPU, **1 GB for staging** or **2 GB for production** (§1.2) |
-| Networking | IPv4 + IPv6 (both on) |
-| SSH keys | **Add the public key you just copied** |
-| Volumes / Placement | skip |
-| Backups | **Enable** (+20% — do not skip this) |
-| Firewall | create one, see below |
-| Name | `ecity-prod` |
+**1. Create instance**
 
-**Firewall rules** (inbound; everything else denied):
+| Setting | Choose | Why |
+|---|---|---|
+| Region | **Mumbai (ap-south-1)** | 20–30 ms from Kerala, and the records stay in India |
+| Platform | **Linux/Unix** | |
+| Blueprint | **OS Only → Ubuntu 24.04 LTS** | Not an app blueprint — everything runs in Docker |
+| Plan | **$5 (1 GB)** for staging, **$12 (2 GB)** for production | §1.2. Lightsail cannot shrink later, so size production properly now |
+| SSH key | **Upload the public key from §3.1** | Lightsail offers to generate one; use your own, so the private key never touches AWS |
+| Name | `ecity-staging` or `ecity-prod` | |
 
-| Port | Protocol | Source | Why |
+Choose the region **before** anything else — it cannot be changed afterwards,
+and a static IP only attaches to an instance in the same region.
+
+**2. Attach a static IP — do this immediately**
+
+Networking → **Create static IP** → attach it to the instance.
+
+It is free while attached, and it is what makes §8b's upgrade possible: when
+you outgrow the plan you rebuild a larger instance and move this IP across,
+and DNS never notices. Skip it and the address changes on every rebuild.
+(Detached static IPs are billed, so release one you stop using.)
+
+**3. Firewall** — Networking → IPv4 Firewall. Delete anything not listed:
+
+| Application | Port | Source | Why |
 |---|---|---|---|
-| 22 | TCP | your IP, or Any | SSH login |
-| 80 | TCP | Any | HTTP (redirects to HTTPS) |
-| 443 | TCP | Any | HTTPS |
+| SSH | 22 | **your IP** if it is static, else Any | Your login |
+| HTTP | 80 | Any | Redirect to HTTPS, and Let's Encrypt renewals |
+| HTTPS | 443 | Any | Everything real |
 
-Postgres port 5432 is **never** opened to the internet. The app reaches the database over Docker's internal network.
+Lightsail opens **3306 and 5432** on some blueprints. Delete them if present.
+Postgres is never exposed: the app reaches it over Docker's internal network,
+and an open Postgres is found by scanners within hours.
 
-Click Create. After about 30 seconds you get an IP address like `5.223.x.x`. Write it down.
+**4. Snapshots** — Snapshots tab → **Enable automatic snapshots**, and pick an
+hour the shop is closed. This is backup layer 1 (§7); roughly 20% of the
+instance price, and not the layer to save money on.
+
+**5. Note the IP.** You now have a static IPv4 like `13.234.x.x`. It goes in
+the DNS record in §5.
+
+*On other providers* — Vultr, DigitalOcean, Linode — the same choices exist
+under slightly different labels: Mumbai or Bangalore, Ubuntu 24.04, 1 or 2 GB,
+your SSH key, a firewall allowing only 22/80/443, and automated backups on.
+Everything from §3.3 onwards is identical.
 
 ### 3.3 First login and hardening
 
@@ -206,6 +230,110 @@ usermod -aG docker ecity
 # log out and back in as ecity, then verify:
 docker run --rm hello-world
 ```
+
+---
+
+## 3b. Cloudflare R2 — buckets and keys
+
+Two buckets, one credential pair. Do this before the first deploy: the app
+reads these at startup, and the backup script refuses to run without them.
+
+**1. Turn R2 on.** Cloudflare dashboard → **R2** → *Enable*. It asks for a
+card even on the free tier; 10 GB of storage and zero egress costs nothing,
+and this shop will not approach that for years.
+
+**2. Create two buckets**, both in an automatic or Asia-Pacific location:
+
+| Bucket | Holds | Who writes it |
+|---|---|---|
+| `ecity-uploads` | Bill photos and attachments people add in the app | The application |
+| `ecity-backups` | Nightly database dumps, via restic | `scripts/backup.sh` on the server |
+
+Separate on purpose. The uploads bucket is written by the app on every
+attachment; the backup bucket is the thing you need on the worst day, and it
+should not share a lifecycle, a retention rule or an accident with anything
+else.
+
+**3. Create an API token.** R2 → **Manage R2 API Tokens** → *Create token*:
+
+- Permission: **Object Read & Write**
+- Scope: **the two buckets above**, not "all buckets"
+- TTL: no expiry (or diarise the renewal — an expired token means backups stop
+  silently, which is the failure this whole section exists to avoid)
+
+It shows you three values **once**:
+
+```
+R2_ACCOUNT_ID=<the long hex id, also in the R2 endpoint URL>
+R2_ACCESS_KEY_ID=<access key>
+R2_SECRET_ACCESS_KEY=<secret — shown only now>
+```
+
+Put them straight into `.env` on the server (§4.3). If you lose the secret you
+cannot recover it; you roll the token and update `.env`.
+
+**4. Add a restic password.** The backup repository is encrypted, and this is
+the key:
+
+```bash
+openssl rand -base64 32     # RESTIC_PASSWORD
+```
+
+**Store it somewhere that is not the server.** A password manager, or written
+down at home. If the server dies and this is only on the server, the off-site
+backups are unreadable — encrypted rubbish. That is the single most common way
+a backup strategy turns out to be theatre.
+
+**5. Initialise the repository, once:**
+
+```bash
+export RESTIC_REPOSITORY="s3:https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com/ecity-backups"
+export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+export RESTIC_PASSWORD="<the one you just generated>"
+restic init
+```
+
+Then run `./scripts/backup.sh` by hand once and confirm `restic snapshots`
+lists it, before trusting the cron entry.
+
+### 3b.1 Uploads are not ready for production yet
+
+**Read this before go-live.** The app has an attachment feature — bill photos,
+supplier invoices, product images — and it works. What is not finished is
+where those files go on a server.
+
+`src/server/storage/index.ts` has two drivers:
+
+- **`local`** writes under `.storage/`, and is what development uses.
+- **`s3`** is a stub. Every method throws
+  `S3 storage driver not implemented yet`.
+
+That leaves two ways to be wrong in production, and both are worth naming:
+
+| `STORAGE_DRIVER` | What happens |
+|---|---|
+| `s3` | The first person to attach a photo gets an error. Loud, immediate, obvious |
+| `local` | It appears to work — and every file is written **inside the container**, so the next deploy replaces the container and destroys them. Silent |
+
+The second is the dangerous one, and it is the default. The compose file in
+§4.1 gives the `app` service no volume, so uploads live only as long as the
+container does. They are also outside the database dump, so `backup.sh` would
+not have them either.
+
+**Before go-live, one of these has to happen:**
+
+1. **Implement the S3 driver against R2** (recommended). The bucket, the
+   credentials and the env vars all already exist — this is the remaining
+   piece, and it puts uploads off-box where the backups already are.
+2. **Or**, as a stopgap: mount a named volume at `.storage/` in the `app`
+   service so files survive a deploy, and add that path to the backup script.
+   Files then live only on the instance, so they are protected by the
+   Lightsail snapshot (layer 1) but not by the off-site copy.
+
+Until one is done, treat attachments as a development feature. The failure
+mode of doing nothing is a shop that photographs supplier bills for three
+months and finds them gone after a Tuesday deploy.
 
 ---
 

@@ -1777,6 +1777,10 @@ go-live):
 
 ## 7. Go-live
 
+- [ ] **Uploads are sorted** — either the S3 driver is implemented, or
+      `.storage/` is a named volume *and* is in the backup. See docs/04 §3b.1.
+      *On the default settings, attachments are destroyed by the next deploy*
+- [ ] Attach a photo, deploy, and check it is **still there**
 - [ ] Everything in the Go-Live Checklist (docs/04 §11)
 - [ ] Existing data loaded in the order in docs/04 §10, each step checked
 - [ ] Staff trained: billing, returns, dues, the daily closing
