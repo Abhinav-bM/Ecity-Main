@@ -372,13 +372,34 @@ test.describe('permissions', () => {
     await expect(page).toHaveURL(/\/adjustments$/)
   })
 
-  test('transfers and adjustments appear in the navigation', async ({ page }, testInfo) => {
+  test('adjustments appear in the navigation', async ({ page }, testInfo) => {
     await signIn(page, USERS.admin)
     if (isMobileProject(testInfo.project.name)) {
       await page.getByRole('button', { name: 'Open navigation menu' }).click()
     }
     const nav = page.getByRole('navigation', { name: 'Main' })
-    await expect(nav.getByRole('link', { name: 'Transfers' })).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Adjustments' })).toBeVisible()
+  })
+
+  /*
+   * Transfers is built and works; its link is commented out of the sidebar
+   * until the shop runs more than one branch, since a menu item that leads
+   * nowhere useful is clutter at the counter.
+   *
+   * Asserted rather than deleted, so that hiding it stays a *decision*: if
+   * someone puts the link back, this fails and they will find the comment
+   * explaining why it went. And the second half proves what hiding a link
+   * must never mean — that the feature itself is gone.
+   */
+  test('transfers is hidden from the sidebar, but still reachable', async ({ page }, testInfo) => {
+    await signIn(page, USERS.admin)
+    if (isMobileProject(testInfo.project.name)) {
+      await page.getByRole('button', { name: 'Open navigation menu' }).click()
+    }
+    const nav = page.getByRole('navigation', { name: 'Main' })
+    await expect(nav.getByRole('link', { name: 'Transfers' })).toHaveCount(0)
+
+    await page.goto('/transfers')
+    await expect(page.getByRole('heading', { name: 'Transfers', level: 1 })).toBeVisible()
   })
 })

@@ -284,18 +284,23 @@ down at home. If the server dies and this is only on the server, the off-site
 backups are unreadable — encrypted rubbish. That is the single most common way
 a backup strategy turns out to be theatre.
 
-**5. Initialise the repository, once:**
+**5. Turn backups on — one command:**
 
 ```bash
-export RESTIC_REPOSITORY="s3:https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com/ecity-backups"
-export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-export RESTIC_PASSWORD="<the one you just generated>"
-restic init
+cd ~/app && ./scripts/setup-backups.sh
 ```
 
-Then run `./scripts/backup.sh` by hand once and confirm `restic snapshots`
-lists it, before trusting the cron entry.
+It installs restic, initialises the encrypted repository, schedules the job
+every four hours, and then **takes a real backup and shows you the snapshot**.
+That last step is the point: the four steps used to be manual, and the one
+people skip is the proof — leaving a cron entry that has never succeeded,
+which looks exactly like one that has.
+
+Safe to run again; every step checks before it acts, so a second run repairs
+whatever is missing rather than duplicating it.
+
+`RESTIC_REPOSITORY` does **not** belong in `.env` — the scripts build it from
+`R2_ACCOUNT_ID` and `R2_BACKUP_BUCKET`.
 
 ### 3b.1 Wiring uploads to R2
 
