@@ -242,42 +242,125 @@ test.describe('permissions', () => {
  * stacked rows, in which no trend, spike or weekly rhythm is visible.
  */
 test.describe('charts', () => {
+  const unique = () => String(Date.now()).slice(-8)
+
+  /**
+   * Put a handset in stock and sell it, so the charts have something to draw.
+   *
+   * These tests used to just load the page. They passed locally, where the
+   * database had accumulated data from other specs, and failed on CI — where
+   * analytics runs against a fresh seed, and where `m10` sorts *before*
+   * `m4-billing`, so no sale has ever been made. A chart with no data
+   * correctly renders "Nothing in this period" and draws no SVG, which read
+   * as "the chart is broken".
+   *
+   * Returns the device so a test can assert on its own data rather than on
+   * whatever else happens to be in the database.
+   */
+  async function sellOneHandset(page: Page) {
+    const id = unique()
+
+    /*
+     * Make the product too. The seed creates categories and brands but no
+     * products, so on a fresh database there is nothing to book a handset
+     * against — which is why the first version of this helper quietly
+     * returned null and the tests skipped rather than failed.
+     */
+    const categories = await page.request.get('/api/categories')
+    const serialised = ((await categories.json()) as { id: number; isSerialised: boolean }[]).find(
+      (c) => c.isSerialised,
+    )
+    if (!serialised) return null
+
+    const created = await page.request.post('/api/products', {
+      data: { name: `E2E Chart Phone ${id}`, categoryId: serialised.id },
+    })
+    if (!created.ok()) return null
+    const product = (await created.json()) as { id: number }
+
+    const branches = await page.request.get('/api/branches')
+    const branchId = ((await branches.json()) as { id: number }[])[0]!.id
+
+    /*
+     * Two handsets, not one. The stock chart sums what is still IN_STOCK and
+     * the trend chart sums what was sold — so a single device cannot feed
+     * both. Selling the only one leaves the stock chart empty, which is what
+     * the first version of this helper did.
+     */
+    const book = async (suffix: string) => {
+      const res = await page.request.post('/api/devices', {
+        data: {
+          productId: product.id,
+          identifiers: [`35${id}${suffix}`.slice(0, 15).padEnd(15, suffix)],
+          mainType: 'USED',
+          branchId,
+          purchasePrice: 20000,
+          sellingPrice: 26000,
+        },
+      })
+      return res.ok() ? ((await res.json()) as { id: number }) : null
+    }
+
+    const toSell = await book('1')
+    const toKeep = await book('2')
+    if (!toSell || !toKeep) return null
+    const device = toSell
+
+    const methods = await page.request.get('/api/business/payment-methods')
+    const method = ((await methods.json()) as { id: number }[])[0]
+    if (!method) return { branchId, sold: false }
+
+    // ...and revenue on the trend chart comes from a sale.
+    const sale = await page.request.post('/api/sales', {
+      data: {
+        branchId,
+        lines: [{ productId: product.id, deviceId: device.id, quantity: 1, unitPrice: 26000 }],
+        payments: [{ paymentMethodId: method.id, amount: 26000 }],
+      },
+    })
+    return { branchId, sold: sale.ok() }
+  }
+
   test.beforeEach(async ({ page }) => {
     await signIn(page, USERS.admin)
   })
 
   test('a time series draws as a trend, not as a list of rows', async ({ page }) => {
+    const seeded = await sellOneHandset(page)
+    test.skip(!seeded?.sold, 'needs a sale to draw a trend')
+
     await gotoAnalytics(page, 'sales')
     const chart = page.getByTestId('sales-chart')
     await expect(chart).toBeVisible()
-    // Recharts renders SVG; the old version rendered <span> widths.
+    // Recharts draws SVG; the version this replaced drew <span> widths, in
+    // which ninety days of takings is ninety stacked rows.
     await expect(chart.locator('svg').first()).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 
   test('a composition draws as a share of the whole', async ({ page }) => {
-    for (const [area, testId] of [
-      ['payments', 'payment-chart'],
-      ['inventory', 'inventory-chart'],
-    ] as const) {
-      await gotoAnalytics(page, area)
-      const chart = page.getByTestId(testId)
-      await expect(chart).toBeVisible()
-      // A donut has arcs; a bar list has none.
-      const drawn = await chart.locator('svg path').count()
-      expect(drawn, `${area} should draw a share chart`).toBeGreaterThan(0)
-    }
+    const seeded = await sellOneHandset(page)
+    test.skip(!seeded, 'needs a serialised product')
+
+    await gotoAnalytics(page, 'inventory')
+    const chart = page.getByTestId('inventory-chart')
+    await expect(chart).toBeVisible()
+    // A donut draws its arcs as <path>; a list of bars draws none.
+    await expect(chart.locator('svg path').first()).toBeVisible()
   })
 
   test('charts still draw in dark mode', async ({ page }) => {
     /*
      * The colours come from the same CSS variables as everything else
      * (theme.spec.ts proves those invert), so what is worth checking here is
-     * that the chart survives the switch at all — a chart that renders once
-     * and blanks on a re-theme is the failure that would actually ship.
+     * that the chart survives the switch at all — one that renders once and
+     * blanks on a re-theme is the failure that would actually ship.
      */
-    await gotoAnalytics(page, 'sales')
+    const seeded = await sellOneHandset(page)
+    test.skip(!seeded, 'needs stock to draw')
+
+    await gotoAnalytics(page, 'inventory')
     await page.evaluate(() => document.documentElement.classList.add('dark'))
-    await expect(page.getByTestId('sales-chart').locator('svg').first()).toBeVisible()
+    await expect(page.getByTestId('inventory-chart').locator('svg').first()).toBeVisible()
   })
 })

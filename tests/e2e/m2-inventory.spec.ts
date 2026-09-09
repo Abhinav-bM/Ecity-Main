@@ -346,8 +346,21 @@ test.describe('imei_slots — a setting, not a release', () => {
   async function setSlots(page: Page, value: string) {
     await page.goto('/settings/business')
     await page.getByRole('textbox', { name: 'IMEI fields per device' }).fill(value)
+
+    /*
+     * Wait for the save itself, not for the toast that announces it.
+     *
+     * Sonner dismisses after about four seconds, so on a loaded CI runner the
+     * notification can appear and disappear between two of Playwright's
+     * polls — which reports "element(s) not found" and looks like the save
+     * failed when it succeeded. This is also a better failure: if the request
+     * really is rejected, the status says so instead of a missing toast.
+     */
+    const saved = page.waitForResponse(
+      (r) => r.url().includes('/api/business') && r.request().method() === 'PATCH',
+    )
     await page.getByRole('button', { name: 'Save profile' }).click()
-    await expect(page.getByText('Business profile saved.')).toBeVisible()
+    expect((await saved).ok(), 'saving the business profile').toBe(true)
   }
 
   test('raising it adds IMEI fields with no deployment', async ({ page }) => {
