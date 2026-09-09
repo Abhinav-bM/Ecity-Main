@@ -65,9 +65,8 @@ export default async function DataPage() {
           </p>
           <ExportButton />
           <p className="text-xs text-muted-foreground">
-            This is <strong>your data</strong>, not a system backup. Restoring the software after a
-            server failure needs a database backup, which runs on a schedule on the server — see
-            the Deployment Guide §7.
+            This is <strong>your data</strong>, not a system backup. Restoring the software after
+            a server failure needs a database backup, which runs automatically on the server.
           </p>
         </CardContent>
       </Card>

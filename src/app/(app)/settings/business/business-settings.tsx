@@ -640,7 +640,7 @@ function ExpenseCategories({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm">Expense categories</CardTitle>
-        <CardDescription>Used when recording expenses in M7.</CardDescription>
+        <CardDescription>The headings expenses are filed under.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-1.5">

@@ -104,8 +104,8 @@ export function CustomerHistory({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Payments against dues are on the Statement and Receipts tabs. Returns and
-        exchanges arrive with M6.
+        Payments against dues are on the Statement and Receipts tabs; returns and
+        exchanges show against the bill they came from.
       </p>
     </div>
   )

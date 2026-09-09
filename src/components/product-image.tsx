@@ -60,7 +60,7 @@ export function ProductImage({
       <CardHeader className="pb-3">
         <CardTitle className="text-sm">Image</CardTitle>
         <CardDescription>
-          Shown on the product list and, from M4, on the billing screen. JPEG, PNG, WebP or HEIC,
+          Shown on the product list and at the counter. JPEG, PNG, WebP or HEIC,
           up to 8 MB.
         </CardDescription>
       </CardHeader>

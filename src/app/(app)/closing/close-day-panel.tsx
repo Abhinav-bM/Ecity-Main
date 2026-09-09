@@ -161,7 +161,7 @@ function CloseForm({
         {methods.length > 0 ? (
           <div className="space-y-2 border-t pt-3">
             <p className="text-xs text-muted-foreground">
-              FR-13.2. What each non-cash method should have taken. Enter the settlement figure if
+              What each non-cash method should have taken. Enter the settlement figure if
               you have it.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">

@@ -129,7 +129,8 @@ export function NewUserForm({
               <Label>Branches</Label>
               {branches.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No branches exist yet. Branch management arrives in M1.
+                  No branches yet. Add one in Settings → Branches, then come back
+                  and assign this person to it.
                 </p>
               ) : (
                 <div className="space-y-2 rounded-md border p-3">

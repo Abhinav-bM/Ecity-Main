@@ -281,9 +281,9 @@ export function AppShell({
 
   const footnote = (
     <p className="text-[11px] leading-relaxed text-muted-foreground">
-      Modules M0–M9 complete.
+      ECITY
       <br />
-      Dashboards and reports arrive in M10 onward.
+      Mobile shop management
     </p>
   )
 
