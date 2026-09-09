@@ -14,6 +14,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 import { MAIN_TYPE_LABEL } from "@/components/main-type-badge";
 import type { MainType } from "@/server/db/schema";
 
@@ -160,7 +161,7 @@ export function GlobalSearch() {
           a phone number, an email, the second IMEI of a dual-SIM handset.
         */}
         <Command shouldFilter={false}>
-          <div className="border-b p-2">
+          <div className="flex items-center gap-1 border-b p-2">
             <Input
               ref={inputRef}
               autoFocus
@@ -169,6 +170,22 @@ export function GlobalSearch() {
               placeholder="IMEI, phone number, customer, product, invoice…"
               aria-label="Find anything"
               className="border-0 shadow-none focus-visible:ring-0"
+            />
+            {/*
+              An IMEI is fifteen digits, and the commonest reason to open this
+              is a handset in your hand. Typing it is the slowest possible way
+              to ask "what is this phone?".
+
+              The read goes into the box rather than jumping straight to the
+              device: search already opens an exact IMEI match on its own, and
+              routing around that would mean two behaviours to keep in step.
+            */}
+            <BarcodeScanner
+              label="Scan an IMEI to search"
+              onScan={(value) => {
+                setQuery(value)
+                inputRef.current?.focus()
+              }}
             />
           </div>
           <CommandList data-testid="search-results">

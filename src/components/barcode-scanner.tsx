@@ -83,19 +83,45 @@ export function BarcodeScanner({
   onScan,
   label = 'Scan with the camera',
   disabled,
+  continuous = false,
+  alreadyHave,
+  remaining,
 }: {
   /** Called with what was read. `confident` is false for a doubtful scan. */
   onScan: (value: string, confident: boolean) => void
   label?: string
   disabled?: boolean
+  /**
+   * Stay open and keep reading. For booking in a delivery: twenty handsets
+   * should be one camera session, not twenty open-scan-close cycles.
+   */
+  continuous?: boolean
+  /** Codes already captured, so a second look at the same box is ignored. */
+  alreadyHave?: string[]
+  /** How many are still wanted, shown as a running count. */
+  remaining?: number
 }) {
   const [supported, setSupported] = useState(false)
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reading, setReading] = useState<string | null>(null)
+  const [captured, setCaptured] = useState<string[]>([])
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const frameRef = useRef<number>(0)
+
+  /*
+   * The callback lives in a ref, not in the effect's dependencies.
+   *
+   * Every caller passes an inline arrow, so `onScan` is a new function on
+   * each parent render. As a dependency that tears the camera down and opens
+   * it again mid-scan — a flicker at best, a missed read at worst.
+   */
+  const onScanRef = useRef(onScan)
+  onScanRef.current = onScan
+
+  const seenRef = useRef<Set<string>>(new Set())
+  seenRef.current = new Set([...(alreadyHave ?? []), ...captured])
 
   useEffect(() => {
     // Rendered only where there is a camera to open, so a desktop till with a
@@ -122,6 +148,7 @@ export function BarcodeScanner({
     let cancelled = false
     setError(null)
     setReading(null)
+    setCaptured([])
 
     void (async () => {
       try {
@@ -147,21 +174,37 @@ export function BarcodeScanner({
           if (cancelled || !videoRef.current) return
           try {
             const found = await detector.detect(videoRef.current)
-            const hit = found.find((b) => b.rawValue.trim())
+            // Skip anything already captured: a barcode stays in frame for
+            // several frames, and the same box read twice is not two handsets.
+            const hit = found.find(
+              (b) => b.rawValue.trim() && !seenRef.current.has(b.rawValue.trim()),
+            )
             if (hit) {
               const value = hit.rawValue.trim()
               const confident = looksLikeImei(value)
-              setReading(value)
-              /*
-               * A good read closes the camera straight away — the next thing
-               * the person wants is the item on the bill, not to dismiss a
-               * dialog. A doubtful one stays open and shows what it saw, so
-               * they can move the box and try again.
-               */
+
               if (confident) {
-                onScan(value, true)
-                setOpen(false)
-                return
+                onScanRef.current(value, true)
+                if (continuous) {
+                  /*
+                   * Stay open and keep going. Booking in a delivery is the
+                   * case this exists for: closing after each handset would
+                   * mean twenty open-scan-close cycles for one box of stock.
+                   */
+                  setCaptured((prev) => [...prev, value])
+                  setReading(null)
+                } else {
+                  /*
+                   * A good read closes straight away — the next thing wanted
+                   * is the item on the bill, not to dismiss a dialog.
+                   */
+                  setOpen(false)
+                  return
+                }
+              } else {
+                // Doubtful: stop and show what was read rather than acting on
+                // it. The serial barcode beside the IMEI is why.
+                setReading(value)
               }
             }
           } catch {
@@ -186,7 +229,7 @@ export function BarcodeScanner({
       cancelled = true
       stop()
     }
-  }, [open, onScan, stop])
+  }, [open, continuous, stop])
 
   if (!supported) return null
 
@@ -237,8 +280,13 @@ export function BarcodeScanner({
                     type="button"
                     size="sm"
                     onClick={() => {
-                      onScan(reading, false)
-                      setOpen(false)
+                      onScanRef.current(reading, false)
+                      if (continuous) {
+                        setCaptured((prev) => [...prev, reading])
+                        setReading(null)
+                      } else {
+                        setOpen(false)
+                      }
                     }}
                   >
                     Use {reading}
@@ -249,11 +297,40 @@ export function BarcodeScanner({
                   Hold the barcode inside the frame. Good light helps more than getting close.
                 </p>
               )}
+
+              {/*
+                A running count, so the person knows where they are without
+                putting the phone down to look at the form behind the camera.
+              */}
+              {continuous ? (
+                <div className="space-y-1" data-testid="scan-progress">
+                  <p className="text-sm font-medium">
+                    {captured.length} scanned
+                    {remaining !== undefined ? ` of ${remaining + captured.length}` : ''}
+                  </p>
+                  {captured.length > 0 ? (
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {captured.slice(-3).join(' · ')}
+                    </p>
+                  ) : null}
+                  {remaining !== undefined && remaining <= 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      That is all of them. Close when you are ready.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )}
 
-          <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-            <X className="size-4" /> Close
+          <Button
+            type="button"
+            variant={continuous && captured.length > 0 ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setOpen(false)}
+          >
+            <X className="size-4" />
+            {continuous && captured.length > 0 ? `Done — ${captured.length} scanned` : 'Close'}
           </Button>
         </DialogContent>
       </Dialog>

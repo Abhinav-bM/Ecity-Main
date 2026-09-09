@@ -4,7 +4,17 @@ import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } fr
 /** M2 — inventory core. Runs at every viewport. Requires a seeded database. */
 
 /** 14–17 digits, unique per run. */
-const imei = (suffix: number) => String(35_000_000_000_000 + (Date.now() % 1_000_000) * 10 + suffix)
+/*
+ * A per-run unique IMEI.
+ *
+ * `n` is spaced by 100, not by 10: the previous version reserved a single
+ * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
+ * eight milliseconds earlier — which showed up as an unrelated test failing
+ * with "already belongs to another device". Two digits is more numbers than
+ * any one spec uses.
+ */
+const imei = (suffix: number) =>
+  String(35_000_000_000_000 + (Date.now() % 1_000_000) * 100 + suffix)
 
 async function createProductIn(page: Page, name: string, categoryLabel: string) {
   await page.goto('/products/new')

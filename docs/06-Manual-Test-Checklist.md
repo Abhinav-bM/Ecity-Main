@@ -2,7 +2,7 @@
 
 ## How to Use This
 
-Automated tests cover the mechanics — 481 unit and integration tests, 912
+Automated tests cover the mechanics — 481 unit and integration tests, 920
 browser tests across four screen sizes. This checklist covers what a person
 still has to judge: does it *feel* right, does the wording make sense, does
 the shop's actual workflow survive contact with the screen.
@@ -698,6 +698,13 @@ counter has a laser scanner but a salesperson on the floor has only a phone.*
 - [ ] Deny camera permission — it says so plainly instead of hanging
 - [ ] Over plain **http** it explains that the camera needs a secure address
 - [ ] The purchase form's IMEI boxes each have the same camera button
+- [ ] The purchase line also has **one button for the whole line** — it stays
+      open, fills each box in turn, and shows a running count
+- [ ] Scanning the same box twice does **not** fill two slots
+- [ ] It says "3 of 10" as you go, so you need not look at the form behind it
+- [ ] **Done — N scanned** closes it
+- [ ] The **global search** (the magnifier in the header) has a camera button;
+      the read lands in the search box and an exact IMEI opens its device
 - [ ] The **laser scanner still works** on the desktop till, unchanged
 
 # M5 — Payments, Credit Sales & Customer Dues

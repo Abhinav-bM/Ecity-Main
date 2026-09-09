@@ -512,7 +512,7 @@ export function PurchaseForm({
                     stays a plain grid of boxes to scan into.
                   */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-medium">
                         {label}s
                         <Badge variant="muted" className="ml-2">
@@ -520,6 +520,33 @@ export function PurchaseForm({
                           {line.units.length}
                         </Badge>
                       </span>
+                      {/*
+                        Scan the whole box in one sitting. Each read drops into
+                        the next empty slot, so a delivery of twenty handsets
+                        is one camera session rather than twenty — which is
+                        the difference between using this and not bothering.
+                      */}
+                      <BarcodeScanner
+                        continuous
+                        label={`Scan every ${label} for line ${index + 1}`}
+                        alreadyHave={line.units.map((u) => u.identifier).filter(Boolean)}
+                        remaining={line.units.filter((u) => !u.identifier.trim()).length}
+                        onScan={(value) => {
+                          setLines((rows) =>
+                            rows.map((l) => {
+                              if (l.key !== line.key) return l
+                              // Already on this line? A second look at the
+                              // same box is not a second handset.
+                              if (l.units.some((u) => u.identifier.trim() === value)) return l
+                              const next = [...l.units]
+                              const slot = next.findIndex((u) => !u.identifier.trim())
+                              if (slot === -1) return l
+                              next[slot] = { ...next[slot]!, identifier: value }
+                              return { ...l, units: next }
+                            }),
+                          )
+                        }}
+                      />
                     </div>
                     <div
                       className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"

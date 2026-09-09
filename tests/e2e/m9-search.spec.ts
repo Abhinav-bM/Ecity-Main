@@ -9,7 +9,17 @@ import { choose, expectNoHorizontalOverflow, signIn, USERS } from './helpers'
 
 const PASSWORD = process.env.SEED_PASSWORD ?? 'ChangeMe!2026'
 const unique = () => String(Date.now()).slice(-8)
-const imei = (n: number) => String(37_400_000_000_000 + (Date.now() % 1_000_000) * 10 + n)
+/*
+ * A per-run unique IMEI.
+ *
+ * `n` is spaced by 100, not by 10: the previous version reserved a single
+ * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
+ * eight milliseconds earlier — which showed up as an unrelated test failing
+ * with "already belongs to another device". Two digits is more numbers than
+ * any one spec uses.
+ */
+const imei = (n: number) =>
+  String(37_400_000_000_000 + (Date.now() % 1_000_000) * 100 + n)
 
 /** Register a handset, optionally dual-SIM, and return its device URL. */
 async function registerDevice(
@@ -330,5 +340,33 @@ test.describe('search respects branch permissions', () => {
   test('an unauthenticated search is refused', async ({ request }) => {
     const res = await request.get('/api/search?q=anything')
     expect(res.status()).toBe(401)
+  })
+})
+
+/**
+ * M14 follow-on: scanning into the global search.
+ *
+ * An IMEI is fifteen digits and the commonest reason to open this box is a
+ * handset in somebody's hand. The decode itself is covered by the unit tests;
+ * what matters here is that the button exists where there is a camera, and
+ * nowhere there is not.
+ */
+test.describe('scanning into the search', () => {
+  test('offers the camera inside the search palette', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    await page.goto('/dashboard')
+
+    await page.getByRole('button', { name: 'Find anything' }).click()
+    await expect(page.getByRole('textbox', { name: 'Find anything' })).toBeVisible()
+
+    const hasCamera = await page.evaluate(
+      () => typeof navigator.mediaDevices?.getUserMedia === 'function',
+    )
+    const scan = page.getByRole('button', { name: 'Scan an IMEI to search' })
+    if (hasCamera) {
+      await expect(scan).toBeVisible()
+    } else {
+      await expect(scan).toHaveCount(0)
+    }
   })
 })

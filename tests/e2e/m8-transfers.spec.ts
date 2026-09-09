@@ -10,7 +10,17 @@ import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } fr
  */
 
 const unique = () => String(Date.now()).slice(-8)
-const imei = (n: number) => String(36_800_000_000_000 + (Date.now() % 1_000_000) * 10 + n)
+/*
+ * A per-run unique IMEI.
+ *
+ * `n` is spaced by 100, not by 10: the previous version reserved a single
+ * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
+ * eight milliseconds earlier — which showed up as an unrelated test failing
+ * with "already belongs to another device". Two digits is more numbers than
+ * any one spec uses.
+ */
+const imei = (n: number) =>
+  String(36_800_000_000_000 + (Date.now() % 1_000_000) * 100 + n)
 
 /** A handset in stock at the active branch, ready to send. */
 async function stockAPhone(page: Page, name: string, one: string) {

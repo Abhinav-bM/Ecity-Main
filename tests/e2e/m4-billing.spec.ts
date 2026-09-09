@@ -4,7 +4,17 @@ import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, tabTo, USE
 /** M4 — sales and billing. Requires a seeded, migrated database. */
 
 const unique = () => String(Date.now()).slice(-8)
-const imei = (n: number) => String(35_400_000_000_000 + (Date.now() % 1_000_000) * 10 + n)
+/*
+ * A per-run unique IMEI.
+ *
+ * `n` is spaced by 100, not by 10: the previous version reserved a single
+ * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
+ * eight milliseconds earlier — which showed up as an unrelated test failing
+ * with "already belongs to another device". Two digits is more numbers than
+ * any one spec uses.
+ */
+const imei = (n: number) =>
+  String(35_400_000_000_000 + (Date.now() % 1_000_000) * 100 + n)
 
 async function createProduct(page: Page, name: string, category: string, price: string) {
   await page.goto('/products/new')

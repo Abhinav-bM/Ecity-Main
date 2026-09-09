@@ -3,7 +3,17 @@ import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } fr
 
 /** M3 — purchases and supplier ledger. Requires a seeded database. */
 
-const imei = (n: number) => String(35_200_000_000_000 + (Date.now() % 1_000_000) * 10 + n)
+/*
+ * A per-run unique IMEI.
+ *
+ * `n` is spaced by 100, not by 10: the previous version reserved a single
+ * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
+ * eight milliseconds earlier — which showed up as an unrelated test failing
+ * with "already belongs to another device". Two digits is more numbers than
+ * any one spec uses.
+ */
+const imei = (n: number) =>
+  String(35_200_000_000_000 + (Date.now() % 1_000_000) * 100 + n)
 const unique = () => String(Date.now()).slice(-8)
 
 async function createSupplier(page: Page, name: string) {
@@ -192,6 +202,33 @@ test.describe('recording a purchase', () => {
     )
     // ...and never the identifiers, which belong to the handsets already typed.
     await expect(second.getByRole('textbox', { name: 'Line 2 IMEI 1' })).toHaveValue('')
+  })
+
+  /*
+   * A delivery of twenty handsets should be one camera session, not twenty
+   * open-scan-close cycles — which is the difference between staff using the
+   * scanner and going back to typing.
+   */
+  test('offers one camera session for the whole line, not one per box', async ({ page }) => {
+    const id = unique()
+    await createProduct(page, `E2E ScanAll ${id}`, 'Mobiles (IMEI)')
+
+    await page.goto('/purchases/new')
+    await pickProduct(page, `E2E ScanAll ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('3')
+
+    const hasCamera = await page.evaluate(
+      () => typeof navigator.mediaDevices?.getUserMedia === 'function',
+    )
+    const scanAll = page.getByRole('button', { name: /Scan every IMEI for line 1/ })
+    if (!hasCamera) {
+      await expect(scanAll).toHaveCount(0)
+      return
+    }
+
+    await expect(scanAll).toBeVisible()
+    // ...and each box still has its own, for the one that will not read.
+    await expect(page.getByRole('button', { name: /Scan IMEI 2 on line 1/ })).toBeVisible()
   })
 
   test('refuses a quantity that does not match the identifiers entered', async ({ page }) => {
