@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { DateRangeField } from '@/components/date-field'
+import { shopDateString } from '@/lib/date'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -73,19 +75,12 @@ export function DuesFilters({
       />
 
       {/* Bounds the collections column only; what is owed is owed today. */}
-      <Input
-        type="date"
-        className="w-auto"
-        aria-label="Collected from"
-        value={params.get('from') ?? ''}
-        onChange={(e) => apply({ from: e.target.value || null })}
-      />
-      <Input
-        type="date"
-        className="w-auto"
-        aria-label="Collected to"
-        value={params.get('to') ?? ''}
-        onChange={(e) => apply({ to: e.target.value || null })}
+      <DateRangeField
+        from={params.get('from') ?? ''}
+        to={params.get('to') ?? ''}
+        max={shopDateString()}
+        onApply={(r) => apply({ from: r.from || null, to: r.to || null })}
+        className="w-full"
       />
     </form>
   )

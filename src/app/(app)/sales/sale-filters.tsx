@@ -6,6 +6,8 @@ import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AppSelect } from '@/components/app-select'
+import { DateRangeField } from '@/components/date-field'
+import { shopDateString } from '@/lib/date'
 
 export function SaleFilters({
   search,
@@ -87,19 +89,12 @@ export function SaleFilters({
         options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
       />
 
-      <Input
-        type="date"
-        className="w-auto"
-        aria-label="From date"
-        value={from}
-        onChange={(e) => apply({ from: e.target.value })}
-      />
-      <Input
-        type="date"
-        className="w-auto"
-        aria-label="To date"
-        value={to}
-        onChange={(e) => apply({ to: e.target.value })}
+      <DateRangeField
+        from={from}
+        to={to}
+        max={shopDateString()}
+        onApply={(r) => apply({ from: r.from || null, to: r.to || null })}
+        className="w-full"
       />
     </form>
   )

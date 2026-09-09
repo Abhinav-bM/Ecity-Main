@@ -348,6 +348,23 @@ test.describe('the bill, after it is saved', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  test('a date range narrows the list, and a bad one does not take the page down', async ({
+    page,
+  }) => {
+    await page.goto('/sales')
+
+    // Today's takings, in one click rather than two dates typed by hand.
+    await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page).toHaveURL(/from=\d{4}-\d{2}-\d{2}&?/)
+    await expect(page.getByTestId('sale-filters')).toBeVisible()
+
+    // A browser that renders a date field as plain text hands back whatever
+    // was typed. That reached the driver as an Invalid Date and threw.
+    await page.goto('/sales?from=09/09/2026&to=not-a-day')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.getByTestId('sale-filters')).toBeVisible()
+  })
+
   test('creates a customer without leaving the bill (FR-6.6)', async ({ page }) => {
     const id = unique()
     const customerName = `E2E Counter Cust ${id}`

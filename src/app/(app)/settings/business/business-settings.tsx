@@ -33,6 +33,13 @@ import { FormSelect } from "@/components/app-select";
 
 type ProfileValues = z.infer<typeof businessProfileSchema>;
 
+/** The enum spells these EXTERNAL and ECITY; a shopkeeper does not. */
+const CHANNEL_LABEL: Record<string, string> = {
+  EXTERNAL: "the other system",
+  ECITY: "this till",
+  BOTH: "both systems",
+};
+
 export function BusinessSettings({
   business,
   taxRates,
@@ -157,7 +164,18 @@ function ProfileForm({
       setFormError(data.error ?? "Could not save.");
       return;
     }
-    toast.success("Business profile saved.");
+
+    /*
+     * Say what moved. Changing where NEW stock is billed also re-channels the
+     * handsets already on the shelf, and a silent success is exactly why this
+     * looked broken before — the shop flipped the switch and saw nothing.
+     */
+    const { restamped = 0 } = (await res.json()) as { restamped?: number };
+    toast.success(
+      restamped > 0
+        ? `Saved. ${restamped} NEW handset${restamped === 1 ? "" : "s"} in stock moved to ${CHANNEL_LABEL[values.newStockSalesChannel] ?? values.newStockSalesChannel}.`
+        : "Business profile saved.",
+    );
     router.refresh();
   }
 

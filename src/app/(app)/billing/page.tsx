@@ -67,6 +67,7 @@ export default async function BillingPage() {
       canCreateCustomer={hasPermission(session.user, 'customer.manage')}
       defaultCreditDays={business.defaultCreditDays}
       gstEnabled={business.gstEnabled}
+      pricesIncludeTax={business.pricesIncludeTax}
     />
   )
 }

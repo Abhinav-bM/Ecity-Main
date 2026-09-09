@@ -13,12 +13,22 @@ import {
 } from '@/components/ui/table'
 import { Pagination } from '@/components/pagination'
 import { formatMoney } from '@/lib/money'
+import { formatDateShort, formatTimeShort } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listExpenses } from '@/server/services/expense.service'
 import { VoidExpenseButton } from './void-expense'
 
 export const dynamic = 'force-dynamic'
+
+/*
+ * A business date is a plain calendar day with no time in it. Reading it at
+ * midday sidesteps the question of whose midnight it was, so the day printed
+ * is the day stored no matter where this renders.
+ */
+function expenseDay(businessDate: string): string {
+  return formatDateShort(`${businessDate}T12:00:00Z`)
+}
 
 const PAGE_SIZE = 25
 
@@ -88,7 +98,8 @@ export default async function ExpensesPage({
                         {e.categoryName}
                       </Link>
                       <p className="text-xs text-muted-foreground">
-                        {e.businessDate} · {e.branchName} · {e.methodName}
+                        {expenseDay(e.businessDate)} {formatTimeShort(e.createdAt)} ·{' '}
+                        {e.branchName} · {e.methodName}
                       </p>
                     </div>
                     <p className="tabular font-semibold">{formatMoney(e.amountPaise)}</p>
@@ -124,7 +135,12 @@ export default async function ExpensesPage({
               <TableBody>
                 {rows.map((e) => (
                   <TableRow key={e.id} data-testid="expense-row">
-                    <TableCell className="whitespace-nowrap">{e.businessDate}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {expenseDay(e.businessDate)}
+                      <span className="block text-xs text-muted-foreground">
+                        {formatTimeShort(e.createdAt)}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <Link
                         href={`/expenses/${e.id}`}

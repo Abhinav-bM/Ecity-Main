@@ -31,6 +31,7 @@ export function BillingScreen({
   taxRates,
   canDiscount,
   gstEnabled,
+  pricesIncludeTax,
 }: {
   branchId: number
   branchName: string
@@ -43,6 +44,14 @@ export function BillingScreen({
   canDiscount: boolean
   /** Off for an unregistered shop: no tax on the bill, no tax on screen. */
   gstEnabled: boolean
+  /*
+   * The shop's own answer to "is the ticket price the price the customer
+   * pays?". The till used to assume yes. On a shop that answers no, the
+   * server added tax on top of a figure the screen had already shown as
+   * final, so the saved bill came out above the price on the shelf - which
+   * looks for all the world like the discount was added rather than taken off.
+   */
+  pricesIncludeTax: boolean
 }) {
   const router = useRouter()
   const cart = useCart()
@@ -86,11 +95,11 @@ export function BillingScreen({
           discountPaise: rupeesToPaise(Number(l.discount) || 0),
           taxRateBasisPoints: l.taxRateBasisPoints,
         })),
-        // Matches the server: it recomputes from the same inputs, so the
-        // figure on screen is the figure that gets saved.
-        true,
+        // The server recomputes from these same inputs and this same
+        // setting, so the figure on screen is the figure that gets saved.
+        pricesIncludeTax,
       ),
-    [cart.lines],
+    [cart.lines, pricesIncludeTax],
   )
 
   const paid = cart.payments.reduce((sum, p) => sum + rupeesToPaise(Number(p.amount) || 0), 0n)
@@ -324,6 +333,20 @@ export function BillingScreen({
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-1 text-sm">
+                {/*
+                  A discount only ever comes off. Showing it as its own line,
+                  signed, is how the person at the till can see that.
+                */}
+                {totals.discountPaise > 0n ? (
+                  <>
+                    <dt className="text-muted-foreground">Items</dt>
+                    <dd className="tabular text-right">{formatMoney(totals.subtotalPaise)}</dd>
+                    <dt className="text-muted-foreground">Discount</dt>
+                    <dd className="tabular text-right text-success">
+                      −{formatMoney(totals.discountPaise)}
+                    </dd>
+                  </>
+                ) : null}
                 {/* No tax to break out when the shop is not registered. */}
                 {gstEnabled ? (
                   <>

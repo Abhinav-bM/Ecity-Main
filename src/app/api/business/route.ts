@@ -11,7 +11,9 @@ export const PATCH = route(
   { permission: 'business.manage', branchFrom: 'none', schema: businessProfileSchema },
   async ({ user, body, ctx }) => {
     const audit = await auditContextFromRequest(user, user.businessId, ctx.activeBranchId)
-    await updateBusiness(user, audit, body)
-    return { ok: true }
+    // How many handsets moved with the setting, so the screen can say so
+    // rather than leaving the shop to guess whether anything happened.
+    const { restamped } = await updateBusiness(user, audit, body)
+    return { ok: true, restamped }
   },
 )

@@ -22,3 +22,34 @@ export function shopDateString(when: Date = new Date(), timeZone = SHOP_TIME_ZON
     day: '2-digit',
   }).format(when)
 }
+
+/** Matches only the shape a date input produces, and nothing else. */
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * A calendar day from a URL, or nothing.
+ *
+ * A query string is typed by whoever is holding the address bar, and some
+ * browsers hand back whatever was typed into a date field rather than an ISO
+ * day. `new Date('09/09/2026T00:00:00')` is an Invalid Date, which survives
+ * every check until the driver tries to send it and throws - so the page dies
+ * on a filter value instead of ignoring it. Anything not a real day is nothing.
+ *
+ * The day is anchored in the shop's zone, not the server's, so a filter means
+ * the same day whether it is read in Mumbai or in a datacentre on UTC.
+ */
+export function parseShopDate(value: string | undefined | null): Date | undefined {
+  if (!value || !ISO_DAY.test(value)) return undefined
+  const at = new Date(`${value}T00:00:00+05:30`)
+  if (Number.isNaN(at.getTime())) return undefined
+  // 2026-02-31 parses, as 3 March. A day that renders back as itself is real.
+  return shopDateString(at) === value ? at : undefined
+}
+
+/** The day after `value`, so an inclusive "to" covers the whole of it. */
+export function parseShopDateEnd(value: string | undefined | null): Date | undefined {
+  const at = parseShopDate(value)
+  if (!at) return undefined
+  at.setDate(at.getDate() + 1)
+  return at
+}

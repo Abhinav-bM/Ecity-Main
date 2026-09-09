@@ -1,7 +1,7 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm'
 import { normaliseStateCode, stateCodeFromGstin } from '@/lib/gst'
 import { db } from '@/server/db'
-import { business, expenseCategory, paymentMethod, taxRate } from '@/server/db/schema'
+import { business, deviceUnit, expenseCategory, paymentMethod, taxRate } from '@/server/db/schema'
 import { diff, writeAudit, type AuditContext } from '@/server/db/audit'
 import { AppError, conflict, notFound } from '@/server/http'
 import type { AuthUser } from '@/server/auth/permissions'
@@ -33,13 +33,56 @@ export async function updateBusiness(
     .set({ ...values, updatedAt: new Date() })
     .where(eq(business.id, actor.businessId))
 
+  /*
+   * Moving NEW stock between systems has to reach the stock already on the
+   * shelf.
+   *
+   * Each device carries the channel it was booked in with, and the till
+   * filters on that column — so changing this setting used to affect only
+   * *future* handsets, and the shop would flip the switch, see nothing
+   * change, and conclude it was broken. Which it was: "NEW stock is billed
+   * here" is a statement about the shop, not about one delivery.
+   *
+   * Two limits, both deliberate:
+   *
+   *   - **Only what is still in stock.** A sold handset's channel is a record
+   *     of where it was sold, and rewriting that would falsify history.
+   *   - **Only devices still carrying the old default.** Anything set to a
+   *     different channel by hand was somebody's decision about that
+   *     particular unit, and a settings change should not quietly undo it.
+   */
+  const movedChannel =
+    values.newStockSalesChannel !== undefined &&
+    values.newStockSalesChannel !== before.newStockSalesChannel
+
+  let restamped = 0
+  if (movedChannel) {
+    const changed = await db
+      .update(deviceUnit)
+      .set({ salesChannel: values.newStockSalesChannel!, updatedAt: new Date() })
+      .where(
+        and(
+          eq(deviceUnit.businessId, actor.businessId),
+          eq(deviceUnit.mainType, 'NEW'),
+          eq(deviceUnit.status, 'IN_STOCK'),
+          eq(deviceUnit.salesChannel, before.newStockSalesChannel),
+        ),
+      )
+      .returning({ id: deviceUnit.id })
+    restamped = changed.length
+  }
+
   await writeAudit(ctx, {
     action: 'UPDATE',
     entityType: 'business',
     entityId: actor.businessId,
-    summary: 'Updated business profile',
+    summary: movedChannel
+      ? `Updated business profile — NEW stock now billed in ${values.newStockSalesChannel}, ${restamped} handset(s) in stock moved with it`
+      : 'Updated business profile',
     changes: diff(before, values),
   })
+
+  return { restamped }
 }
 
 /* ------------------------------------------------------------ tax rates --- */

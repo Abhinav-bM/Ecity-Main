@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Pagination } from '@/components/pagination'
-import { MainTypeBadge } from '@/components/main-type-badge'
+import { DEVICE_STATUS_LABEL, MainTypeBadge } from '@/components/main-type-badge'
 import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -21,6 +21,18 @@ import { listAdjustments } from '@/server/services/adjustment.service'
 export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 25
+
+/*
+ * A device status, spelled the way the rest of the app spells it.
+ *
+ * This column printed the database's own words — `IN_STOCK → DAMAGED`,
+ * underscores and all. The same map already labels the status badge
+ * everywhere else, so reusing it keeps one vocabulary rather than two.
+ */
+function statusLabel(status: string | null): string {
+  if (!status) return '—'
+  return DEVICE_STATUS_LABEL[status] ?? status.replace(/_/g, ' ').toLowerCase()
+}
 
 const REASON_LABEL: Record<string, string> = {
   DAMAGE: 'Damage',
@@ -91,7 +103,7 @@ export default async function AdjustmentsPage({
                   </p>
                   <p className="tabular text-sm">
                     {a.deviceId
-                      ? `${a.deviceStatusBefore} → ${a.deviceStatusAfter}`
+                      ? `${statusLabel(a.deviceStatusBefore)} → ${statusLabel(a.deviceStatusAfter)}`
                       : `${a.quantityBefore} → ${a.quantityAfter}`}
                   </p>
                   {a.notes ? <p className="text-xs text-muted-foreground">{a.notes}</p> : null}
@@ -143,7 +155,7 @@ export default async function AdjustmentsPage({
                     </TableCell>
                     <TableCell className="tabular">
                       {a.deviceId ? (
-                        `${a.deviceStatusBefore} → ${a.deviceStatusAfter}`
+                        `${statusLabel(a.deviceStatusBefore)} → ${statusLabel(a.deviceStatusAfter)}`
                       ) : (
                         <>
                           {a.quantityBefore} → {a.quantityAfter}

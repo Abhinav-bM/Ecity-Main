@@ -221,3 +221,27 @@ describe('GST split on a bill (OQ-4: statutory invoices)', () => {
     expect(bill.taxPaise).toBeGreaterThan(0n)
   })
 })
+
+/*
+ * A discount comes off. That sounds too obvious to test, but the till used to
+ * assume every shop prices tax-inclusive while the server asked the shop, so
+ * on a tax-exclusive shop the screen showed one figure and the saved bill was
+ * larger - which reads exactly like the discount had been added on.
+ */
+describe('a discount only ever reduces the bill', () => {
+  const line = { unitPricePaise: rs(10_000), quantity: 1, taxRateBasisPoints: 1800 }
+
+  it.each([true, false])('under pricesIncludeTax=%s', (inclusive) => {
+    const full = computeBill([line], inclusive).totalPaise
+    const discounted = computeBill([{ ...line, discountPaise: rs(500) }], inclusive).totalPaise
+    expect(discounted).toBeLessThan(full)
+    expect(full - discounted).toBe(inclusive ? rs(500) : rs(590))
+  })
+
+  it('reports what came off, so the screen can show it', () => {
+    const bill = computeBill([{ ...line, discountPaise: rs(500) }], true)
+    expect(bill.subtotalPaise).toBe(rs(10_000))
+    expect(bill.discountPaise).toBe(rs(500))
+    expect(bill.totalPaise).toBe(rs(9_500))
+  })
+})

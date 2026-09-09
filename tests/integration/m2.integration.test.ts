@@ -12,6 +12,7 @@ import {
   normaliseIdentifiers,
 } from '@/server/services/device.service'
 import { createCategory, createProduct, listLowStock, setMinQuantity } from '@/server/services/product.service'
+import { updateBusiness } from '@/server/services/business.service'
 import {
   appendDeviceEvent,
   canTransition,
@@ -38,6 +39,7 @@ suite('M2 inventory core (database-backed)', () => {
   let actor: AuthUser
   let ctx: AuditContext
   /** IMEIs must be 14-17 digits and unique across the business. */
+  /** Unique per run. Keep `n` under 100: runs are spaced by exactly that. */
   const imei = (n: number) => String(10_000_000_000_000 + (stamp % 1_000_000) * 100 + n)
 
   beforeAll(async () => {
@@ -229,6 +231,82 @@ suite('M2 inventory core (database-backed)', () => {
       expect(() => normaliseIdentifiers(['123'])).toThrow(/not a valid IMEI/)
       expect(() => normaliseIdentifiers([])).toThrow(/At least one IMEI/)
       expect(() => normaliseIdentifiers(['35412312345678', '35412312345678'])).toThrow(/twice/)
+    })
+  })
+
+  /*
+   * Reported by the shop: turning on "NEW stock is billed here" appeared to
+   * do nothing. It did — for stock booked in afterwards. Each device carries
+   * the channel it was created with and the till filters on that column, so
+   * the handsets already on the shelf stayed hidden and the setting looked
+   * broken.
+   */
+  describe('moving NEW stock between systems', () => {
+    it('moves the handsets already in stock, not just future ones', async () => {
+      const before = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(96)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      // Booked in while NEW stock belonged to the other system.
+      expect((await getDevice(actor, before.id)).device.salesChannel).toBe('EXTERNAL')
+
+      const result = await updateBusiness(actor, ctx, { newStockSalesChannel: 'ECITY' })
+      expect(result.restamped).toBeGreaterThanOrEqual(1)
+      expect((await getDevice(actor, before.id)).device.salesChannel).toBe('ECITY')
+    })
+
+    it('leaves a handset somebody had set by hand', async () => {
+      // A per-device decision is not something a settings change should undo.
+      const special = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(97)],
+        mainType: 'NEW',
+        branchId: branchA,
+        salesChannel: 'BOTH',
+      })
+
+      await updateBusiness(actor, ctx, { newStockSalesChannel: 'EXTERNAL' })
+      expect((await getDevice(actor, special.id)).device.salesChannel).toBe('BOTH')
+    })
+
+    it('never rewrites a handset that has already been sold', async () => {
+      const sold = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(98)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      await updateBusiness(actor, ctx, { newStockSalesChannel: 'ECITY' })
+      await setDeviceStatus(
+        { businessId, actorId: 0, refType: 'test' },
+        {
+          deviceId: sold.id,
+          expectedStatus: 'IN_STOCK',
+          nextStatus: 'SOLD',
+          eventType: 'SOLD',
+        },
+      )
+
+      await updateBusiness(actor, ctx, { newStockSalesChannel: 'EXTERNAL' })
+      // Where it was sold is history, and history is not edited by a setting.
+      expect((await getDevice(actor, sold.id)).device.salesChannel).toBe('ECITY')
+    })
+
+    it('leaves used stock alone entirely', async () => {
+      const used = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(99)],
+        mainType: 'USED',
+        branchId: branchA,
+      })
+      await updateBusiness(actor, ctx, { newStockSalesChannel: 'ECITY' })
+      expect((await getDevice(actor, used.id)).device.salesChannel).toBe('ECITY')
+
+      await updateBusiness(actor, ctx, { newStockSalesChannel: 'EXTERNAL' })
+      // The setting is about NEW stock; used stock is always sold here.
+      expect((await getDevice(actor, used.id)).device.salesChannel).toBe('ECITY')
     })
   })
 

@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Attachments } from '@/components/attachments'
-import { MainTypeBadge } from '@/components/main-type-badge'
+import { DEVICE_STATUS_LABEL, MainTypeBadge } from '@/components/main-type-badge'
 import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -64,7 +64,8 @@ export default async function AdjustmentPage({ params }: { params: Promise<{ id:
                 <dd className="font-mono text-xs">{a.identifier ?? '—'}</dd>
                 <dt className="text-muted-foreground">Status</dt>
                 <dd>
-                  {a.deviceStatusBefore} → {a.deviceStatusAfter}
+                  {DEVICE_STATUS_LABEL[a.deviceStatusBefore ?? ''] ?? a.deviceStatusBefore} →{' '}
+                  {DEVICE_STATUS_LABEL[a.deviceStatusAfter ?? ''] ?? a.deviceStatusAfter}
                 </dd>
                 <dt className="text-muted-foreground">Classification at the time</dt>
                 <dd>

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm'
 import { db, type DbOrTx } from '@/server/db'
 import {
   branch,
@@ -673,8 +673,15 @@ export async function listSales(actor: AuthUser, filters: SaleFilters) {
     conditions.push(scope.length > 0 ? inArray(sale.branchId, scope) : sql`false`)
   }
   if (filters.customerId) conditions.push(eq(sale.customerId, filters.customerId))
-  if (filters.from) conditions.push(sql`${sale.soldAt} >= ${filters.from}`)
-  if (filters.to) conditions.push(sql`${sale.soldAt} < ${filters.to}`)
+  /*
+   * gte/lt rather than a raw template. A `sql` fragment binds whatever it is
+   * given straight to the driver, which wants a string and is handed a Date:
+   * every date filter on this list died on the count query. The operators run
+   * the value through the column's own mapper, so the type is the column's
+   * problem rather than the caller's.
+   */
+  if (filters.from) conditions.push(gte(sale.soldAt, filters.from))
+  if (filters.to) conditions.push(lt(sale.soldAt, filters.to))
 
   // Payment status is derived, so it is filtered with the same expression the
   // list displays - there is no stored column that could disagree.

@@ -251,6 +251,8 @@ export async function getExpense(actor: AuthUser, id: number) {
         branchId: expense.branchId,
         amountPaise: expense.amountPaise,
         businessDate: expense.businessDate,
+        // The moment it was keyed in, which is not always the day it books to.
+        createdAt: expense.createdAt,
         description: expense.description,
         reference: expense.reference,
         postedAfterClose: expense.postedAfterClose,
@@ -310,6 +312,8 @@ export async function listExpenses(actor: AuthUser, filters: ExpenseFilters) {
         id: expense.id,
         amountPaise: expense.amountPaise,
         businessDate: expense.businessDate,
+        // The moment it was keyed in, which is not always the day it books to.
+        createdAt: expense.createdAt,
         description: expense.description,
         reference: expense.reference,
         postedAfterClose: expense.postedAfterClose,

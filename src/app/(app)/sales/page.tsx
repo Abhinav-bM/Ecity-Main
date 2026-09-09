@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDateShort } from '@/lib/utils'
+import { parseShopDate, parseShopDateEnd } from '@/lib/date'
 import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -37,18 +38,15 @@ export default async function SalesPage({
 
   const p = await searchParams
   const page = Math.max(1, Number(p.page ?? '1') || 1)
-  // An inclusive "to" date means the whole of that day, so the range ends at
-  // midnight following it.
-  const toExclusive = p.to ? new Date(`${p.to}T00:00:00`) : undefined
-  if (toExclusive) toExclusive.setDate(toExclusive.getDate() + 1)
 
   const [{ rows, total }, branches] = await Promise.all([
     listSales(session.user, {
       search: p.search,
       paymentStatus: p.paymentStatus as never,
       branchId: p.branchId ? Number(p.branchId) : undefined,
-      from: p.from ? new Date(`${p.from}T00:00:00`) : undefined,
-      to: toExclusive,
+      from: parseShopDate(p.from),
+      // Inclusive: a "to" of the 9th covers everything up to midnight after it.
+      to: parseShopDateEnd(p.to),
       page,
       pageSize: PAGE_SIZE,
     }),

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { parseShopDate, parseShopDateEnd } from '@/lib/date'
 import { redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -46,8 +47,8 @@ export default async function CustomerDuesPage({
   // Collections need a window to be a meaningful figure. Default to the
   // current month, which is the period a shop actually reviews.
   const now = new Date()
-  const from = p.from ? new Date(p.from) : new Date(now.getFullYear(), now.getMonth(), 1)
-  const to = p.to ? new Date(new Date(p.to).getTime() + 86_400_000) : new Date(now.getTime() + 86_400_000)
+  const from = parseShopDate(p.from) ?? new Date(now.getFullYear(), now.getMonth(), 1)
+  const to = parseShopDateEnd(p.to) ?? new Date(now.getTime() + 86_400_000)
 
   const [dues, byBranch, branches] = await Promise.all([
     customerDues(session.user, {
