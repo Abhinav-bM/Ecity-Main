@@ -106,6 +106,45 @@ test.describe('the counter', () => {
     await expect(page.getByRole('button', { name: 'Print receipt (80 mm)' })).toBeVisible()
   })
 
+  /*
+   * The discount box is typed into digit by digit, and computeBill throws on
+   * a discount larger than the line. That throw is right on the server, but
+   * it used to run inside the till's render on every keystroke - so typing
+   * "500" against a 250 line raised an exception mid-render and took the
+   * whole screen down with a half-built bill on it.
+   */
+  test('a discount larger than the line says so instead of taking the till down', async ({
+    page,
+  }) => {
+    const id = unique()
+    const name = `E2E OverDisc Cable ${id}`
+    await createProduct(page, name, 'Cables', '250')
+    await purchase(page, {
+      supplier: `E2E OverDiscSup ${id}`,
+      product: name,
+      quantity: '10',
+      cost: '100',
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(name)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+    await expect(page.getByTestId('cart-lines').getByText(name)).toBeVisible()
+
+    await page.getByRole('textbox', { name: 'Discount (₹)' }).fill('500')
+
+    // Still standing, and naming the figure rather than describing it.
+    await expect(page.getByText(/The most you can take off this line is ₹250/i)).toBeVisible()
+    await expect(page.getByTestId('cart-lines').getByText(name)).toBeVisible()
+    // And refusing to send a bill the server would only reject.
+    await expect(page.getByRole('button', { name: /^Save bill/ })).toBeDisabled()
+
+    // Corrected, and the till carries on.
+    await page.getByRole('textbox', { name: 'Discount (₹)' }).fill('50')
+    await expect(page.getByText(/The most you can take off this line/i)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Save bill/ })).toBeEnabled()
+  })
+
   test('bills an accessory keyboard-only in under 20 seconds (M4 acceptance)', async ({
     page,
   }) => {

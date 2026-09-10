@@ -86,15 +86,45 @@ export function BillingScreen({
     [taxRates],
   )
 
+  /*
+   * Which lines have been given a discount bigger than they are worth.
+   *
+   * Checked here rather than left to computeBill, which *throws* on it. That
+   * throw is right on the server - a bill worth less than nothing must not be
+   * saved - but this runs inside a render, on every keystroke. Typing "500"
+   * into the discount of a ₹300 line passes through a moment where the
+   * discount exceeds the line, and the exception took the whole till down
+   * mid-sale rather than saying the number was too big.
+   */
+  const overDiscounted = useMemo(() => {
+    const over = new Map<string, bigint>()
+    for (const l of cart.lines) {
+      const gross = rupeesToPaise(Number(l.unitPrice) || 0) * BigInt(l.quantity)
+      // Carries the most that can come off, so the line can name the figure
+      // rather than describe it. "Worth" read as worth-to-the-shop, which is
+      // a different question entirely - this has nothing to do with cost.
+      if (rupeesToPaise(Number(l.discount) || 0) > gross) over.set(l.key, gross)
+    }
+    return over
+  }, [cart.lines])
+
   const totals = useMemo(
     () =>
       computeBill(
-        cart.lines.map((l) => ({
-          unitPricePaise: rupeesToPaise(Number(l.unitPrice) || 0),
-          quantity: l.quantity,
-          discountPaise: rupeesToPaise(Number(l.discount) || 0),
-          taxRateBasisPoints: l.taxRateBasisPoints,
-        })),
+        cart.lines.map((l) => {
+          const unitPricePaise = rupeesToPaise(Number(l.unitPrice) || 0)
+          const gross = unitPricePaise * BigInt(l.quantity)
+          const discountPaise = rupeesToPaise(Number(l.discount) || 0)
+          return {
+            unitPricePaise,
+            quantity: l.quantity,
+            // Capped for the preview only. The line is already flagged above
+            // and Save is blocked, so this figure is never what gets sent -
+            // it just keeps a total on screen while the number is corrected.
+            discountPaise: discountPaise > gross ? gross : discountPaise,
+            taxRateBasisPoints: l.taxRateBasisPoints,
+          }
+        }),
         // The server recomputes from these same inputs and this same
         // setting, so the figure on screen is the figure that gets saved.
         pricesIncludeTax,
@@ -266,6 +296,7 @@ export function BillingScreen({
                       key={line.key}
                       line={line}
                       canDiscount={canDiscount}
+                      maxDiscountPaise={overDiscounted.get(line.key) ?? null}
                       onChange={(patch) => cart.updateLine(line.key, patch)}
                       onRemove={() => cart.removeLine(line.key)}
                     />
@@ -396,7 +427,8 @@ export function BillingScreen({
 
           <Button
             className="h-11 w-full text-base"
-            disabled={saving || cart.lines.length === 0}
+            // A bill the server is certain to refuse should not be sendable.
+            disabled={saving || cart.lines.length === 0 || overDiscounted.size > 0}
             onClick={() => void save()}
           >
             {saving ? 'Saving…' : `Save bill · ${formatMoney(totals.totalPaise)}`}
@@ -410,11 +442,17 @@ export function BillingScreen({
 function CartRow({
   line,
   canDiscount,
+  maxDiscountPaise,
   onChange,
   onRemove,
 }: {
   line: CartLine
   canDiscount: boolean
+  /**
+   * Set only when the discount is too big, to the most that could come off.
+   * Said here, beside the box it was typed into.
+   */
+  maxDiscountPaise: bigint | null
   onChange: (patch: Partial<CartLine>) => void
   onRemove: () => void
 }) {
@@ -486,6 +524,13 @@ function CartRow({
       {overStock ? (
         <p className="text-xs text-destructive">
           Only {line.availableQuantity} in stock at this branch.
+        </p>
+      ) : null}
+
+      {maxDiscountPaise !== null ? (
+        <p className="text-xs text-destructive">
+          The most you can take off this line is {formatMoney(maxDiscountPaise)} — its price times
+          the quantity. Any more and the line would come to less than nothing.
         </p>
       ) : null}
     </li>

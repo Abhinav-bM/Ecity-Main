@@ -3,6 +3,10 @@ name: deploy
 on:
   push:
     branches: [main]
+  # Shipping the commit already on main, without inventing one. Needed when a
+  # push happened but the deploy did not - minutes ran out, a run was
+  # cancelled, the repo's visibility was being changed.
+  workflow_dispatch:
 
 # A second push while a deploy is running should replace it, not race it.
 concurrency:
@@ -14,6 +18,9 @@ jobs:
   # build whose tests are failing, which is worse than not deploying at all.
   check:
     uses: ./.github/workflows/ci.yml
+    # The extremes on the way out; full-sweep.yml covers all four weekly.
+    with:
+      e2e_projects: --project=mobile-small --project=desktop
 
   deploy:
     needs: [check]

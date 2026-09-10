@@ -1,0 +1,23 @@
+name: full-sweep
+
+# Every viewport, once a week.
+#
+# A deploy checks the narrowest phone and the desktop, because that is where
+# layout actually breaks. The tablet and the ordinary phone are covered here.
+#
+# Weekly, not nightly: this job is around thirty minutes, so a nightly run
+# would cost roughly 900 minutes a month by itself - most of a free allowance,
+# spent re-proving layouts that had not changed since the night before.
+on:
+  schedule:
+    # 19:30 UTC Sunday is 01:00 Monday in the shop's timezone: nobody is
+    # pushing, and a failure is waiting at the start of the working week.
+    - cron: '30 19 * * 0'
+  workflow_dispatch:
+
+jobs:
+  every-viewport:
+    # Blank means every viewport.
+    uses: ./.github/workflows/ci.yml
+    with:
+      e2e_projects: ''

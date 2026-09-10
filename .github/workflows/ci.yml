@@ -1,11 +1,30 @@
 name: ci
 
 on:
-  push:
-    branches: [main]
+  # Deliberately NOT `push: branches: [main]`.
+  #
+  # deploy.yml already fires on a push to main, and its first job calls this
+  # workflow before it ships. Triggering here as well ran the whole check job
+  # TWICE for every push - two installs, two builds, two browser sweeps, in
+  # parallel - and billed for both. Run #50 was ci 30m04s alongside deploy
+  # 32m26s on one commit: an hour of minutes to learn one thing.
   pull_request:
   # Called by deploy.yml, so nothing ships until these checks pass.
   workflow_call:
+    inputs:
+      e2e_projects:
+        description: Playwright --project flags. Blank runs every viewport.
+        type: string
+        required: false
+        default: --project=mobile-small --project=desktop
+  # So the full sweep can still be asked for by hand on any branch.
+  workflow_dispatch:
+    inputs:
+      e2e_projects:
+        description: Playwright --project flags. Blank runs every viewport.
+        type: string
+        required: false
+        default: ''
 
 jobs:
   check:
@@ -37,9 +56,23 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      # The app is used on phones, tablets and desktops. Playwright runs every
-      # suite at all four viewports; a desktop-only layout fails here.
+      # Cached on the browser build, not the lockfile: Playwright pins its
+      # browser to the library version, and re-downloading Chromium every run
+      # was a minute of billed time for a file that had not changed.
+      - name: Work out the Playwright version
+        id: pw
+        run: echo "v=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.v }}
       - run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+      # The system libraries live outside the cached directory, so they are
+      # still needed on a hit - this is the cheap half of the command.
+      - run: npx playwright install-deps chromium
+        if: steps.pw-cache.outputs.cache-hit == 'true'
       # The browser suite bills against the demo branch and catalogue; a
       # server is seeded with `db:seed`, which creates none of that.
       - run: npm run db:seed:demo
@@ -47,7 +80,14 @@ jobs:
           SEED_PASSWORD: ci-test-password-123
       - run: npm start &
       - run: npx wait-on http://localhost:3000/api/health --timeout 60000
-      - run: npm run test:e2e
+      # Which viewports, and why not always all four.
+      #
+      # All four is the honest answer, and full-sweep.yml does exactly that
+      # once a week. But it is by far the most expensive thing in this file,
+      # and on the path to a deploy the layouts that break are the extremes -
+      # so a release checks the narrowest phone and the desktop. Blank runs
+      # all of them.
+      - run: npm run test:e2e -- ${{ inputs.e2e_projects }}
         env:
           SEED_PASSWORD: ci-test-password-123
           E2E_BASE_URL: http://localhost:3000

@@ -30,7 +30,7 @@ type Category = Brand & {
  * "phones, and I want their box serials too". So one list of three.
  */
 const TRACKING_OPTIONS = [
-  { value: 'IMEI', label: 'IMEI (phones)' },
+  // { value: 'IMEI', label: 'IMEI (phones)' },
   { value: 'IMEI_SERIAL', label: 'IMEI and serial number (phones)' },
   { value: 'SERIAL', label: 'Serial number only (laptops, speakers)' },
 ]
