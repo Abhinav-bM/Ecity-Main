@@ -49,13 +49,17 @@ test.describe('as admin', () => {
      * sale becomes impossible and the screen never says why.
      */
     const suffix = String(Date.now()).slice(-6)
-    const code = `VOUCH${suffix}`.slice(0, 20)
     const name = `Voucher ${suffix}`
 
     await page.goto('/settings/business')
     await page.getByRole('tab', { name: 'Payments' }).click()
 
-    await page.getByLabel('Payment method code').fill(code)
+    /*
+     * A name and a kind, and nothing else. The form used to also demand a
+     * `code` - capitals and underscores, unique per shop - which nothing in
+     * the app ever reads. The service derives it from the name now.
+     */
+    await expect(page.getByLabel('Payment method code')).toHaveCount(0)
     await page.getByLabel('Payment method name').fill(name)
     await choose(page.getByRole('combobox', { name: 'Payment method type' }), 'Other')
     await page.getByRole('button', { name: 'Add method' }).click()

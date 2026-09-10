@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '@/server/db'
 import * as schema from '@/server/db/schema'
 import { createParty, listParties, setPartyStatus, updateParty } from '@/server/services/party.service'
@@ -9,7 +9,11 @@ import {
   listAccessibleBranches,
   setBranchStatus,
 } from '@/server/services/branch.service'
-import { setPaymentMethodActive, upsertTaxRate } from '@/server/services/business.service'
+import {
+  setPaymentMethodActive,
+  upsertPaymentMethod,
+  upsertTaxRate,
+} from '@/server/services/business.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
 import { databaseAvailable } from './setup'
@@ -214,6 +218,45 @@ suite('M1 master data (database-backed)', () => {
         .from(schema.taxRate)
         .where(eq(schema.taxRate.businessId, businessId))
       expect(defaults.filter((r) => r.isDefault)).toHaveLength(1)
+    })
+
+    /*
+     * The add form asks for a name and a kind, not a code. `code` is unique
+     * per business and shown in the list, but nothing in the app branches on
+     * it - so making a shop owner invent one was asking them to do the
+     * database's filing. It is derived here instead.
+     */
+    it('derives a payment method code from its name', async () => {
+      const { id } = await upsertPaymentMethod(actor, ctx, {
+        name: 'Google Pay',
+        type: 'UPI',
+      })
+      const row = (
+        await db.select().from(schema.paymentMethod).where(eq(schema.paymentMethod.id, id)).limit(1)
+      )[0]!
+      expect(row.code).toBe('GOOGLE_PAY')
+      // UPI does not reach the till drawer unless it is asked to.
+      expect(row.affectsCashDrawer).toBe(false)
+    })
+
+    it('sidesteps a code another method already has', async () => {
+      const first = await upsertPaymentMethod(actor, ctx, { name: 'Paytm', type: 'UPI' })
+      const second = await upsertPaymentMethod(actor, ctx, { name: 'Paytm', type: 'UPI' })
+      const rows = await db
+        .select()
+        .from(schema.paymentMethod)
+        .where(inArray(schema.paymentMethod.id, [first.id, second.id]))
+      expect(rows.map((r) => r.code).sort()).toEqual(['PAYTM', 'PAYTM_2'])
+    })
+
+    it('leaves the code alone when the method is renamed', async () => {
+      const { id } = await upsertPaymentMethod(actor, ctx, { name: 'Card', type: 'CARD' })
+      await upsertPaymentMethod(actor, ctx, { id, name: 'Card machine', type: 'CARD' })
+      const row = (
+        await db.select().from(schema.paymentMethod).where(eq(schema.paymentMethod.id, id)).limit(1)
+      )[0]!
+      expect(row.code).toBe('CARD')
+      expect(row.name).toBe('Card machine')
     })
 
     it('refuses to deactivate the only cash payment method', async () => {

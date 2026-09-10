@@ -163,12 +163,19 @@ export const taxRateSchema = z.object({
 
 export const paymentMethodSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
+  /*
+   * Optional: derived from the name by the service when absent. The add form
+   * no longer asks for one - it is an identifier the app never branches on,
+   * and a shop owner has no way to invent a good one. Still accepted, and
+   * still validated, so the seed and any import can pin a known code.
+   */
   code: z
     .string()
     .trim()
     .min(2)
     .max(20)
-    .regex(/^[A-Z0-9_]+$/, 'Use capitals, digits and underscores only.'),
+    .regex(/^[A-Z0-9_]+$/, 'Use capitals, digits and underscores only.')
+    .optional(),
   name: z.string().trim().min(2, 'Name is required.').max(60),
   type: z.enum(['CASH', 'UPI', 'CARD', 'BANK_TRANSFER', 'OTHER']),
   affectsCashDrawer: z.boolean().optional(),

@@ -215,46 +215,108 @@ export async function listPaymentMethods(actor: AuthUser) {
     .orderBy(asc(paymentMethod.sortOrder), asc(paymentMethod.name))
 }
 
+/**
+ * A method's `code` is derived from its name, not asked for.
+ *
+ * It is unique per business and shows in the settings list, but nothing in the
+ * app ever branches on it - every decision that matters reads `type` instead
+ * (the cash-drawer default below, the last-cash-method guard further down).
+ * It was nonetheless a required field on the add form, which asked a shop
+ * owner to invent `BANK_TRANSFER`-shaped identifiers for something they never
+ * see used. The name is an answer they already have.
+ */
+function codeFromName(name: string) {
+  const base = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 20)
+  // A name of nothing but punctuation still has to produce a valid code.
+  return base.length >= 2 ? base : 'METHOD'
+}
+
+/** GPAY, then GPAY_2 - and the suffix has to fit the 20-character column. */
+async function freeCode(businessId: number, wanted: string) {
+  const taken = new Set(
+    (
+      await db
+        .select({ code: paymentMethod.code })
+        .from(paymentMethod)
+        .where(eq(paymentMethod.businessId, businessId))
+    ).map((r) => r.code),
+  )
+  if (!taken.has(wanted)) return wanted
+  for (let n = 2; n < 100; n++) {
+    const suffix = `_${n}`
+    const candidate = wanted.slice(0, 20 - suffix.length) + suffix
+    if (!taken.has(candidate)) return candidate
+  }
+  throw conflict('Too many payment methods with similar names.')
+}
+
 export async function upsertPaymentMethod(
   actor: AuthUser,
   ctx: AuditContext,
   input: {
     id?: number
-    code: string
+    /** Derived from the name when absent. Still accepted so a seed can pin one. */
+    code?: string
     name: string
     type: (typeof paymentMethod.$inferInsert)['type']
     affectsCashDrawer?: boolean
     sortOrder?: number
   },
 ) {
-  const clash = await db
-    .select({ id: paymentMethod.id })
-    .from(paymentMethod)
-    .where(
-      and(eq(paymentMethod.businessId, actor.businessId), eq(paymentMethod.code, input.code)),
-    )
-    .limit(1)
-  if (clash[0] && clash[0].id !== input.id) {
-    throw conflict('A payment method with this code already exists.')
-  }
-
   if (input.id) {
+    // Scoped to the business: selecting by id alone let an admin of one shop
+    // edit another shop's method, because the clash check below never matched
+    // across businesses and so never stood in the way.
     const before = (
-      await db.select().from(paymentMethod).where(eq(paymentMethod.id, input.id)).limit(1)
+      await db
+        .select()
+        .from(paymentMethod)
+        .where(and(eq(paymentMethod.id, input.id), eq(paymentMethod.businessId, actor.businessId)))
+        .limit(1)
     )[0]
     if (!before) throw notFound('Payment method')
+
+    // The code is the method's stable identifier and an edit never rewrites
+    // it: renaming "GPay" to "Google Pay" must not move what it is called
+    // underneath.
+    const after = {
+      name: input.name,
+      type: input.type,
+      affectsCashDrawer: input.affectsCashDrawer ?? input.type === 'CASH',
+      sortOrder: input.sortOrder ?? before.sortOrder,
+    }
     await db
       .update(paymentMethod)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...after, updatedAt: new Date() })
       .where(eq(paymentMethod.id, input.id))
     await writeAudit(ctx, {
       action: 'UPDATE',
       entityType: 'payment_method',
       entityId: input.id,
       summary: `Updated payment method ${input.name}`,
-      changes: diff(before, input),
+      changes: diff(before, after),
     })
     return { id: input.id }
+  }
+
+  let code: string
+  if (input.code) {
+    // Supplied explicitly (the seed, an import): a clash is the caller's
+    // mistake and is worth refusing rather than quietly renaming.
+    const clash = await db
+      .select({ id: paymentMethod.id })
+      .from(paymentMethod)
+      .where(and(eq(paymentMethod.businessId, actor.businessId), eq(paymentMethod.code, input.code)))
+      .limit(1)
+    if (clash[0]) throw conflict('A payment method with this code already exists.')
+    code = input.code
+  } else {
+    code = await freeCode(actor.businessId, codeFromName(input.name))
   }
 
   const created = (
@@ -262,7 +324,7 @@ export async function upsertPaymentMethod(
       .insert(paymentMethod)
       .values({
         businessId: actor.businessId,
-        code: input.code,
+        code,
         name: input.name,
         type: input.type,
         affectsCashDrawer: input.affectsCashDrawer ?? input.type === 'CASH',

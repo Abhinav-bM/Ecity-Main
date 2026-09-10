@@ -531,15 +531,20 @@ test.describe('the product picker scales', () => {
     await choose(page.getByRole('combobox', { name: 'Category', exact: true }), 'Cables')
 
     /*
-     * A tax rate is required on a registered shop, and there is no "none"
-     * option. This dialog used to send no rate at all, so a product added
-     * mid-delivery was saved untaxed and the first bill for it quietly used
-     * whatever the shop default happened to be.
+     * The tax rate is offered, not demanded. It was briefly mandatory, which
+     * meant a buyer with a half-typed delivery on screen had to go and set up
+     * a 0% rate in Settings before a genuinely untaxed product could be
+     * booked in at all. Untaxed is a real answer and "No tax rate" gives it.
      */
     const create = page.getByRole('button', { name: 'Create and use' })
-    await expect(create).toBeDisabled()
-    await choose(page.getByRole('combobox', { name: 'Tax rate', exact: true }), 'GST 18%')
     await expect(create).toBeEnabled()
+    const tax = page.getByRole('combobox', { name: 'Tax rate', exact: true })
+    await tax.click()
+    await expect(page.getByRole('option', { name: 'No tax rate' })).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    // Choosing one still puts it on the product, which is checked below.
+    await choose(tax, 'GST 18%')
     await create.click()
 
     // And it lands on the line that asked for it.

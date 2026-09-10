@@ -571,18 +571,30 @@ const PAYMENT_TYPES = [
 ] as const;
 
 type MethodDraft = {
-  code: string;
   name: string;
   type: string;
   affectsCashDrawer: boolean;
 };
 
 const emptyDraft = (): MethodDraft => ({
-  code: "",
   name: "",
   type: "CASH",
   affectsCashDrawer: true,
 });
+
+/**
+ * What almost every shop wants, as one tap each.
+ *
+ * A business set up by hand starts with no methods at all, and the first thing
+ * it needs is the same three every time. Filling a form three times to say
+ * "Cash", "UPI", "Card" is work the screen can do itself; a preset already
+ * present is dropped from the row rather than offered twice.
+ */
+const PRESETS = [
+  { name: "Cash", type: "CASH", affectsCashDrawer: true },
+  { name: "UPI", type: "UPI", affectsCashDrawer: false },
+  { name: "Card", type: "CARD", affectsCashDrawer: false },
+] as const;
 
 /**
  * The shop's payment methods.
@@ -611,6 +623,9 @@ function PaymentMethods({
   const [edit, setEdit] = useState<MethodDraft>(emptyDraft());
   const [busy, setBusy] = useState(false);
 
+  // One of a kind is enough for the offer to have been taken up.
+  const missingPresets = PRESETS.filter((p) => !methods.some((m) => m.type === p.type));
+
   async function save(body: Record<string, unknown>, done: string) {
     setBusy(true);
     const res = await apiFetch("/api/business/payment-methods", {
@@ -629,9 +644,11 @@ function PaymentMethods({
   }
 
   async function add() {
+    // No code is sent: the service derives one from the name. It is an
+    // identifier nothing in the app reads, and asking a shop owner to invent
+    // one was asking them to do the database's filing.
     const ok = await save(
       {
-        code: draft.code.trim().toUpperCase(),
         name: draft.name.trim(),
         type: draft.type,
         affectsCashDrawer: draft.affectsCashDrawer,
@@ -641,13 +658,16 @@ function PaymentMethods({
     if (ok) setDraft(emptyDraft());
   }
 
+  async function addPreset(preset: (typeof PRESETS)[number]) {
+    await save({ ...preset }, `${preset.name} added.`);
+  }
+
   async function saveEdit(m: PaymentMethod) {
     const ok = await save(
       {
         id: m.id,
-        // The code is the method's identifier and is not editable; it is sent
-        // back unchanged because the endpoint upserts on the whole shape.
-        code: m.code,
+        // The code is the method's identifier and is not editable. It is no
+        // longer sent at all - an edit leaves whatever the row already has.
         name: edit.name.trim(),
         type: edit.type,
         affectsCashDrawer: edit.affectsCashDrawer,
@@ -750,7 +770,6 @@ function PaymentMethods({
                         onClick={() => {
                           setEditing(m.id);
                           setEdit({
-                            code: m.code,
                             name: m.name,
                             type: m.type,
                             affectsCashDrawer: m.affectsCashDrawer,
@@ -778,18 +797,32 @@ function PaymentMethods({
 
         {canManage ? (
           <div className="space-y-3 rounded-md border p-3">
-            <p className="text-sm font-medium">Add a payment method</p>
+            {missingPresets.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Quick add</p>
+                <div className="flex flex-wrap gap-2">
+                  {missingPresets.map((preset) => (
+                    <Button
+                      key={preset.type}
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void addPreset(preset)}
+                    >
+                      + {preset.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <p className="text-sm font-medium">
+              {missingPresets.length > 0 ? "Or add another" : "Add a payment method"}
+            </p>
             <div className="flex flex-wrap gap-2">
               <Input
-                className="w-32 font-mono"
-                placeholder="CASH"
-                value={draft.code}
-                onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
-                aria-label="Payment method code"
-              />
-              <Input
                 className="min-w-0 flex-1 sm:max-w-xs"
-                placeholder="Cash"
+                placeholder="GPay"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 aria-label="Payment method name"
@@ -814,10 +847,7 @@ function PaymentMethods({
               />
               Money taken this way goes into the branch cash drawer
             </label>
-            <Button
-              onClick={() => void add()}
-              disabled={busy || draft.code.trim().length < 2 || draft.name.trim().length < 2}
-            >
+            <Button onClick={() => void add()} disabled={busy || draft.name.trim().length < 2}>
               {busy ? "Adding…" : "Add method"}
             </Button>
           </div>
