@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
+import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
 
 /**
  * M1 — master data. Runs at every viewport in playwright.config.ts.
@@ -39,6 +39,49 @@ test.describe('as admin', () => {
 
     await page.getByRole('tab', { name: 'Expenses' }).click()
     await expect(page.getByText('Electricity').first()).toBeVisible()
+  })
+
+  test('adds, edits and retires a payment method — and the till follows', async ({ page }) => {
+    /*
+     * This tab could only activate and deactivate what the seed had put there.
+     * A business set up by hand therefore had no payment methods and no way to
+     * make one, which leaves the till with nothing to take money with - a cash
+     * sale becomes impossible and the screen never says why.
+     */
+    const suffix = String(Date.now()).slice(-6)
+    const code = `VOUCH${suffix}`.slice(0, 20)
+    const name = `Voucher ${suffix}`
+
+    await page.goto('/settings/business')
+    await page.getByRole('tab', { name: 'Payments' }).click()
+
+    await page.getByLabel('Payment method code').fill(code)
+    await page.getByLabel('Payment method name').fill(name)
+    await choose(page.getByRole('combobox', { name: 'Payment method type' }), 'Other')
+    await page.getByRole('button', { name: 'Add method' }).click()
+    await expect(page.getByText(`${name}`).first()).toBeVisible()
+
+    // It is offered at the till straight away.
+    await page.goto('/billing')
+    await expect(page.getByRole('button', { name: `+ ${name}` })).toBeVisible()
+
+    // Renaming it is reflected everywhere it is offered.
+    const renamed = `${name} B`
+    await page.goto('/settings/business')
+    await page.getByRole('tab', { name: 'Payments' }).click()
+    await page.getByRole('button', { name: `Edit ${name}` }).click()
+    await page.getByLabel(`Name for ${name}`).fill(renamed)
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText(renamed).first()).toBeVisible()
+
+    // Retiring it takes it off the till, without touching what it has taken.
+    await page.getByRole('button', { name: `Deactivate ${renamed}` }).click()
+    await expect(page.getByText('Inactive').first()).toBeVisible()
+
+    await page.goto('/billing')
+    await expect(page.getByRole('button', { name: `+ ${renamed}` })).toHaveCount(0)
+    // The seeded methods are untouched.
+    await expect(page.getByRole('button', { name: '+ Cash' })).toBeVisible()
   })
 
   test('creates a customer, finds it by search, then deactivates it', async ({ page }) => {

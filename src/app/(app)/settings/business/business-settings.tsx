@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/form-field";
-import { FormSelect } from "@/components/app-select";
+import { AppSelect, FormSelect } from "@/components/app-select";
 import { FormError } from '@/components/form-error'
 import { apiFetch } from '@/lib/api'
 
@@ -561,6 +561,42 @@ function TaxRates({
   );
 }
 
+/** The kinds the database recognises, spelled for a person. */
+const PAYMENT_TYPES = [
+  { value: "CASH", label: "Cash" },
+  { value: "UPI", label: "UPI" },
+  { value: "CARD", label: "Card" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
+type MethodDraft = {
+  code: string;
+  name: string;
+  type: string;
+  affectsCashDrawer: boolean;
+};
+
+const emptyDraft = (): MethodDraft => ({
+  code: "",
+  name: "",
+  type: "CASH",
+  affectsCashDrawer: true,
+});
+
+/**
+ * The shop's payment methods.
+ *
+ * Until now this screen could only activate and deactivate what was already
+ * there — and payment methods are only ever created by the seed, so a business
+ * set up by hand had none and no way to make one. That is not a cosmetic gap:
+ * with no methods the till renders no payment buttons at all, and a cash sale
+ * becomes impossible.
+ *
+ * Deactivating rather than deleting, for the usual reason (docs/02 §2.2 rule
+ * 4): every sale, expense and supplier payment ever taken points at the method
+ * it used. An inactive method keeps all of that and simply stops being offered.
+ */
 function PaymentMethods({
   methods,
   canManage,
@@ -570,6 +606,57 @@ function PaymentMethods({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [draft, setDraft] = useState<MethodDraft>(emptyDraft());
+  const [editing, setEditing] = useState<number | null>(null);
+  const [edit, setEdit] = useState<MethodDraft>(emptyDraft());
+  const [busy, setBusy] = useState(false);
+
+  async function save(body: Record<string, unknown>, done: string) {
+    setBusy(true);
+    const res = await apiFetch("/api/business/payment-methods", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return false;
+    }
+    toast.success(done);
+    startTransition(() => router.refresh());
+    return true;
+  }
+
+  async function add() {
+    const ok = await save(
+      {
+        code: draft.code.trim().toUpperCase(),
+        name: draft.name.trim(),
+        type: draft.type,
+        affectsCashDrawer: draft.affectsCashDrawer,
+      },
+      "Payment method added.",
+    );
+    if (ok) setDraft(emptyDraft());
+  }
+
+  async function saveEdit(m: PaymentMethod) {
+    const ok = await save(
+      {
+        id: m.id,
+        // The code is the method's identifier and is not editable; it is sent
+        // back unchanged because the endpoint upserts on the whole shape.
+        code: m.code,
+        name: edit.name.trim(),
+        type: edit.type,
+        affectsCashDrawer: edit.affectsCashDrawer,
+        sortOrder: m.sortOrder,
+      },
+      "Payment method updated.",
+    );
+    if (ok) setEditing(null);
+  }
 
   async function setActive(m: PaymentMethod, isActive: boolean) {
     const res = await apiFetch(`/api/business/payment-methods/${m.id}`, {
@@ -581,6 +668,7 @@ function PaymentMethods({
       toast.error(res.error);
       return;
     }
+    toast.success(`${m.name} ${isActive ? "reactivated" : "deactivated"}.`);
     startTransition(() => router.refresh());
   }
 
@@ -589,36 +677,151 @@ function PaymentMethods({
       <CardHeader className="pb-3">
         <CardTitle className="text-sm">Payment methods</CardTitle>
         <CardDescription>
-          Cash methods post to the branch drawer; the rest post to accounts.
+          Cash methods post to the branch drawer; the rest post to accounts. A
+          deactivated method stops being offered at the till, but every past
+          payment keeps it.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ul className="divide-y rounded-md border">
-          {methods.map((m) => (
-            <li key={m.id} className="flex flex-wrap items-center gap-2 p-3">
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {m.name}
-              </span>
-              <Badge variant="outline" className="font-mono text-[11px]">
-                {m.type}
-              </Badge>
-              {m.affectsCashDrawer ? (
-                <Badge variant="muted">Cash drawer</Badge>
-              ) : null}
-              {!m.isActive ? <Badge variant="muted">Inactive</Badge> : null}
-              {canManage ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => void setActive(m, !m.isActive)}
-                >
-                  {m.isActive ? "Deactivate" : "Reactivate"}
-                </Button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+      <CardContent className="space-y-4">
+        {methods.length === 0 ? (
+          <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+            No payment methods yet. Until you add one, the till has nothing to
+            take payment with — start with Cash.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-md border" data-testid="payment-methods">
+            {methods.map((m) =>
+              editing === m.id ? (
+                <li key={m.id} className="space-y-3 p-3" data-testid="payment-method-edit">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      {m.code}
+                    </Badge>
+                    <Input
+                      className="min-w-0 flex-1 sm:max-w-xs"
+                      value={edit.name}
+                      onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+                      aria-label={`Name for ${m.name}`}
+                    />
+                    <AppSelect
+                      label={`Type for ${m.name}`}
+                      className="w-40"
+                      value={edit.type}
+                      onValueChange={(v) => setEdit({ ...edit, type: v })}
+                      options={[...PAYMENT_TYPES]}
+                    />
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Switch
+                      checked={edit.affectsCashDrawer}
+                      onCheckedChange={(c) => setEdit({ ...edit, affectsCashDrawer: c })}
+                      aria-label={`Posts to the cash drawer for ${m.name}`}
+                    />
+                    Money taken this way goes into the branch cash drawer
+                  </label>
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={busy || !edit.name.trim()} onClick={() => void saveEdit(m)}>
+                      {busy ? "Saving…" : "Save"}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </li>
+              ) : (
+                <li key={m.id} className="flex flex-wrap items-center gap-2 p-3" data-testid="payment-method-row">
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {m.name}
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[11px]">
+                    {m.type}
+                  </Badge>
+                  {m.affectsCashDrawer ? (
+                    <Badge variant="muted">Cash drawer</Badge>
+                  ) : null}
+                  {!m.isActive ? <Badge variant="muted">Inactive</Badge> : null}
+                  {canManage ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={pending}
+                        aria-label={`Edit ${m.name}`}
+                        onClick={() => {
+                          setEditing(m.id);
+                          setEdit({
+                            code: m.code,
+                            name: m.name,
+                            type: m.type,
+                            affectsCashDrawer: m.affectsCashDrawer,
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={pending}
+                        aria-label={`${m.isActive ? "Deactivate" : "Reactivate"} ${m.name}`}
+                        onClick={() => void setActive(m, !m.isActive)}
+                      >
+                        {m.isActive ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    </>
+                  ) : null}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+
+        {canManage ? (
+          <div className="space-y-3 rounded-md border p-3">
+            <p className="text-sm font-medium">Add a payment method</p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="w-32 font-mono"
+                placeholder="CASH"
+                value={draft.code}
+                onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
+                aria-label="Payment method code"
+              />
+              <Input
+                className="min-w-0 flex-1 sm:max-w-xs"
+                placeholder="Cash"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                aria-label="Payment method name"
+              />
+              <AppSelect
+                label="Payment method type"
+                className="w-40"
+                value={draft.type}
+                onValueChange={(v) =>
+                  // Cash is the one kind that reaches the till by default; the
+                  // switch below still has the final say.
+                  setDraft({ ...draft, type: v, affectsCashDrawer: v === "CASH" })
+                }
+                options={[...PAYMENT_TYPES]}
+              />
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Switch
+                checked={draft.affectsCashDrawer}
+                onCheckedChange={(c) => setDraft({ ...draft, affectsCashDrawer: c })}
+                aria-label="Posts to the cash drawer"
+              />
+              Money taken this way goes into the branch cash drawer
+            </label>
+            <Button
+              onClick={() => void add()}
+              disabled={busy || draft.code.trim().length < 2 || draft.name.trim().length < 2}
+            >
+              {busy ? "Adding…" : "Add method"}
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

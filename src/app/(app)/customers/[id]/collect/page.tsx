@@ -51,7 +51,9 @@ export default async function CollectPage({ params }: { params: Promise<{ id: st
         customerName={party.name}
         openSales={openSales}
         branches={branches}
-        methods={methods.map((m) => ({ id: m.id, name: m.name }))}
+        // Active only: a retired method must not be offered for a new
+        // collection, the same as at the till and on an expense.
+        methods={methods.filter((m) => m.isActive).map((m) => ({ id: m.id, name: m.name }))}
         defaultBranchId={session.activeBranchId ?? branches[0]?.id ?? null}
       />
     </div>
