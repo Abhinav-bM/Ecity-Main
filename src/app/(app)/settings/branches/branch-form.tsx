@@ -16,6 +16,7 @@ import { FormStateCodeSelect } from '@/components/state-code-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { FormSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof branchSchema>
 
@@ -55,14 +56,13 @@ export function BranchForm({
 
   async function onSubmit(values: Values) {
     setFormError(null)
-    const res = await fetch(id ? `/api/branches/${id}` : '/api/branches', {
+    const res = await apiFetch(id ? `/api/branches/${id}` : '/api/branches', {
       method: id ? 'PATCH' : 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ...values, managerUserId: values.managerUserId || null }),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? 'Could not save the branch.')
+      setFormError(res.error)
       return
     }
     toast.success(`Branch ${id ? 'updated' : 'created'}.`)

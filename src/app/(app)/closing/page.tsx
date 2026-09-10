@@ -7,11 +7,11 @@ import { formatMoney } from '@/lib/money'
 import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { businessDateFor } from '@/server/services/cash.service'
 import { daySummary } from '@/server/services/closing.service'
 import { listBranches } from '@/server/services/branch.service'
 import { DrawerControls } from '../cash/drawer-controls'
 import { CloseDayPanel } from './close-day-panel'
+import { shopDayParam } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +32,8 @@ export default async function ClosingPage({
     return <p className="p-6 text-sm text-muted-foreground">No branch to close.</p>
   }
 
-  const businessDate = p.date ?? businessDateFor()
+  // From the address bar, so anything that is not a real day becomes today.
+  const businessDate = shopDayParam(p.date)
   const day = await daySummary(session.user, branchId, businessDate)
   const canClose = hasPermission(session.user, 'closing.create')
   const canVoid = hasPermission(session.user, 'closing.void')

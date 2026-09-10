@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { adjust, reconcile, updateAccount } from '@/server/services/account.service'
 import { AppError, route } from '@/server/http'
@@ -17,11 +17,11 @@ const schema = z.discriminatedUnion('action', [
     isActive: z.boolean().optional(),
   }),
   /** FR-12.4. Records what the statement said; moves no money by itself. */
-  z.object({ action: z.literal('reconcile'), statementBalance: z.coerce.number() }),
+  z.object({ action: z.literal('reconcile'), statementBalance: rupeeAmount({ min: -100_000_000 }) }),
   /** A real difference is corrected visibly, in the ledger. */
   z.object({
     action: z.literal('adjust'),
-    amount: z.coerce.number(),
+    amount: rupeeAmount({ min: -100_000_000 }),
     note: z.string().trim().min(1, 'Say what the adjustment is for.').max(300),
   }),
 ])

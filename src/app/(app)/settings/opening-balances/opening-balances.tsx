@@ -15,6 +15,7 @@ import { Field } from '@/components/form-field'
 import { AppSelect } from '@/components/app-select'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
+import { apiFetch } from '@/lib/api'
 
 type Branch = { id: number; name: string }
 type Account = { id: number; name: string; branchName: string | null }
@@ -76,14 +77,13 @@ export function OpeningBalances({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/opening-balances', {
+      const res = await apiFetch('/api/opening-balances', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ asOf, ...payload }),
       })
-      const json = (await res.json()) as { error?: string }
       if (!res.ok) {
-        setError(json.error ?? 'That could not be saved.')
+        setError(res.error)
         return false
       }
       toast.success(done)

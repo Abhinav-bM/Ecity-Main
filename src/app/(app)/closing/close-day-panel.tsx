@@ -18,7 +18,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatMoney } from '@/lib/money'
-import { rupeesToPaise } from '@/lib/validation'
+import { parseRupees, rupeesToPaise } from '@/lib/validation'
+import { apiFetch } from '@/lib/api'
 
 type Method = { id: number; name: string; expectedPaise: string }
 
@@ -79,7 +80,7 @@ function CloseForm({
   const difference = useMemo(() => {
     const value = Number(counted)
     if (counted === '' || !Number.isFinite(value)) return null
-    return rupeesToPaise(value) - expected
+    return rupeesToPaise(parseRupees(value)) - expected
   }, [counted, expected])
 
   async function submit() {
@@ -90,7 +91,7 @@ function CloseForm({
     }
 
     setBusy(true)
-    const res = await fetch('/api/closings', {
+    const res = await apiFetch('/api/closings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -108,8 +109,7 @@ function CloseForm({
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not close the day.')
+      return setError(res.error)
     }
     toast.success('Day closed.')
     router.refresh()
@@ -226,15 +226,14 @@ function ReopenButton({ closingId, businessDate }: { closingId: number; business
     setError(null)
     if (!reason.trim()) return setError('Say why the day is being reopened.')
     setBusy(true)
-    const res = await fetch(`/api/closings/${closingId}`, {
+    const res = await apiFetch(`/api/closings/${closingId}`, {
       method: 'DELETE',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not reopen the day.')
+      return setError(res.error)
     }
     setOpen(false)
     toast.success('Day reopened.')

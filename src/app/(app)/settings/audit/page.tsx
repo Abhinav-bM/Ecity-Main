@@ -15,6 +15,7 @@ import { describeChanges, type Change } from '@/lib/changes'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listAuditLog } from '@/server/services/audit.service'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,7 @@ export default async function AuditPage({
   if (!hasPermission(session.user, 'audit.view')) redirect('/dashboard')
 
   const params = await searchParams
-  const page = Math.max(1, Number(params.page ?? '1') || 1)
+  const page = readPage(params.page)
 
   const { rows, total, pageSize } = await listAuditLog(session.user, {
     page,

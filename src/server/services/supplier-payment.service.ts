@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@/server/db'
 import {
   paymentMethod,
@@ -97,6 +97,15 @@ export async function recordSupplierPayment(
     let allocated = 0n
     for (const a of allocations) {
       if (a.amountPaise <= 0n) continue
+
+      /*
+       * Lock the purchase before reading what is still owed on it. Without
+       * this, two payments against the same supplier bill entered at once both
+       * see the full amount outstanding and both allocate it, and the purchase
+       * shows as paid twice - the same race as on the customer side.
+       */
+      await tx.execute(sql`select id from purchase where id = ${a.purchaseId} for update`)
+
       const target = await tx
         .select({ id: purchase.id, totalPaise: purchase.totalPaise, status: purchase.status })
         .from(purchase)
@@ -203,10 +212,21 @@ export async function voidSupplierPayment(
   if (payment.voidedAt) throw new AppError('This payment is already voided.', 422, 'ALREADY_VOID')
 
   await db.transaction(async (tx) => {
-    await tx
+    /*
+     * Conditional on it not already being void, and it is the UPDATE that
+     * decides - not the read above, which by now is a moment old. Two people
+     * voiding the same payment (or one person double-clicking) would otherwise
+     * both pass that check and both post a REVERSAL, crediting the supplier
+     * twice for one payment. The loser changes no rows and is told so.
+     */
+    const voided = await tx
       .update(supplierPayment)
       .set({ voidedAt: new Date(), voidReason: reason.trim() })
-      .where(eq(supplierPayment.id, id))
+      .where(and(eq(supplierPayment.id, id), isNull(supplierPayment.voidedAt)))
+      .returning({ id: supplierPayment.id })
+    if (!voided[0]) {
+      throw new AppError('This payment is already voided.', 422, 'ALREADY_VOID')
+    }
 
     // The ledger is append-only, so the reversal is a new entry.
     await postLedgerEntry(tx, {

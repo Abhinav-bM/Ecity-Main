@@ -496,6 +496,25 @@ export async function commitImport(
     throw conflict('Check the file over before importing it.')
   }
 
+  /*
+   * Claim the job before applying a single row.
+   *
+   * The status read above is a moment old, and this loop is long: a
+   * double-click, or two people importing the same batch, both got past it and
+   * both ran the whole file - creating every product and party in it twice.
+   * The UPDATE is conditional on the job still being VALIDATED, so exactly one
+   * caller can claim it and the other is told the batch is already going in.
+   *
+   * The counts are filled in at the end; the status is what has to be taken
+   * now, because it is the lock.
+   */
+  const claimed = await db
+    .update(importJob)
+    .set({ status: 'COMMITTED', committedAt: new Date(), committedBy: actor.id })
+    .where(and(eq(importJob.id, jobId), eq(importJob.status, 'VALIDATED')))
+    .returning({ id: importJob.id })
+  if (!claimed[0]) throw conflict('That batch is already being imported.')
+
   const rows = await db
     .select()
     .from(importRow)
@@ -529,15 +548,13 @@ export async function commitImport(
     }
   }
 
+  // The status, and who did it, were taken above when the job was claimed.
   await db
     .update(importJob)
     .set({
-      status: 'COMMITTED',
       committedRows: committed,
       errorRows: job.errorRows + failed,
       validRows: committed,
-      committedAt: new Date(),
-      committedBy: actor.id,
     })
     .where(eq(importJob.id, jobId))
 

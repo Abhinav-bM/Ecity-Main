@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -26,7 +27,7 @@ export default async function ReturnPage({ params }: { params: Promise<{ id: str
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const r = await getReturn(session.user, id)
+  const r = await orNotFound(getReturn(session.user, id))
   const net = r.salesReturn.totalPaise - r.salesReturn.deductionPaise
 
   return (

@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { FormSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof productSchema>
 
@@ -66,14 +67,13 @@ export function ProductForm({
 
   async function onSubmit(values: Values) {
     setFormError(null)
-    const res = await fetch(id ? `/api/products/${id}` : '/api/products', {
+    const res = await apiFetch(id ? `/api/products/${id}` : '/api/products', {
       method: id ? 'PATCH' : 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? 'Could not save the product.')
+      setFormError(res.error)
       return
     }
     toast.success(`Product ${id ? 'updated' : 'created'}.`)

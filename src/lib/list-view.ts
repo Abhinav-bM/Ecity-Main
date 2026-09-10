@@ -37,7 +37,24 @@ export function readListView<TKey extends string>(
   const sort = allowed.includes(asked as TKey) ? (asked as TKey) : fallback.sort
   const dir: SortDirection = one('dir') === 'desc' ? 'desc' : one('dir') === 'asc' ? 'asc' : (fallback.dir ?? 'asc')
 
-  return { page: Math.max(1, Number(one('page') ?? '1') || 1), sort, dir }
+  return { page: readPage(one('page')), sort, dir }
+}
+
+/**
+ * A page number that is a real page.
+ *
+ * `Math.max(1, Number(raw) || 1)` - which every list screen used to spell out
+ * for itself - keeps Infinity, because `Number('Infinity') || 1` is Infinity
+ * and Infinity is the larger of the two. That became `offset Infinity` and a
+ * 500 from the driver on every one of those screens. Capped as well as
+ * floored: no list here has a millionth page, and asking for one is a scan,
+ * not a reader.
+ */
+export function readPage(raw: string | string[] | undefined): number {
+  if (Array.isArray(raw)) raw = raw[0]
+  const n = Number(raw ?? '1')
+  if (!Number.isFinite(n)) return 1
+  return Math.min(1_000_000, Math.max(1, Math.trunc(n) || 1))
 }
 
 /**

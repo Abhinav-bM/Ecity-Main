@@ -7,6 +7,7 @@ import { listAccessibleBranches } from '@/server/services/branch.service'
 import { listParties } from '@/server/services/party.service'
 import { DeviceList } from './device-list'
 import type { MainType } from '@/server/db/schema'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +23,7 @@ export default async function DevicesPage({
   if (!hasPermission(session.user, 'inventory.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const filters = {
     search: p.search ?? '',
     mainType: p.mainType as MainType | undefined,

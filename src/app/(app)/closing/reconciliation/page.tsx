@@ -12,8 +12,8 @@ import {
 import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { businessDateFor } from '@/server/services/cash.service'
 import { reconciliationReport } from '@/server/services/closing.service'
+import { shopDayParam } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +34,8 @@ export default async function ReconciliationPage({
   if (!hasPermission(session.user, 'closing.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const businessDate = p.date ?? businessDateFor()
+  // From the address bar, so anything that is not a real day becomes today.
+  const businessDate = shopDayParam(p.date)
   const report = await reconciliationReport(session.user, businessDate)
 
   return (

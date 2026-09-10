@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { BarcodeScanner } from "@/components/barcode-scanner";
 import { MAIN_TYPE_LABEL } from "@/components/main-type-badge";
 import type { MainType } from "@/server/db/schema";
+import { apiFetch } from '@/lib/api'
 
 type Hit = {
   kind: string;
@@ -94,8 +95,8 @@ export function GlobalSearch() {
     const ticket = ++latest.current;
     setLoading(true);
     const timer = setTimeout(() => {
-      void fetch(`/api/search?q=${encodeURIComponent(term)}`)
-        .then((r) => (r.ok ? r.json() : null))
+      void apiFetch(`/api/search?q=${encodeURIComponent(term)}`)
+        .then((r) => (r.ok ? (r.data as Results | null) : null))
         .then((data: Results | null) => {
           if (ticket !== latest.current) return;
           setLoading(false);

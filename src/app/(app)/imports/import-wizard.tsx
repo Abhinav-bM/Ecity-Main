@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 const KINDS = [
   { value: 'PRODUCTS', label: 'Products', needsBranch: false },
@@ -94,7 +95,7 @@ export function ImportWizard({
       content = await file.text()
     }
 
-    const res = await fetch('/api/imports', {
+    const res = await apiFetch('/api/imports', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -107,10 +108,9 @@ export function ImportWizard({
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'That file could not be read.')
+      return setError(res.error)
     }
-    const data = (await res.json()) as Staged & {
+    const data = (res.data) as Staged & {
       fields?: { required: string[]; optional: string[] }
     }
     setStaged(data)
@@ -123,21 +123,20 @@ export function ImportWizard({
     if (!staged) return
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/imports/${staged.id}`, {
+    const res = await apiFetch(`/api/imports/${staged.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'validate', columnMap }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'That did not check out.')
+      return setError(res.error)
     }
-    setChecked((await res.json()) as { valid: number; errors: number })
+    setChecked((res.data) as { valid: number; errors: number })
 
-    const rows = await fetch(`/api/imports/${staged.id}?errorsOnly=true`)
+    const rows = await apiFetch(`/api/imports/${staged.id}?errorsOnly=true`)
     if (rows.ok) {
-      const data = (await rows.json()) as { rows: Row[] }
+      const data = (rows.data) as { rows: Row[] }
       setPreview(data.rows.slice(0, 20))
     }
   }
@@ -146,17 +145,16 @@ export function ImportWizard({
     if (!staged) return
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/imports/${staged.id}`, {
+    const res = await apiFetch(`/api/imports/${staged.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'commit' }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'The import did not finish.')
+      return setError(res.error)
     }
-    const result = (await res.json()) as { committed: number; failed: number }
+    const result = (res.data) as { committed: number; failed: number }
     toast.success(`Imported ${result.committed} row(s).`)
     reset()
     router.refresh()

@@ -16,6 +16,7 @@ import { inspectionQueue } from '@/server/services/return.service'
 import { formatDateShort } from '@/lib/utils'
 import { Pagination } from '@/components/pagination'
 import { InspectButton } from './inspect-button'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ export default async function InspectionQueuePage({
 
   const canInspect = hasPermission(session.user, 'return.inspect')
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const { rows: queue, total } = await inspectionQueue(session.user, session.activeBranchId, {
     page,
     pageSize: PAGE_SIZE,

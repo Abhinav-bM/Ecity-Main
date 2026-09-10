@@ -17,6 +17,7 @@ import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listPurchases } from '@/server/services/purchase.service'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,7 @@ export default async function PurchasesPage({
   if (!hasPermission(session.user, 'purchase.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const { rows, total } = await listPurchases(session.user, {
     search: p.search,
     status: p.status as never,

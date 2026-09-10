@@ -19,6 +19,7 @@ import { AGING_BUCKETS, branchDues, customerDues } from '@/server/services/custo
 import { Pagination } from '@/components/pagination'
 import { formatMoney } from '@/lib/money'
 import { DuesFilters } from './dues-filters'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +56,7 @@ export default async function CustomerDuesPage({
       branchId: p.branchId ? Number(p.branchId) : null,
       overdueOnly: p.overdue === '1',
       search: p.search,
-      page: Math.max(1, Number(p.page ?? '1') || 1),
+      page: readPage(p.page),
       pageSize: PAGE_SIZE,
     }),
     branchDues(session.user, { from, to }, now),

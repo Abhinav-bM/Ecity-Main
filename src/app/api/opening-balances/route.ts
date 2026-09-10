@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { MAX_QUANTITY, rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import {
   openingCash,
@@ -22,10 +22,10 @@ const schema = z.discriminatedUnion('kind', [
     kind: z.literal('cash'),
     asOf,
     branches: z
-      .array(z.object({ branchId: z.coerce.number().int().positive(), amount: z.coerce.number() }))
+      .array(z.object({ branchId: z.coerce.number().int().positive(), amount: rupeeAmount({ min: -100_000_000 }) }))
       .default([]),
     accounts: z
-      .array(z.object({ accountId: z.coerce.number().int().positive(), amount: z.coerce.number() }))
+      .array(z.object({ accountId: z.coerce.number().int().positive(), amount: rupeeAmount({ min: -100_000_000 }) }))
       .default([]),
   }),
   z.object({
@@ -36,7 +36,7 @@ const schema = z.discriminatedUnion('kind', [
       .array(
         z.object({
           productId: z.coerce.number().int().positive(),
-          quantity: z.coerce.number().int().positive(),
+          quantity: z.coerce.number().int().positive().max(MAX_QUANTITY),
         }),
       )
       .min(1, 'Add at least one product.'),
@@ -46,12 +46,12 @@ const schema = z.discriminatedUnion('kind', [
     asOf,
     customers: z
       .array(
-        z.object({ customerId: z.coerce.number().int().positive(), amount: z.coerce.number() }),
+        z.object({ customerId: z.coerce.number().int().positive(), amount: rupeeAmount({ min: -100_000_000 }) }),
       )
       .default([]),
     suppliers: z
       .array(
-        z.object({ supplierId: z.coerce.number().int().positive(), amount: z.coerce.number() }),
+        z.object({ supplierId: z.coerce.number().int().positive(), amount: rupeeAmount({ min: -100_000_000 }) }),
       )
       .default([]),
   }),

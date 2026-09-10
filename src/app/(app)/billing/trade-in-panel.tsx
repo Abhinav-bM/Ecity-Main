@@ -18,9 +18,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AppSelect } from '@/components/app-select'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
-import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
+import { MAIN_TYPES, parseRupees, rupeesToPaise } from '@/lib/validation'
 import { formatMoney } from '@/lib/money'
 import type { useCart } from '@/stores/cart'
+import { apiFetch } from '@/lib/api'
 
 type TradeIn = ReturnType<typeof useCart.getState>['tradeIn']
 
@@ -127,7 +128,7 @@ function TradeInDialog({
     }
 
     setBusy(true)
-    const res = await fetch('/api/trade-ins', {
+    const res = await apiFetch('/api/trade-ins', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -139,24 +140,23 @@ function TradeInDialog({
         colour,
         batteryHealthPercent: battery ? Number(battery) : undefined,
         conditionNotes: notes,
-        estimatedValue: estimated ? Number(estimated) : undefined,
-        agreedValue: Number(agreed) || 0,
+        estimatedValue: estimated ? parseRupees(estimated) : undefined,
+        agreedValue: parseRupees(agreed),
         customerId,
       }),
     })
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not accept the trade-in.')
+      setError(res.error)
       return
     }
-    const { id, deviceId } = (await res.json()) as { id: number; deviceId: number }
+    const { id, deviceId } = (res.data) as { id: number; deviceId: number }
     onAccepted({
       id,
       deviceId,
       identifier: identifier.trim(),
-      valuePaise: rupeesToPaise(Number(agreed) || 0).toString(),
+      valuePaise: rupeesToPaise(parseRupees(agreed)).toString(),
     })
     toast.success('Trade-in accepted and added to stock.')
     onOpenChange(false)

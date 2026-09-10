@@ -101,6 +101,26 @@ export async function createReturn(
   await assertBranchAcceptsTransactions(actor, input.branchId)
 
   return db.transaction(async (tx) => {
+    /*
+     * Lock the bill for the rest of the transaction.
+     *
+     * Everything below decides how much may still come back by READING what
+     * has already come back (`alreadyReturnedQty`). Two returns of the same
+     * line processed at once both read the same "nothing returned yet" under
+     * READ COMMITTED, both pass the check and both write - the goods go back
+     * into stock twice and the customer is refunded twice. A serialised line
+     * is saved by the device's status guard; a counted one had nothing.
+     *
+     * Locking the sale row serialises returns against the same bill, which is
+     * the only ordering that makes the remaining-quantity check mean anything.
+     */
+    const lockedSale = await tx.execute(
+      sql`select id from sale
+          where id = ${input.saleId} and business_id = ${actor.businessId}
+          for update`,
+    )
+    if ((lockedSale as unknown as unknown[]).length === 0) throw notFound('Sale')
+
     const saleRow = (
       await tx
         .select()

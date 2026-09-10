@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 
 export type PickedParty = { id: number; name: string; phone: string | null }
 
@@ -64,9 +65,9 @@ export function PartyPicker({
     const timer = setTimeout(async () => {
       const params = new URLSearchParams({ page: '1', pageSize: '20' })
       if (query.trim()) params.set('search', query.trim())
-      const res = await fetch(`/api/${kind}s?${params}`)
+      const res = await apiFetch(`/api/${kind}s?${params}`)
       if (cancelled) return
-      const data = res.ok ? ((await res.json()) as { rows?: PickedParty[] }) : null
+      const data = res.ok ? ((res.data) as { rows?: PickedParty[] }) : null
       setRows(data?.rows ?? [])
       setLoading(false)
     }, 150)

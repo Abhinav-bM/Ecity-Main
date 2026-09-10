@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getBranch } from '@/server/services/branch.service'
@@ -16,11 +17,11 @@ export default async function EditBranchPage({ params }: { params: Promise<{ id:
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [branch, users, business] = await Promise.all([
+  const [branch, users, business] = await orNotFound(Promise.all([
     getBranch(session.user, id),
     listUsers(session.user),
     getBusiness(session.user),
-  ])
+  ]))
 
   return (
     <BranchForm

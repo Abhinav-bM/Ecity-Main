@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 /**
  * PRD FR-38.3. For a device the other system bills: stock drops now, and the
@@ -31,15 +32,14 @@ export function SoldExternallyButton({ deviceId }: { deviceId: number }) {
   async function mark() {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/devices/${deviceId}/sold-externally`, {
+    const res = await apiFetch(`/api/devices/${deviceId}/sold-externally`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ note }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not mark this device.')
+      setError(res.error)
       return
     }
     toast.success('Marked sold in the other system.')

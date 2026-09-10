@@ -3,6 +3,7 @@ import { PartyList, type PartyRow } from '@/components/party-list'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listParties } from '@/server/services/party.service'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ export default async function SuppliersPage({
   if (!hasPermission(session.user, 'supplier.view')) redirect('/dashboard')
 
   const params = await searchParams
-  const page = Math.max(1, Number(params.page ?? '1') || 1)
+  const page = readPage(params.page)
   const search = params.search ?? ''
   const includeInactive = params.includeInactive === '1'
 

@@ -17,6 +17,7 @@ import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listTransfers, type TransferStatus } from '@/server/services/transfer.service'
 import { StatusFilter } from './status-filter'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,7 @@ export default async function TransfersPage({
   if (!hasPermission(session.user, 'transfer.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const status = p.status as TransferStatus | undefined
 
   const { rows, total } = await listTransfers(session.user, {

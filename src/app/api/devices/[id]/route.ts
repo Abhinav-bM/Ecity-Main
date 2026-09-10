@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { getDevice, updateDevice } from '@/server/services/device.service'
-import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
+import { MAIN_TYPES, rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { AppError, route } from '@/server/http'
 
-const money = z.union([z.coerce.number().min(0), z.literal('')]).optional()
+const money = z.union([rupeeAmount(), z.literal('')]).optional()
 const text = (max: number) => z.union([z.string().trim().max(max), z.literal('')]).optional()
 
 const schema = z.object({

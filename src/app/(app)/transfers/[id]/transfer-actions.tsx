@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 type Item = {
   id: number
@@ -65,15 +66,14 @@ export function TransferActions({
   async function act(body: Record<string, unknown>, done: string) {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/transfers/${transferId}`, {
+    const res = await apiFetch(`/api/transfers/${transferId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'That did not work.')
+      setError(res.error)
       return false
     }
     toast.success(done)

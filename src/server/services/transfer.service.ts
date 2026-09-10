@@ -243,7 +243,26 @@ function assertAtBranch(actor: AuthUser, branchId: number, doing: string) {
   }
 }
 
+/**
+ * The transfer, locked for the rest of the transaction.
+ *
+ * Every step - approve, dispatch, receive, cancel - reads the status, checks
+ * the transition is legal, and then writes. Without the lock two of those can
+ * read the same status and both find their move legal: a dispatch and a cancel
+ * arriving together would each move the same stock, and the row would end up
+ * in whichever state committed last. Serialising them here is what makes
+ * `assertTransition` an actual guarantee rather than a hopeful check.
+ *
+ * Every caller already runs inside a transaction and goes through this
+ * function, so this is the single place it needs to happen.
+ */
 async function loadForChange(tx: DbOrTx, actor: AuthUser, id: number) {
+  await tx.execute(
+    sql`select id from stock_transfer
+        where id = ${id} and business_id = ${actor.businessId}
+        for update`,
+  )
+
   const row = (
     await tx
       .select()

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getDevice } from '@/server/services/device.service'
@@ -20,12 +21,12 @@ export default async function EditDevicePage({ params }: { params: Promise<{ id:
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [detail, taxRates, business, suppliers] = await Promise.all([
+  const [detail, taxRates, business, suppliers] = await orNotFound(Promise.all([
     getDevice(session.user, id),
     listTaxRates(session.user),
     getBusiness(session.user),
     listParties(session.user, 'supplier', { page: 1, pageSize: 500 }),
-  ])
+  ]))
   const d = detail.device
 
   return (

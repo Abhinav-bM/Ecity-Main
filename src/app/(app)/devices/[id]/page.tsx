@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,18 +28,18 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
   if (!Number.isInteger(id) || id <= 0) notFound()
 
   const { device, productName, brandName, branchName, supplierName, identifiers } =
-    await getDevice(session.user, id)
+    await orNotFound(getDevice(session.user, id))
   const showCost = hasPermission(session.user, 'inventory.view_cost')
 
   /*
    * M9 FR-30.5, FR-30.6. getDevice already proved the caller may see this
    * device, so these two run together rather than one after the other.
    */
-  const [timeline, commercials, position] = await Promise.all([
+  const [timeline, commercials, position] = await orNotFound(Promise.all([
     deviceTimeline(session.user, id),
     deviceCommercials(id),
     devicePosition(id),
-  ])
+  ]))
   const soldFor = commercials.at(-1) ?? null
 
   return (

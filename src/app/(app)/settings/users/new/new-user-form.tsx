@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof createUserSchema>
 
@@ -48,14 +49,13 @@ export function NewUserForm({
 
   async function onSubmit(values: Values) {
     setFormError(null)
-    const res = await fetch('/api/users', {
+    const res = await apiFetch('/api/users', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? 'Could not create the user.')
+      setFormError(res.error)
       return
     }
     toast.success('User created. They must change their password at first sign-in.')

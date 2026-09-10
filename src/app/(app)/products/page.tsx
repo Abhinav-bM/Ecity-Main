@@ -17,6 +17,8 @@ import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listProducts } from '@/server/services/product.service'
 import { ProductFilters } from './product-filters'
+import { ProductStatusButton } from './product-status'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +34,7 @@ export default async function ProductsPage({
   if (!hasPermission(session.user, 'product.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const search = p.search ?? ''
   const { rows, total } = await listProducts(session.user, {
     search,
@@ -85,7 +87,10 @@ export default async function ProductsPage({
                       {[r.brandName, r.categoryName].filter(Boolean).join(' · ')}
                     </p>
                   </div>
-                  {r.isSerialised ? <Badge variant="outline">IMEI</Badge> : null}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {!r.isActive ? <Badge variant="muted">Inactive</Badge> : null}
+                    {r.isSerialised ? <Badge variant="outline">IMEI</Badge> : null}
+                  </div>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">
@@ -96,6 +101,11 @@ export default async function ProductsPage({
                   </span>
                   <span className="tabular">{formatMoney(r.sellingPricePaise)}</span>
                 </div>
+                {canManage ? (
+                  <div className="mt-2 flex justify-end border-t pt-2">
+                    <ProductStatusButton id={r.id} name={r.name} isActive={r.isActive} />
+                  </div>
+                ) : null}
               </Card>
             ))}
           </div>
@@ -111,6 +121,11 @@ export default async function ProductsPage({
                   <TableHead className="text-right">Stock</TableHead>
                   {showCost ? <TableHead className="text-right">Cost</TableHead> : null}
                   <TableHead className="text-right">Price</TableHead>
+                  {canManage ? (
+                    <TableHead className="text-right">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -152,6 +167,11 @@ export default async function ProductsPage({
                     <TableCell className="tabular text-right">
                       {formatMoney(r.sellingPricePaise)}
                     </TableCell>
+                    {canManage ? (
+                      <TableCell className="py-1 text-right">
+                        <ProductStatusButton id={r.id} name={r.name} isActive={r.isActive} />
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>

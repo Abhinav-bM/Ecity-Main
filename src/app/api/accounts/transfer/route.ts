@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { transfer } from '@/server/services/account.service'
 import { route } from '@/server/http'
@@ -7,7 +7,7 @@ import { route } from '@/server/http'
 const schema = z.object({
   fromAccountId: z.coerce.number().int().positive(),
   toAccountId: z.coerce.number().int().positive(),
-  amount: z.coerce.number().positive('A transfer must be more than zero.'),
+  amount: rupeeAmount({ min: 0.01, minMessage: 'A transfer must be more than zero.' }),
   businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   note: z.string().trim().max(300).optional(),
 })

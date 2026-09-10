@@ -46,6 +46,18 @@ export function parseShopDate(value: string | undefined | null): Date | undefine
   return shopDateString(at) === value ? at : undefined
 }
 
+/**
+ * A calendar day from a URL as a yyyy-mm-dd string, falling back to today.
+ *
+ * The string form of `parseShopDate`, for the screens that pass a business
+ * date straight to a query and print it in a heading. `?date=garbage` used to
+ * reach a `date` column and be rejected by the driver, which killed the cash
+ * drawer, the closing screen and the reconciliation report on a mistyped link.
+ */
+export function shopDayParam(value: string | undefined | null): string {
+  return parseShopDate(value) ? (value as string) : shopDateString()
+}
+
 /** The day after `value`, so an inclusive "to" covers the whole of it. */
 export function parseShopDateEnd(value: string | undefined | null): Date | undefined {
   const at = parseShopDate(value)

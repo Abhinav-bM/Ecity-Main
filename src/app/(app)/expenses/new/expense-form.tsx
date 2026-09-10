@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 /** PRD FR-10.2. Everything an expense needs, and nothing it does not. */
 export function ExpenseForm({
@@ -60,7 +61,7 @@ export function ExpenseForm({
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount.')
 
     setBusy(true)
-    const res = await fetch('/api/expenses', {
+    const res = await apiFetch('/api/expenses', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -77,8 +78,7 @@ export function ExpenseForm({
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not record it.')
+      setError(res.error)
       return
     }
     toast.success('Expense recorded.')

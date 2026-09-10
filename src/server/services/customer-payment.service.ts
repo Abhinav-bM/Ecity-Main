@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db, type DbOrTx } from '@/server/db'
 import {
   branch,
@@ -125,6 +125,17 @@ export async function recordCustomerPayment(
     let allocated = 0n
     for (const a of allocations) {
       if (a.amountPaise <= 0n) continue
+
+      /*
+       * Lock the invoice before reading what it still owes.
+       *
+       * `saleReceivedPaise` below is a read, and the check that follows only
+       * holds if nothing else allocates against this bill in between. Two
+       * collections taken at two tills at the same moment would otherwise both
+       * see the full amount outstanding and both allocate it - the invoice
+       * ends up paid twice over and the customer's statement stops adding up.
+       */
+      await tx.execute(sql`select id from sale where id = ${a.saleId} for update`)
 
       const target = (
         await tx
@@ -295,10 +306,15 @@ export async function voidCustomerPayment(
   if (payment.voidedAt) throw conflict('This receipt is already voided.')
 
   await db.transaction(async (tx) => {
-    await tx
+    // The UPDATE is the check: two voids of the same receipt would otherwise
+    // both post a REVERSAL and credit the customer twice. See the supplier
+    // side for the same guard.
+    const voided = await tx
       .update(customerPayment)
       .set({ voidedAt: new Date(), voidReason: reason.trim() })
-      .where(eq(customerPayment.id, id))
+      .where(and(eq(customerPayment.id, id), isNull(customerPayment.voidedAt)))
+      .returning({ id: customerPayment.id })
+    if (!voided[0]) throw conflict('This receipt is already voided.')
 
     // The ledger is append-only, so the reversal is a new entry rather than
     // an edit. The allocations stay: they are what the receipt claimed, and

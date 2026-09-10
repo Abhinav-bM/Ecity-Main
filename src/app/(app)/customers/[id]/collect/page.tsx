@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getParty } from '@/server/services/party.service'
@@ -21,13 +22,13 @@ export default async function CollectPage({ params }: { params: Promise<{ id: st
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [party, openSales, branches, methods, balance] = await Promise.all([
+  const [party, openSales, branches, methods, balance] = await orNotFound(Promise.all([
     getParty(session.user, 'customer', id),
     openSalesForCustomer(session.user, id),
     listAccessibleBranches(session.user),
     listPaymentMethods(session.user),
     customerBalance(id),
-  ])
+  ]))
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

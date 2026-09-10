@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Copy, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
+import { MAIN_TYPES, parseQuantity, parseRupees, rupeesToPaise } from '@/lib/validation'
 import { formatMoney } from '@/lib/money'
 import { shopDateString } from '@/lib/date'
 import { FormError } from '@/components/form-error'
@@ -21,6 +21,7 @@ import { NewPartyDialog, splitTypedTerm } from '@/components/new-party-dialog'
 import { BarcodeScanner } from '@/components/barcode-scanner'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 /**
  * One handset on a serialised line.
@@ -146,7 +147,7 @@ export function PurchaseForm({
         // The identifier grid always has exactly one slot per unit, so the
         // count can never silently disagree with the quantity.
         if (next.product?.isSerialised) {
-          const want = Math.max(1, Math.min(999, Number(next.quantity) || 1))
+          const want = parseQuantity(next.quantity, { max: 999 })
           const have = next.units.length
           if (want > have) {
             next.units = [...next.units, ...Array.from({ length: want - have }, newUnit)]
@@ -167,9 +168,11 @@ export function PurchaseForm({
    */
   const totals = lines.reduce(
     (acc, l) => {
-      const qty = BigInt(Math.trunc(Number(l.quantity) || 0))
-      const cost = rupeesToPaise(Number(l.unitCost) || 0)
-      const disc = rupeesToPaise(Number(l.discount) || 0)
+      // Sanitised before they reach BigInt: a half-typed "1.5" or a pasted
+      // "1e400" in one of these boxes would otherwise throw inside a render.
+      const qty = BigInt(parseQuantity(l.quantity, { min: 0 }))
+      const cost = rupeesToPaise(parseRupees(l.unitCost))
+      const disc = rupeesToPaise(parseRupees(l.discount))
       return { subtotal: acc.subtotal + cost * qty, discount: acc.discount + disc }
     },
     { subtotal: 0n, discount: 0n },
@@ -188,7 +191,7 @@ export function PurchaseForm({
       }
       if (product.isSerialised) {
         const filled = l.units.filter((u) => u.identifier.trim()).length
-        const qty = Number(l.quantity) || 0
+        const qty = parseQuantity(l.quantity, { min: 0 })
         if (filled !== qty) {
           const what = product.identifierType === 'SERIAL' ? 'serial number' : 'IMEI'
           setFormError(
@@ -200,7 +203,7 @@ export function PurchaseForm({
     }
 
     setSaving(true)
-    const res = await fetch('/api/purchases', {
+    const res = await apiFetch('/api/purchases', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -251,11 +254,10 @@ export function PurchaseForm({
     setSaving(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? 'Could not save the purchase.')
+      setFormError(res.error)
       return
     }
-    const created = (await res.json()) as { purchaseNumber: string; id: number }
+    const created = (res.data) as { purchaseNumber: string; id: number }
     toast.success(`Purchase ${created.purchaseNumber} recorded.`)
     router.push(`/purchases/${created.id}`)
     router.refresh()

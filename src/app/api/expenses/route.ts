@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { createExpense, listExpenses } from '@/server/services/expense.service'
 import { route } from '@/server/http'
@@ -11,7 +11,7 @@ const schema = z.object({
   categoryId: z.coerce.number().int().positive(),
   paymentMethodId: z.coerce.number().int().positive(),
   accountId: z.coerce.number().int().positive().nullable().optional(),
-  amount: z.coerce.number().positive('An expense must be more than zero.'),
+  amount: rupeeAmount({ min: 0.01, minMessage: 'An expense must be more than zero.' }),
   businessDate: isoDate.optional(),
   description: z.string().trim().max(300).optional(),
   reference: z.string().trim().max(80).optional(),

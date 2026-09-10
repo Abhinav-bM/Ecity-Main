@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { apiFetch } from '@/lib/api'
 
 export type PartyRow = {
   id: number
@@ -68,14 +69,13 @@ export function PartyList({
 
   async function toggleStatus(row: PartyRow) {
     const status = row.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    const res = await fetch(`/api/${plural}/${row.id}/status`, {
+    const res = await apiFetch(`/api/${plural}/${row.id}/status`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ status }),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not update.')
+      toast.error(res.error)
       return
     }
     toast.success(`${row.name} ${status === 'ACTIVE' ? 'reactivated' : 'deactivated'}.`)

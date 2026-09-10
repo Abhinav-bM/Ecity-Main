@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -19,10 +20,10 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [detail, business] = await Promise.all([
+  const [detail, business] = await orNotFound(Promise.all([
     getCustomerPayment(session.user, id),
     getBusiness(session.user),
-  ])
+  ]))
   const balance = await customerBalance(detail.payment.customerId)
 
   return (

@@ -15,6 +15,7 @@ import { FormError } from '@/components/form-error'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { PickedParty } from '@/components/party-picker'
+import { apiFetch } from '@/lib/api'
 
 /**
  * What was typed into the search box, sorted into the right field.
@@ -73,19 +74,18 @@ export function NewPartyDialog({
   async function create() {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/${kind}s`, {
+    const res = await apiFetch(`/api/${kind}s`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, phone }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
       // Duplicate phone is the common one, and the message names who has it.
-      setError(data.error ?? `Could not create the ${kind}.`)
+      setError(res.error)
       return
     }
-    const { id } = (await res.json()) as { id: number }
+    const { id } = (res.data) as { id: number }
     const created = { id, name: name.trim(), phone: phone.trim() || null }
     onCreated(created)
     toast.success(successMessage?.(created.name) ?? `${created.name} added.`)

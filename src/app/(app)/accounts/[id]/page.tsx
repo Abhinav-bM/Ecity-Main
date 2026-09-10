@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -16,6 +17,7 @@ import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { accountLedger } from '@/server/services/cash.service'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,11 +51,10 @@ export default async function AccountPage({
   if (!Number.isInteger(id) || id <= 0) notFound()
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
-  const { account, rows, total } = await accountLedger(session.user, id, {
-    page,
-    pageSize: PAGE_SIZE,
-  })
+  const page = readPage(p.page)
+  const { account, rows, total } = await orNotFound(
+    accountLedger(session.user, id, { page, pageSize: PAGE_SIZE }),
+  )
 
   return (
     <div className="space-y-4">

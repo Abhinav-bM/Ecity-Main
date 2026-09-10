@@ -15,6 +15,7 @@ import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listClosings } from '@/server/services/closing.service'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +32,7 @@ export default async function ClosingHistoryPage({
   if (!hasPermission(session.user, 'closing.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const { rows, total } = await listClosings(session.user, {
     branchId: p.branchId ? Number(p.branchId) : undefined,
     page,

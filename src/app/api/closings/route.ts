@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { closeDay, listClosings } from '@/server/services/closing.service'
 import { route } from '@/server/http'
@@ -9,9 +9,9 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a yyyy-mm-dd date.'
 const schema = z.object({
   branchId: z.coerce.number().int().positive(),
   businessDate: isoDate,
-  countedCash: z.coerce.number().min(0, 'Counted cash cannot be negative.'),
+  countedCash: rupeeAmount({ minMessage: 'Counted cash cannot be negative.' }),
   /** FR-13.2. Counted per non-cash method, keyed by payment method id. */
-  countedByMethod: z.record(z.string(), z.coerce.number()).optional(),
+  countedByMethod: z.record(z.string(), rupeeAmount()).optional(),
   notes: z.string().trim().max(500).optional(),
   externalFeedImported: z.coerce.boolean().optional(),
   overrideReason: z.string().trim().max(300).optional(),

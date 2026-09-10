@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { AppSelect } from '@/components/app-select'
 import { MainTypeBadge } from '@/components/main-type-badge'
 import type { MainType } from '@/server/db/schema'
+import { apiFetch } from '@/lib/api'
 
 type Line = {
   key: string
@@ -69,8 +70,8 @@ export function TransferForm({
     const timer = setTimeout(() => {
       const q = new URLSearchParams({ branchId: fromId })
       if (search.trim()) q.set('search', search.trim())
-      void fetch(`/api/transfers/sendable?${q.toString()}`)
-        .then((r) => (r.ok ? r.json() : { devices: [], accessories: [] }))
+      void apiFetch(`/api/transfers/sendable?${q.toString()}`)
+        .then((r) => (r.ok ? (r.data as Sendable) : { devices: [], accessories: [] }))
         .then((data: Sendable) => {
           if (!cancelled) setStock(data)
         })
@@ -119,7 +120,7 @@ export function TransferForm({
     if (lines.length === 0) return setError('Add something to send.')
 
     setBusy(true)
-    const res = await fetch('/api/transfers', {
+    const res = await apiFetch('/api/transfers', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -136,10 +137,9 @@ export function TransferForm({
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not request the transfer.')
+      return setError(res.error)
     }
-    const saved = (await res.json()) as { id: number; transferNumber: string }
+    const saved = (res.data) as { id: number; transferNumber: string }
     toast.success(`${saved.transferNumber} requested.`)
     router.push(`/transfers/${saved.id}`)
     router.refresh()

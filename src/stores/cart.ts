@@ -146,11 +146,23 @@ export const useCart = create<CartState>()(
     {
       name: 'ecity-cart',
       version: 1,
-      // Only what a half-built bill needs to survive a refresh.
+      /*
+       * Everything a half-built bill needs to survive a refresh.
+       *
+       * The trade-in, the due date and the credit note used to be left out.
+       * That is worse than not persisting at all: the reload brought the cart
+       * back but not the handset taken in part-exchange, so the bill was
+       * completed at full price, the customer was charged for a phone they had
+       * already handed over, and the trade-in row was left unattached - free to
+       * be put against somebody else's bill.
+       */
       partialize: (s) => ({
         branchId: s.branchId,
         customerId: s.customerId,
         customerName: s.customerName,
+        tradeIn: s.tradeIn,
+        dueDate: s.dueDate,
+        creditNotes: s.creditNotes,
         lines: s.lines,
         payments: s.payments,
         notes: s.notes,

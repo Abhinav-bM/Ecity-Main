@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/utils";
 import { formatMoney } from "@/lib/money";
 import { MAIN_TYPE_LABEL } from "@/components/main-type-badge";
 import type { MainType } from "@/server/db/schema";
+import { apiBlob } from '@/lib/api'
 
 export type InvoiceData = {
   invoiceNumber: string;
@@ -461,9 +462,9 @@ function ShareButton({
   async function share() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/sales/${saleId}/pdf`);
-      if (!res.ok) throw new Error("Could not build the PDF.");
-      const blob = await res.blob();
+      const res = await apiBlob(`/api/sales/${saleId}/pdf`);
+      if (!res.ok) throw new Error(res.error);
+      const blob = res.blob;
       const file = new File(
         [blob],
         `${invoiceNumber.replace(/[^A-Za-z0-9._-]/g, "-")}.pdf`,

@@ -11,12 +11,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { apiFetch } from '@/lib/api'
 
 export function UserMenu({ name, email }: { name: string; email: string }) {
   const router = useRouter()
 
   async function signOut() {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    await apiFetch('/api/auth/logout', { method: 'POST' })
     router.replace('/login')
     router.refresh()
   }

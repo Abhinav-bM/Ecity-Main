@@ -13,9 +13,10 @@ import { formatMoney } from '@/lib/money'
 import { formatDateTime } from '@/lib/utils'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
-import { businessDateFor, getDrawerDay } from '@/server/services/cash.service'
+import { getDrawerDay } from '@/server/services/cash.service'
 import { listBranches } from '@/server/services/branch.service'
 import { DrawerControls } from './drawer-controls'
+import { shopDayParam } from '@/lib/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +49,8 @@ export default async function CashDrawerPage({
     return <p className="p-6 text-sm text-muted-foreground">No branch to show.</p>
   }
 
-  const businessDate = p.date ?? businessDateFor()
+  // From the address bar, so anything that is not a real day becomes today.
+  const businessDate = shopDayParam(p.date)
   const day = await getDrawerDay(session.user, branchId, businessDate)
 
   return (

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -25,10 +26,10 @@ export default async function SalePage({ params }: { params: Promise<{ id: strin
 
   const canCollect = hasPermission(session.user, 'customer_payment.manage')
 
-  const [detail, invoice] = await Promise.all([
+  const [detail, invoice] = await orNotFound(Promise.all([
     getSale(session.user, id),
     getInvoiceData(session.user, id),
-  ])
+  ]))
 
   const overdue =
     detail.sale.dueDate != null && detail.sale.dueDate.getTime() < Date.now()

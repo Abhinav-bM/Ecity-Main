@@ -15,7 +15,7 @@ import {
   type MainType,
 } from '@/server/db/schema'
 import { writeAudit, type AuditContext } from '@/server/db/audit'
-import { AppError, conflict, notFound } from '@/server/http'
+import { AppError, conflict, isUniqueViolation, notFound } from '@/server/http'
 import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permissions'
 import { computeBill, computeLine } from '@/lib/tax'
 import {
@@ -122,17 +122,8 @@ export async function createSale(
   // Idempotency: a retry after a dropped connection returns the original bill
   // rather than creating a second one (PRD NFR §9.3).
   if (input.idempotencyKey) {
-    const existing = await db
-      .select({ id: sale.id, invoiceNumber: sale.invoiceNumber })
-      .from(sale)
-      .where(
-        and(
-          eq(sale.businessId, actor.businessId),
-          eq(sale.idempotencyKey, input.idempotencyKey),
-        ),
-      )
-      .limit(1)
-    if (existing[0]) return { ...existing[0], reused: true }
+    const existing = await findByIdempotencyKey(actor.businessId, input.idempotencyKey)
+    if (existing) return { ...existing, reused: true }
   }
 
   const settings = (
@@ -576,7 +567,32 @@ export async function createSale(
     )
 
     return { id: created.id, invoiceNumber, reused: false }
+  }).catch(async (error: unknown) => {
+    /*
+     * Two tills - or one till and its own retry - sent the same key at the
+     * same moment, so both got past the check above and the unique index
+     * rejected the second. The bill it lost to is the answer it wanted: the
+     * customer is billed once, and the browser that retried gets the invoice
+     * rather than "something went wrong" and a reason to try a third time.
+     */
+    if (input.idempotencyKey && isUniqueViolation(error, 'sale_idempotency_uq')) {
+      const existing = await findByIdempotencyKey(actor.businessId, input.idempotencyKey)
+      if (existing) return { ...existing, reused: true }
+    }
+    throw error
   })
+}
+
+async function findByIdempotencyKey(
+  businessId: number,
+  idempotencyKey: string,
+): Promise<{ id: number; invoiceNumber: string } | null> {
+  const rows = await db
+    .select({ id: sale.id, invoiceNumber: sale.invoiceNumber })
+    .from(sale)
+    .where(and(eq(sale.businessId, businessId), eq(sale.idempotencyKey, idempotencyKey)))
+    .limit(1)
+  return rows[0] ?? null
 }
 
 /* ------------------------------------------------------------- reading --- */

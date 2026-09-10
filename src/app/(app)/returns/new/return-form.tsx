@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input'
 import { AppSelect } from '@/components/app-select'
 import { MainTypeBadge } from '@/components/main-type-badge'
 import { formatMoney } from '@/lib/money'
-import { rupeesToPaise } from '@/lib/validation'
+import { parseQuantity, parseRupees, rupeesToPaise } from '@/lib/validation'
 import type { MainType } from '@/server/db/schema'
+import { apiFetch } from '@/lib/api'
 
 export type ReturnableLine = {
   id: number
@@ -71,7 +72,7 @@ export function ReturnForm({
   const chosen = useMemo(
     () =>
       returnable
-        .map((l) => ({ line: l, n: Number(qty[l.id] ?? 0) || 0 }))
+        .map((l) => ({ line: l, n: parseQuantity(qty[l.id] ?? 0, { min: 0 }) }))
         .filter((x) => x.n > 0),
     [qty, returnable],
   )
@@ -81,7 +82,7 @@ export function ReturnForm({
     (sum, { line, n }) => sum + (line.lineTotalPaise * BigInt(n)) / BigInt(line.quantity),
     0n,
   )
-  const deductionPaise = rupeesToPaise(Number(deduction) || 0)
+  const deductionPaise = rupeesToPaise(parseRupees(deduction))
   const refundable = goodsValue - deductionPaise
 
   async function submit() {
@@ -96,7 +97,7 @@ export function ReturnForm({
     }
 
     setBusy(true)
-    const res = await fetch('/api/returns', {
+    const res = await apiFetch('/api/returns', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -104,7 +105,7 @@ export function ReturnForm({
         branchId: Number(branchId),
         lines: chosen.map(({ line, n }) => ({ saleItemId: line.id, quantity: n })),
         reason,
-        deduction: Number(deduction) || 0,
+        deduction: parseRupees(deduction),
         refundMethod,
         paymentMethodId: refundMethod === 'PAYMENT_METHOD' ? Number(methodId) : undefined,
       }),
@@ -112,11 +113,10 @@ export function ReturnForm({
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not record the return.')
+      setError(res.error)
       return
     }
-    const { id, returnNumber } = (await res.json()) as { id: number; returnNumber: string }
+    const { id, returnNumber } = (res.data) as { id: number; returnNumber: string }
     toast.success(`Return ${returnNumber} recorded.`)
     router.push(`/returns/${id}`)
   }

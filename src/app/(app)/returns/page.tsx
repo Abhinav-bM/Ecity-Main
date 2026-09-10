@@ -17,6 +17,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { listReturns } from '@/server/services/return.service'
 import { formatMoney } from '@/lib/money'
 import { formatDateShort } from '@/lib/utils'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export default async function ReturnsPage({
   if (!hasPermission(session.user, 'return.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const { rows, total } = await listReturns(session.user, {
     search: p.search,
     page,

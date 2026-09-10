@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 type Named = { id: number; name: string }
 
@@ -78,7 +79,7 @@ function NewAccountDialog({
     setError(null)
     if (!name.trim()) return setError('Give the account a name.')
     setBusy(true)
-    const res = await fetch('/api/accounts', {
+    const res = await apiFetch('/api/accounts', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -92,8 +93,7 @@ function NewAccountDialog({
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not add it.')
+      return setError(res.error)
     }
     onOpenChange(false)
     setName('')
@@ -198,7 +198,7 @@ function TransferDialog({
     const value = Number(amount)
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount.')
     setBusy(true)
-    const res = await fetch('/api/accounts/transfer', {
+    const res = await apiFetch('/api/accounts/transfer', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -210,8 +210,7 @@ function TransferDialog({
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not transfer it.')
+      return setError(res.error)
     }
     onOpenChange(false)
     setAmount('')
@@ -298,15 +297,14 @@ function ReconcileDialog({
     const value = Number(balance)
     if (!Number.isFinite(value)) return setError('Enter the statement balance.')
     setBusy(true)
-    const res = await fetch(`/api/accounts/${accountId}`, {
+    const res = await apiFetch(`/api/accounts/${accountId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'reconcile', statementBalance: value }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not reconcile.')
+      return setError(res.error)
     }
     onOpenChange(false)
     setBalance('')

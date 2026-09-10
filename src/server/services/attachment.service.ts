@@ -70,21 +70,39 @@ export async function uploadAttachment(
   const body = Buffer.from(await input.file.arrayBuffer())
   await storage().put(key, body, input.file.type)
 
-  const created = (
-    await db
-      .insert(attachment)
-      .values({
-        businessId: actor.businessId,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        fileName: input.file.name.slice(0, 200),
-        contentType: input.file.type,
-        sizeBytes: input.file.size,
-        storageKey: key,
-        uploadedBy: actor.id,
-      })
-      .returning()
-  )[0]!
+  /*
+   * The object is in the bucket before the row that points at it exists, and
+   * it has to be that way round - a row referring to a file that failed to
+   * upload is worse than a file nothing refers to.
+   *
+   * But a failure here (a lost connection, a constraint) used to leave that
+   * object behind for ever: nothing references it, nothing lists it, and
+   * storage is charged by the gigabyte. So the upload is undone before the
+   * error goes on its way.
+   */
+  let created
+  try {
+    created = (
+      await db
+        .insert(attachment)
+        .values({
+          businessId: actor.businessId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          fileName: input.file.name.slice(0, 200),
+          contentType: input.file.type,
+          sizeBytes: input.file.size,
+          storageKey: key,
+          uploadedBy: actor.id,
+        })
+        .returning()
+    )[0]!
+  } catch (error) {
+    // Best effort: if the tidy-up also fails there is nothing further to try,
+    // and the original error is the one worth reporting.
+    await storage().delete(key).catch(() => undefined)
+    throw error
+  }
 
   await writeAudit(ctx, {
     action: 'CREATE',

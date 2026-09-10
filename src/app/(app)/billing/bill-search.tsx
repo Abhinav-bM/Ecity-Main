@@ -9,6 +9,7 @@ import { BarcodeScanner } from '@/components/barcode-scanner'
 import { MainTypeBadge } from '@/components/main-type-badge'
 import { formatMoney } from '@/lib/money'
 import type { MainType } from '@/server/db/schema'
+import { apiFetch } from '@/lib/api'
 
 export type DeviceHit = {
   deviceId: number
@@ -53,25 +54,37 @@ export function BillSearch({
   const [devices, setDevices] = useState<DeviceHit[]>([])
   const [products, setProducts] = useState<ProductHit[]>([])
   const [loading, setLoading] = useState(false)
+  /*
+   * A search that failed is not the same as a search that found nothing, and
+   * at a till the difference matters: "no results" reads as "we do not stock
+   * it", and the customer is turned away for a phone sitting on the shelf.
+   */
+  const [searchError, setSearchError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (query.trim().length < 2) {
       setDevices([])
       setProducts([])
+      setSearchError(null)
       return
     }
     let cancelled = false
     setLoading(true)
     const timer = setTimeout(async () => {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/billing/search?q=${encodeURIComponent(query.trim())}&branchId=${branchId}`,
       )
       if (cancelled) return
       if (res.ok) {
-        const data = (await res.json()) as { devices: DeviceHit[]; products: ProductHit[] }
+        const data = (res.data) as { devices: DeviceHit[]; products: ProductHit[] }
         setDevices(data.devices)
         setProducts(data.products)
+        setSearchError(null)
+      } else {
+        setDevices([])
+        setProducts([])
+        setSearchError(res.error)
       }
       setLoading(false)
     }, 120)
@@ -128,6 +141,12 @@ export function BillSearch({
           }}
         />
       </div>
+
+      {searchError ? (
+        <Card className="p-3 text-sm text-destructive" role="alert">
+          {searchError}
+        </Card>
+      ) : null}
 
       {loading || devices.length > 0 || products.length > 0 ? (
         <Card className="max-h-80 divide-y overflow-y-auto" data-testid="bill-search-results">

@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table'
 import { SortableHead, SortStrip } from '@/components/sortable-head'
 import type { BranchListItem } from '@/server/services/branch.service'
+import { apiFetch } from '@/lib/api'
 
 export function BranchList({
   branches,
@@ -36,14 +37,13 @@ export function BranchList({
 
   async function toggle(b: BranchListItem) {
     const status = b.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    const res = await fetch(`/api/branches/${b.id}/status`, {
+    const res = await apiFetch(`/api/branches/${b.id}/status`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ status }),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not update the branch.')
+      toast.error(res.error)
       return
     }
     toast.success(`${b.name} ${status === 'ACTIVE' ? 'reactivated' : 'deactivated'}.`)

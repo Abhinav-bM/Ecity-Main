@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Attachments } from '@/components/attachments'
@@ -21,10 +22,10 @@ export default async function ExpensePage({ params }: { params: Promise<{ id: st
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [expense, files] = await Promise.all([
+  const [expense, files] = await orNotFound(Promise.all([
     getExpense(session.user, id),
     listAttachments(session.user, 'expense', id),
-  ])
+  ]))
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

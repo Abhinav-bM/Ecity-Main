@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 /**
  * An expense is voided, never deleted. The money is posted back to the drawer
@@ -28,15 +29,14 @@ export function VoidExpenseButton({ id, amount }: { id: number; amount: string }
   async function submit() {
     if (!reason.trim()) return
     setBusy(true)
-    const res = await fetch(`/api/expenses/${id}`, {
+    const res = await apiFetch(`/api/expenses/${id}`, {
       method: 'DELETE',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not void it.')
+      toast.error(res.error)
       return
     }
     setOpen(false)

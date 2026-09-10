@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 type Brand = { id: number; name: string; isActive: boolean; productCount: number }
 type Category = Brand & {
@@ -144,14 +145,13 @@ function List({
 
   async function save(id: number, body: Record<string, unknown>) {
     setError(null)
-    const res = await fetch(`/api/${kind === 'brand' ? 'brands' : 'categories'}/${id}`, {
+    const res = await apiFetch(`/api/${kind === 'brand' ? 'brands' : 'categories'}/${id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'That did not work.')
+      setError(res.error)
       return
     }
     setEditing(null)
@@ -265,15 +265,14 @@ function NewBrand() {
     setError(null)
     if (!name.trim()) return setError('Give the brand a name.')
     setBusy(true)
-    const res = await fetch('/api/brands', {
+    const res = await apiFetch('/api/brands', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not add it.')
+      return setError(res.error)
     }
     setName('')
     toast.success('Brand added.')
@@ -380,15 +379,14 @@ function NewCategory() {
     setError(null)
     if (!name.trim()) return setError('Give the category a name.')
     setBusy(true)
-    const res = await fetch('/api/categories', {
+    const res = await apiFetch('/api/categories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, isSerialised, ...trackingFields(tracking) }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not add it.')
+      return setError(res.error)
     }
     setName('')
     toast.success('Category added.')

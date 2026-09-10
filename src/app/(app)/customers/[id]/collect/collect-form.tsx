@@ -11,8 +11,9 @@ import { Field } from '@/components/form-field'
 import { Input } from '@/components/ui/input'
 import { AppSelect } from '@/components/app-select'
 import { formatMoney } from '@/lib/money'
-import { rupeesToPaise } from '@/lib/validation'
+import { parseRupees, rupeesToPaise } from '@/lib/validation'
 import { formatDateShort } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 
 export type OpenSale = {
   id: number
@@ -60,7 +61,7 @@ export function CollectForm({
   const [busy, setBusy] = useState(false)
 
   const amountPaise = useMemo(
-    () => rupeesToPaise(Number(amount) || 0),
+    () => rupeesToPaise(parseRupees(amount)),
     [amount],
   )
 
@@ -80,7 +81,7 @@ export function CollectForm({
 
   const manualTotal = useMemo(
     () =>
-      Object.values(manual).reduce((sum, v) => sum + rupeesToPaise(Number(v) || 0), 0n),
+      Object.values(manual).reduce((sum, v) => sum + rupeesToPaise(parseRupees(v)), 0n),
     [manual],
   )
 
@@ -99,7 +100,7 @@ export function CollectForm({
     }
 
     setBusy(true)
-    const res = await fetch('/api/customer-payments', {
+    const res = await apiFetch('/api/customer-payments', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -114,7 +115,7 @@ export function CollectForm({
               .filter(([, v]) => v.trim())
               .map(([saleId, v]) => ({
                 saleId: Number(saleId),
-                amountPaise: rupeesToPaise(Number(v) || 0).toString(),
+                amountPaise: rupeesToPaise(parseRupees(v)).toString(),
               }))
           : undefined,
       }),
@@ -122,11 +123,10 @@ export function CollectForm({
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not record the payment.')
+      setError(res.error)
       return
     }
-    const { id, receiptNumber } = (await res.json()) as { id: number; receiptNumber: string }
+    const { id, receiptNumber } = (res.data) as { id: number; receiptNumber: string }
     toast.success(`Receipt ${receiptNumber} recorded.`)
     router.push(`/receipts/${id}`)
   }

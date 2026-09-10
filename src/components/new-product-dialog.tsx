@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { PickedProduct } from '@/components/product-picker'
+import { apiFetch } from '@/lib/api'
 
 type Category = { id: number; name: string; isSerialised: boolean; identifierType: string }
 
@@ -54,9 +55,9 @@ export function NewProductDialog({
     setError(null)
     let cancelled = false
     void (async () => {
-      const res = await fetch('/api/categories')
+      const res = await apiFetch('/api/categories')
       if (cancelled || !res.ok) return
-      setCategories((await res.json()) as Category[])
+      setCategories((res.data) as Category[])
     })()
     return () => {
       cancelled = true
@@ -66,18 +67,17 @@ export function NewProductDialog({
   async function create() {
     setError(null)
     setBusy(true)
-    const res = await fetch('/api/products', {
+    const res = await apiFetch('/api/products', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, categoryId, sellingPrice, brandId: null, taxRateId: null }),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
       setBusy(false)
-      setError(data.error ?? 'Could not create the product.')
+      setError(res.error)
       return
     }
-    const { id } = (await res.json()) as { id: number }
+    const { id } = (res.data) as { id: number }
 
     /*
      * The create call answers with an id and nothing else, and the caller
@@ -85,8 +85,8 @@ export function NewProductDialog({
      * purchase line asks for next. So it is read back through the same search
      * the picker uses, which is the one shape every caller already handles.
      */
-    const found = await fetch(`/api/products/search?q=${encodeURIComponent(name.trim())}`)
-    const rows = found.ok ? ((await found.json()) as PickedProduct[]) : []
+    const found = await apiFetch(`/api/products/search?q=${encodeURIComponent(name.trim())}`)
+    const rows = found.ok ? ((found.data) as PickedProduct[]) : []
     const product = rows.find((p) => p.id === id)
     setBusy(false)
 

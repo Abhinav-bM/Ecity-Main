@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import {
   ALL_KINDS,
   listRules,
@@ -21,7 +21,7 @@ const schema = z.object({
   /** The shop's setting — needs notification.manage. */
   isEnabled: z.boolean().optional(),
   thresholdDays: z.coerce.number().int().min(0).max(3650).nullable().optional(),
-  thresholdRupees: z.coerce.number().min(0).max(10_000_000).nullable().optional(),
+  thresholdRupees: rupeeAmount({ max: 10_000_000 }).nullable().optional(),
 })
 
 export const PATCH = route(

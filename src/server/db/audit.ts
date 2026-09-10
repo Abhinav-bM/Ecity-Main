@@ -14,6 +14,25 @@ export type AuditContext = {
 }
 
 /**
+ * Make a value safe to compare and to store as jsonb.
+ *
+ * Only bigint needs the treatment - a string keeps the precision that made
+ * bigint the right choice, where a number would not. Dates are left alone so
+ * the comparison below can still use `getTime`.
+ */
+function jsonSafe(value: unknown): unknown {
+  if (typeof value === 'bigint') return value.toString()
+  if (Array.isArray(value)) return value.map(jsonSafe)
+  if (value instanceof Date) return value
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, jsonSafe(v)]),
+    )
+  }
+  return value
+}
+
+/**
  * Compute the changed fields only. Unchanged values are not recorded, which
  * keeps the log readable and small. PRD FR-1.4 / FR-31.1.
  */
@@ -35,8 +54,17 @@ export function diff<T extends Record<string, unknown>>(
      * noise that pushed the one field that did change off the screen. Both
      * normalise to null before the comparison and after it.
      */
-    const prev = (before ? before[key] : undefined) ?? null
-    const next = value ?? null
+    /*
+     * Money is bigint paise everywhere (docs/03 §4.1), and both the deep
+     * comparison below and the jsonb column this ends up in go through
+     * JSON.stringify - which throws outright on a bigint. Today's callers all
+     * happen to pass only text and ids, so nothing has hit it; the first one
+     * to include a price field would have taken down the update it was
+     * describing, from inside the transaction, with "Do not know how to
+     * serialize a BigInt". Normalising here means a caller never has to know.
+     */
+    const prev = jsonSafe((before ? before[key] : undefined) ?? null)
+    const next = jsonSafe(value ?? null)
 
     const same =
       prev === next ||

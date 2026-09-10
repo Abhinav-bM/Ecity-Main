@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { createReturn, listReturns } from '@/server/services/return.service'
-import { rupeesToPaise } from '@/lib/validation'
+import { MAX_QUANTITY, rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { route } from '@/server/http'
 
 const schema = z.object({
@@ -11,13 +11,13 @@ const schema = z.object({
     .array(
       z.object({
         saleItemId: z.coerce.number().int().positive(),
-        quantity: z.coerce.number().int().min(1),
+        quantity: z.coerce.number().int().min(1).max(MAX_QUANTITY),
       }),
     )
     .min(1, 'Choose at least one item to return.'),
   reason: z.string().trim().max(300).optional(),
   notes: z.string().trim().max(500).optional(),
-  deduction: z.coerce.number().min(0).default(0),
+  deduction: rupeeAmount().default(0),
   refundMethod: z.enum(['NONE', 'PAYMENT_METHOD', 'CUSTOMER_ACCOUNT']).default('NONE'),
   paymentMethodId: z.coerce.number().int().positive().optional(),
   reference: z.string().trim().max(120).optional(),

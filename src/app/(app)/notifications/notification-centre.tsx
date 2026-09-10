@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Field } from '@/components/form-field'
 import { formatDateTime } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 
 type Item = {
   id: number
@@ -68,14 +69,13 @@ export function NotificationCentre({
   async function post(body: unknown, done?: string) {
     setBusy(true)
     try {
-      const res = await fetch('/api/notifications', {
+      const res = await apiFetch('/api/notifications', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (!res.ok) {
-        const data = (await res.json()) as { error?: string }
-        toast.error(data.error ?? 'That did not work.')
+        toast.error(res.error)
         return
       }
       if (done) toast.success(done)
@@ -268,14 +268,13 @@ function RuleCard({ rule, canManage }: { rule: Rule; canManage: boolean }) {
   async function patch(body: Record<string, unknown>) {
     setBusy(true)
     try {
-      const res = await fetch('/api/notifications/rules', {
+      const res = await apiFetch('/api/notifications/rules', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ kind: rule.kind, ...body }),
       })
       if (!res.ok) {
-        const data = (await res.json()) as { error?: string }
-        toast.error(data.error ?? 'That could not be changed.')
+        toast.error(res.error)
         return
       }
       router.refresh()

@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import { AppSelect } from '@/components/app-select'
 import { formatDateShort } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
+import { apiFetch } from '@/lib/api'
 
 const PAY_VARIANT = { PAID: 'success', PARTIAL: 'warning', UNPAID: 'muted' } as const
 
@@ -177,7 +178,7 @@ function PayDialog({
   async function pay() {
     setError(null)
     setBusy(true)
-    const res = await fetch('/api/supplier-payments', {
+    const res = await apiFetch('/api/supplier-payments', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // No allocations: the server settles the oldest purchases first, which
@@ -193,8 +194,7 @@ function PayDialog({
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not record the payment.')
+      setError(res.error)
       return
     }
     toast.success('Payment recorded.')

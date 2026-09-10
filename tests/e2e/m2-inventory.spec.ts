@@ -60,6 +60,44 @@ test.describe('as admin', () => {
     await expect(page.getByRole('link', { name }).and(page.locator(':visible'))).toBeVisible()
   })
 
+  test('retires a product from the catalogue, and brings it back', async ({ page }) => {
+    /*
+     * The catalogue's only removal. Until this existed a product created by
+     * mistake could not be got rid of at all - it had to be deleted straight
+     * out of the database, which a shopkeeper cannot do and which would orphan
+     * every purchase and bill referring to it.
+     */
+    const name = `E2E Retire ${Date.now()}`
+    await createMobileProduct(page, name)
+
+    const find = async () => {
+      await page.getByLabel('Search products').fill(name)
+      await page.getByRole('button', { name: 'Search' }).click()
+    }
+    const link = () => page.getByRole('link', { name }).and(page.locator(':visible'))
+    // Card and table both carry the control; only one of them is on screen.
+    const button = (action: 'Deactivate' | 'Reactivate') =>
+      page.getByRole('button', { name: `${action} ${name}` }).and(page.locator(':visible'))
+
+    await find()
+    await expect(link()).toBeVisible()
+
+    await button('Deactivate').click()
+    await expect(page.getByText(`${name} deactivated.`)).toBeVisible()
+
+    // Gone from the catalogue as the till and the pickers see it.
+    await expect(link()).toHaveCount(0)
+
+    // Still there for anyone looking, and marked as retired.
+    await page.getByRole('button', { name: 'Show inactive' }).click()
+    await expect(link()).toBeVisible()
+    await expect(page.getByText('Inactive').and(page.locator(':visible')).first()).toBeVisible()
+
+    await button('Reactivate').click()
+    await expect(page.getByText(`${name} reactivated.`)).toBeVisible()
+    await expect(link()).toBeVisible()
+  })
+
   test('registers a device and shows it with its classification', async ({ page }) => {
     const name = `E2E Device Model ${Date.now()}`
     await createMobileProduct(page, name)
@@ -481,6 +519,16 @@ test.describe('permissions', () => {
     await expect(page).toHaveURL(/\/devices$/)
     await page.goto('/products/new')
     await expect(page).toHaveURL(/\/products$/)
+  })
+
+  test('staff cannot retire a product', async ({ page }) => {
+    // Retiring a product is product.manage, which staff lack. The control is
+    // not rendered for them - and the endpoint checks the permission too, so
+    // hiding it is a convenience, not the guard.
+    await signIn(page, USERS.staff)
+    await page.goto('/products')
+    await expect(page.getByRole('heading', { name: 'Products', level: 1 })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Deactivate / })).toHaveCount(0)
   })
 
   test('inventory appears in the navigation for every role', async ({ page }, testInfo) => {

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { AppSelect } from '@/components/app-select'
 import { MAIN_TYPES } from '@/lib/validation'
 import type { MainType } from '@/server/db/schema'
+import { apiFetch } from '@/lib/api'
 
 export type DeviceEditValues = {
   mainType: MainType
@@ -70,15 +71,14 @@ export function DeviceEditForm({
     }
 
     setBusy(true)
-    const res = await fetch(`/api/devices/${deviceId}`, {
+    const res = await apiFetch(`/api/devices/${deviceId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(v),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not save the changes.')
+      setError(res.error)
       return
     }
     toast.success('Device updated.')

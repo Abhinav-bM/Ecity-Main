@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { FormStateCodeSelect } from '@/components/state-code-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof partySchema>
 
@@ -63,14 +64,13 @@ export function PartyForm({
 
   async function onSubmit(values: Values) {
     setFormError(null)
-    const res = await fetch(id ? `/api/${plural}/${id}` : `/api/${plural}`, {
+    const res = await apiFetch(id ? `/api/${plural}/${id}` : `/api/${plural}`, {
       method: id ? 'PATCH' : 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? `Could not save the ${kind}.`)
+      setFormError(res.error)
       return
     }
     toast.success(`${label} ${id ? 'updated' : 'created'}.`)

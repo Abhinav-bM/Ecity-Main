@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { MAX_QUANTITY, rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { createSale, listSales } from '@/server/services/sale.service'
 import { route } from '@/server/http'
@@ -7,9 +7,9 @@ import { route } from '@/server/http'
 const lineSchema = z.object({
   productId: z.coerce.number().int().positive(),
   deviceId: z.coerce.number().int().positive().nullable().optional(),
-  quantity: z.coerce.number().int().min(1),
-  unitPrice: z.coerce.number().min(0),
-  discount: z.coerce.number().min(0).default(0),
+  quantity: z.coerce.number().int().min(1).max(MAX_QUANTITY),
+  unitPrice: rupeeAmount(),
+  discount: rupeeAmount().default(0),
   taxRateId: z.coerce.number().int().positive().nullable().optional(),
 })
 
@@ -21,7 +21,7 @@ const saleSchema = z.object({
     .array(
       z.object({
         paymentMethodId: z.coerce.number().int().positive(),
-        amount: z.coerce.number().min(0),
+        amount: rupeeAmount(),
         reference: z.string().trim().max(80).optional(),
       }),
     )

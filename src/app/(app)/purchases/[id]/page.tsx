@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -34,8 +35,8 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const detail = await getPurchase(session.user, id)
-  const files = await listAttachments(session.user, 'purchase', id)
+  const detail = await orNotFound(getPurchase(session.user, id))
+  const files = await orNotFound(listAttachments(session.user, 'purchase', id))
   const canReverse =
     hasPermission(session.user, 'purchase.reverse') && detail.purchase.status === 'CONFIRMED'
   // Carried in from M5: a typo in a supplier bill number had no fix once a

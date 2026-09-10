@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { apiFetch } from '@/lib/api'
 
 type Role = {
   id: number
@@ -66,15 +67,14 @@ export function RoleEditor({
   async function save() {
     if (!active) return
     setSaving(true)
-    const res = await fetch(`/api/roles/${active.id}`, {
+    const res = await apiFetch(`/api/roles/${active.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ permissions: [...draft] }),
     })
     setSaving(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not save the role.')
+      toast.error(res.error)
       return
     }
     toast.success('Role updated. Affected users will be signed out.')

@@ -12,6 +12,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { apiFetch } from '@/lib/api'
 
 export type PickedProduct = {
   id: number
@@ -65,9 +66,9 @@ export function ProductPicker({
       const params = new URLSearchParams()
       if (query.trim()) params.set('q', query.trim())
       if (serialisedOnly) params.set('serialised', 'true')
-      const res = await fetch(`/api/products/search?${params}`)
+      const res = await apiFetch(`/api/products/search?${params}`)
       if (cancelled) return
-      setRows(res.ok ? ((await res.json()) as PickedProduct[]) : [])
+      setRows(res.ok ? ((res.data) as PickedProduct[]) : [])
       setLoading(false)
     }, 150)
     return () => {

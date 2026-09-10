@@ -15,7 +15,7 @@ import {
   supplierPayment,
 } from '@/server/db/schema'
 import { writeAudit, type AuditContext } from '@/server/db/audit'
-import { AppError, conflict, notFound } from '@/server/http'
+import { AppError, conflict, isUniqueViolation, notFound } from '@/server/http'
 import { branchScope, type AuthUser } from '@/server/auth/permissions'
 import { businessDateFor, expectedCashPaise } from './cash.service'
 import { expenseTotalsFor } from './expense.service'
@@ -405,6 +405,17 @@ export async function closeDay(
     )
 
     return { id: created.id, cashDifferencePaise: difference }
+  }).catch((error: unknown) => {
+    /*
+     * Two people pressed Close for the same branch and day at the same moment.
+     * The check above was true for both; the partial unique index settled it.
+     * The one that lost is not a fault - the day IS closed - so it gets the
+     * same message it would have got a second later, not a 500.
+     */
+    if (isUniqueViolation(error, 'daily_closing_live_uq')) {
+      throw conflict('That day is already closed for this branch.')
+    }
+    throw error
   })
 }
 
@@ -460,10 +471,13 @@ export async function voidClosing(
       )
     }
 
-    await tx
+    // Conditional, so two reopenings cannot both reverse the same closing.
+    const voided = await tx
       .update(dailyClosing)
       .set({ voidedAt: new Date(), voidedBy: actor.id, voidReason: reason.trim() })
-      .where(eq(dailyClosing.id, id))
+      .where(and(eq(dailyClosing.id, id), isNull(dailyClosing.voidedAt)))
+      .returning({ id: dailyClosing.id })
+    if (!voided[0]) throw conflict('That closing has already been voided.')
 
     await tx
       .update(cashDrawerDay)

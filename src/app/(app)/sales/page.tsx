@@ -20,6 +20,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { listSales } from '@/server/services/sale.service'
 import { listAccessibleBranches } from '@/server/services/branch.service'
 import { SaleFilters } from './sale-filters'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export default async function SalesPage({
   if (!hasPermission(session.user, 'sale.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
 
   const [{ rows, total }, branches] = await Promise.all([
     listSales(session.user, {

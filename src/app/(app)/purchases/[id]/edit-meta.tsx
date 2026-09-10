@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { apiFetch } from '@/lib/api'
 
 /**
  * Correcting a purchase (carried into M7 from M5).
@@ -54,7 +55,7 @@ export function EditPurchaseMeta({
   async function submit() {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/purchases/${purchaseId}`, {
+    const res = await apiFetch(`/api/purchases/${purchaseId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -68,8 +69,7 @@ export function EditPurchaseMeta({
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not save the correction.')
+      return setError(res.error)
     }
     setOpen(false)
     toast.success('Purchase corrected.')

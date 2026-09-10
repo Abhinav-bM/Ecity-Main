@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof resetPasswordSchema>
 
@@ -30,14 +31,13 @@ export function ResetPasswordForm() {
 
   async function onSubmit(values: Values) {
     setFormError(null)
-    const res = await fetch('/api/auth/reset-password', {
+    const res = await apiFetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? 'Could not reset the password.')
+      setFormError(res.error)
       return
     }
     router.replace('/login')

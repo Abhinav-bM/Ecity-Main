@@ -7,6 +7,7 @@ import { ImageOff, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { apiFetch } from '@/lib/api'
 
 /**
  * A product's picture (PRD FR-4.2). Uploads through the same storage layer and
@@ -33,11 +34,10 @@ export function ProductImage({
     setBusy(true)
     const body = new FormData()
     body.append('file', file)
-    const res = await fetch(`/api/products/${productId}/image`, { method: 'POST', body })
+    const res = await apiFetch(`/api/products/${productId}/image`, { method: 'POST', body })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not upload the image.')
+      toast.error(res.error)
       return
     }
     toast.success('Image updated.')
@@ -46,10 +46,10 @@ export function ProductImage({
 
   async function remove() {
     setBusy(true)
-    const res = await fetch(`/api/products/${productId}/image`, { method: 'DELETE' })
+    const res = await apiFetch(`/api/products/${productId}/image`, { method: 'DELETE' })
     setBusy(false)
     if (!res.ok) {
-      toast.error('Could not remove the image.')
+      toast.error(res.error)
       return
     }
     startTransition(() => router.refresh())

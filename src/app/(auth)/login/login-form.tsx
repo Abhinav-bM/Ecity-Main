@@ -12,8 +12,24 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof loginSchema>
+
+/**
+ * Where to land after signing in - and only ever inside this app.
+ *
+ * `?next=` is set by the API client when a request comes back unauthenticated,
+ * so it is whatever was in the address bar, and that makes it attacker-supplied
+ * in a link. Only a plain absolute path is honoured: `//evil.example` is a
+ * protocol-relative URL, and browsers normalise the backslash in
+ * `/\evil.example` to the same thing, so both are refused.
+ */
+function safeNext(next: string | null): string {
+  if (!next || !next.startsWith('/')) return '/dashboard'
+  if (next.startsWith('//') || next.startsWith('/\\')) return '/dashboard'
+  return next
+}
 
 export function LoginForm() {
   const router = useRouter()
@@ -26,17 +42,17 @@ export function LoginForm() {
 
   async function onSubmit(values: Values) {
     setFormError(null)
-    const res = await fetch('/api/auth/login', {
+    const res = await apiFetch('/api/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     })
-    const data = (await res.json()) as { error?: string }
     if (!res.ok) {
-      setFormError(data.error ?? 'Could not sign in. Please try again.')
+      setFormError(res.error)
       return
     }
-    router.replace('/dashboard')
+    // Back to whatever the session expired on, when there was one.
+    router.replace(safeNext(new URLSearchParams(window.location.search).get('next')))
     router.refresh()
   }
 

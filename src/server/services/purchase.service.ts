@@ -406,6 +406,31 @@ export async function reversePurchase(
   }
 
   return db.transaction(async (tx) => {
+    /*
+     * Claim the purchase before undoing anything.
+     *
+     * The status was read outside this transaction and everything below puts
+     * stock back, so two reversals arriving together - a double-click, or two
+     * managers - both saw CONFIRMED and both ran: the accessories were
+     * restocked twice and the supplier was credited twice for one bill. The
+     * conditional UPDATE lets exactly one caller through, and it happens
+     * FIRST, so the loser stops before it moves anything.
+     */
+    const claimed = await tx
+      .update(purchase)
+      .set({
+        status: 'REVERSED',
+        reversedAt: new Date(),
+        reversalReason: reason.trim(),
+        updatedAt: new Date(),
+        updatedBy: actor.id,
+      })
+      .where(and(eq(purchase.id, id), eq(purchase.status, 'CONFIRMED')))
+      .returning({ id: purchase.id })
+    if (!claimed[0]) {
+      throw new AppError('Only a confirmed purchase can be reversed.', 422, 'NOT_CONFIRMED')
+    }
+
     const itemIds = existing.items.map((i) => i.id)
 
     const devices = itemIds.length
@@ -491,16 +516,7 @@ export async function reversePurchase(
       actorId: actor.id,
     })
 
-    await tx
-      .update(purchase)
-      .set({
-        status: 'REVERSED',
-        reversedAt: new Date(),
-        reversalReason: reason.trim(),
-        updatedAt: new Date(),
-        updatedBy: actor.id,
-      })
-      .where(eq(purchase.id, id))
+    // The status was taken at the top of the transaction; see the claim there.
 
     await writeAudit(
       ctx,

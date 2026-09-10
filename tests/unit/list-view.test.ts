@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readListView, sortAndPage } from '@/lib/list-view'
+import { readPage, readListView, sortAndPage } from '@/lib/list-view'
 
 /**
  * The page and the sort come out of the URL, which means they are user input.
@@ -70,5 +70,43 @@ describe('sorting and paging a bounded list', () => {
     // Silently showing page 3 as page 9 would make the control lie.
     const { rows: out } = sortAndPage(rows, { page: 9, dir: 'asc' }, 2, (r) => r.name)
     expect(out).toHaveLength(0)
+  })
+})
+
+describe('readPage', () => {
+  /*
+   * Seventeen list screens each spelled out `Math.max(1, Number(p.page) || 1)`,
+   * and every one of them answered `?page=Infinity` with a 500: Infinity is the
+   * larger of the two, so the floor keeps it, and `offset Infinity` is a query
+   * Postgres refuses.
+   */
+  it('refuses a page that is not a number', () => {
+    expect(readPage(undefined)).toBe(1)
+    expect(readPage('')).toBe(1)
+    expect(readPage('abc')).toBe(1)
+  })
+
+  it('refuses an infinite page, which reached the driver as an offset', () => {
+    expect(readPage('Infinity')).toBe(1)
+    expect(readPage('-Infinity')).toBe(1)
+    expect(readPage('1e400')).toBe(1)
+  })
+
+  it('holds the floor', () => {
+    expect(readPage('0')).toBe(1)
+    expect(readPage('-3')).toBe(1)
+  })
+
+  it('caps a page nobody is reading', () => {
+    expect(readPage('999999999999')).toBe(1_000_000)
+  })
+
+  it('keeps a real page, and truncates a fractional one', () => {
+    expect(readPage('7')).toBe(7)
+    expect(readPage('2.9')).toBe(2)
+  })
+
+  it('takes the first value when the query repeats the key', () => {
+    expect(readPage(['3', '9'])).toBe(3)
   })
 })

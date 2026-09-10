@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { apiFetch } from '@/lib/api'
 
 export function BranchSwitcher({
   branches,
@@ -31,14 +32,13 @@ export function BranchSwitcher({
   const shortLabel = active ? active.code : canViewAll ? 'All' : '—'
 
   async function select(branchId: number | null) {
-    const res = await fetch('/api/session/branch', {
+    const res = await apiFetch('/api/session/branch', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ branchId }),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not switch branch.')
+      toast.error(res.error)
       return
     }
     startTransition(() => router.refresh())

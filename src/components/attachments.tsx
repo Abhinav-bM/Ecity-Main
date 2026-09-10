@@ -6,6 +6,7 @@ import { FileText, Paperclip, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { apiFetch } from '@/lib/api'
 
 export type AttachmentRow = {
   id: number
@@ -43,11 +44,10 @@ export function Attachments({
     body.append('file', file)
     body.append('entityType', entityType)
     body.append('entityId', String(entityId))
-    const res = await fetch('/api/attachments', { method: 'POST', body })
+    const res = await apiFetch('/api/attachments', { method: 'POST', body })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      toast.error(data.error ?? 'Could not attach the file.')
+      toast.error(res.error)
       return
     }
     toast.success('File attached.')
@@ -56,10 +56,10 @@ export function Attachments({
 
   async function remove(id: number) {
     setBusy(true)
-    const res = await fetch(`/api/attachments/${id}`, { method: 'DELETE' })
+    const res = await apiFetch(`/api/attachments/${id}`, { method: 'DELETE' })
     setBusy(false)
     if (!res.ok) {
-      toast.error('Could not remove the file.')
+      toast.error(res.error)
       return
     }
     startTransition(() => router.refresh())

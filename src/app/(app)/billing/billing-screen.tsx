@@ -6,7 +6,7 @@ import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { computeBill } from '@/lib/tax'
 import { formatMoney } from '@/lib/money'
-import { rupeesToPaise } from '@/lib/validation'
+import { MAX_QUANTITY, parseQuantity, parseRupees, rupeesToPaise } from '@/lib/validation'
 import { shopDateString } from '@/lib/date'
 import { useCart, type CartLine } from '@/stores/cart'
 import { FormError } from '@/components/form-error'
@@ -20,6 +20,7 @@ import { BillSearch, type DeviceHit, type ProductHit } from './bill-search'
 import { CustomerPanel } from './customer-panel'
 import { TradeInPanel } from './trade-in-panel'
 import type { MainType } from '@/server/db/schema'
+import { apiFetch } from '@/lib/api'
 
 export function BillingScreen({
   branchId,
@@ -99,11 +100,11 @@ export function BillingScreen({
   const overDiscounted = useMemo(() => {
     const over = new Map<string, bigint>()
     for (const l of cart.lines) {
-      const gross = rupeesToPaise(Number(l.unitPrice) || 0) * BigInt(l.quantity)
+      const gross = rupeesToPaise(parseRupees(l.unitPrice)) * BigInt(parseQuantity(l.quantity))
       // Carries the most that can come off, so the line can name the figure
       // rather than describe it. "Worth" read as worth-to-the-shop, which is
       // a different question entirely - this has nothing to do with cost.
-      if (rupeesToPaise(Number(l.discount) || 0) > gross) over.set(l.key, gross)
+      if (rupeesToPaise(parseRupees(l.discount)) > gross) over.set(l.key, gross)
     }
     return over
   }, [cart.lines])
@@ -112,12 +113,16 @@ export function BillingScreen({
     () =>
       computeBill(
         cart.lines.map((l) => {
-          const unitPricePaise = rupeesToPaise(Number(l.unitPrice) || 0)
-          const gross = unitPricePaise * BigInt(l.quantity)
-          const discountPaise = rupeesToPaise(Number(l.discount) || 0)
+          const unitPricePaise = rupeesToPaise(parseRupees(l.unitPrice))
+          // Whatever is in the box right now, made safe to compute with:
+          // computeBill throws on a fractional quantity and BigInt refuses an
+          // infinite one, and both of those are a keystroke away.
+          const quantity = parseQuantity(l.quantity)
+          const gross = unitPricePaise * BigInt(quantity)
+          const discountPaise = rupeesToPaise(parseRupees(l.discount))
           return {
             unitPricePaise,
-            quantity: l.quantity,
+            quantity,
             // Capped for the preview only. The line is already flagged above
             // and Save is blocked, so this figure is never what gets sent -
             // it just keeps a total on screen while the number is corrected.
@@ -132,7 +137,7 @@ export function BillingScreen({
     [cart.lines, pricesIncludeTax],
   )
 
-  const paid = cart.payments.reduce((sum, p) => sum + rupeesToPaise(Number(p.amount) || 0), 0n)
+  const paid = cart.payments.reduce((sum, p) => sum + rupeesToPaise(parseRupees(p.amount)), 0n)
   /*
    * PRD FR-9.2. A trade-in is not a discount on the bill - the invoice still
    * shows the full price of what was sold, and GST is charged on that. It
@@ -194,7 +199,7 @@ export function BillingScreen({
     }
 
     setSaving(true)
-    const res = await fetch('/api/sales', {
+    const res = await apiFetch('/api/sales', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -211,17 +216,19 @@ export function BillingScreen({
         // FR-9.2. Sent as its own field, not as a discount: the bill and its
         // GST stay at the full price and the agreed value settles part of it.
         tradeInId: cart.tradeIn?.id ?? null,
+        // The sanitised figures, so what is sent is exactly what the totals
+        // on screen were computed from - not the raw text of the box.
         lines: cart.lines.map((l) => ({
           productId: l.productId,
           deviceId: l.deviceId,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice || 0,
-          discount: l.discount || 0,
+          quantity: parseQuantity(l.quantity),
+          unitPrice: parseRupees(l.unitPrice),
+          discount: parseRupees(l.discount),
           taxRateId: l.taxRateId,
         })),
         payments: cart.payments.map((p) => ({
           paymentMethodId: p.paymentMethodId,
-          amount: p.amount || 0,
+          amount: parseRupees(p.amount),
           reference: p.reference,
         })),
       }),
@@ -229,11 +236,10 @@ export function BillingScreen({
     setSaving(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not save the bill.')
+      setError(res.error)
       return
     }
-    const saved = (await res.json()) as { id: number; invoiceNumber: string }
+    const saved = (res.data) as { id: number; invoiceNumber: string }
     cart.clear()
     toast.success(`Invoice ${saved.invoiceNumber} saved.`)
     router.push(`/sales/${saved.id}`)
@@ -489,8 +495,9 @@ function CartRow({
             className="h-9"
             // A device line is one physical unit; the quantity cannot change.
             disabled={line.deviceId !== null}
+            max={MAX_QUANTITY}
             value={line.quantity}
-            onChange={(e) => onChange({ quantity: Math.max(1, Number(e.target.value) || 1) })}
+            onChange={(e) => onChange({ quantity: parseQuantity(e.target.value) })}
           />
         </div>
         <div className="space-y-1">

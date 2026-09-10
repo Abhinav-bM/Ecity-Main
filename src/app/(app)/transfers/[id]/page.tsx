@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -35,7 +36,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const detail = await getTransfer(session.user, id)
+  const detail = await orNotFound(getTransfer(session.user, id))
   const t = detail.transfer
 
   /*

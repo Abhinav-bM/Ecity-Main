@@ -17,6 +17,7 @@ sales and reporting arrive in M2 onward — see `docs/02-Module-Breakdown.md`.
 | `docs/04-Deployment-Guide.md` | Buying the server, deploying, backups, runbook |
 | `docs/05-Database-Guide.md` | **Start here for Postgres** — setup, migrations, everyday tasks |
 | `docs/06-Manual-Test-Checklist.md` | What to check by hand after each module. M0 done |
+| `docs/07-Cash-and-Closing.md` | The cash drawer, daily closing and opening balances, for shop staff |
 
 ## Stack
 

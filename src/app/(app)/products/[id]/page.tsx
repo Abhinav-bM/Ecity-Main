@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -19,14 +20,14 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [detail, categories, brands, taxRates, business, suppliers] = await Promise.all([
+  const [detail, categories, brands, taxRates, business, suppliers] = await orNotFound(Promise.all([
     getProduct(session.user, id),
     listCategories(session.user),
     listBrands(session.user),
     listTaxRates(session.user),
     getBusiness(session.user),
     listParties(session.user, 'supplier', { page: 1, pageSize: 500 }),
-  ])
+  ]))
 
   const p = detail.product
 

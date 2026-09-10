@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { FormSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof deviceSchema>
 
@@ -109,14 +110,13 @@ export function DeviceForm({
       return
     }
 
-    const res = await fetch('/api/devices', {
+    const res = await apiFetch('/api/devices', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setFormError(data.error ?? 'Could not register the device.')
+      setFormError(res.error)
       return
     }
     toast.success('Device registered.')

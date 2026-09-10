@@ -15,6 +15,7 @@ import { hasPermission } from '@/server/auth/permissions'
 import { warrantyExpiring } from '@/server/services/notification.service'
 import { Pagination } from '@/components/pagination'
 import { WarrantyWindow } from './warranty-window'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,7 @@ export default async function WarrantyPage({
 
   const p = await searchParams
   const withinDays = Math.min(365, Math.max(1, Number(p.days ?? '60') || 60))
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
 
   const { rows, total } = await warrantyExpiring(session.user, {
     withinDays,

@@ -202,7 +202,8 @@ export async function voidExpense(
     const scope = branchScope(actor, null)
     if (scope !== null && !scope.includes(row.branchId)) throw notFound('Expense')
 
-    await tx
+    // Conditional, so two voids of the same expense cannot both refund it.
+    const voided = await tx
       .update(expense)
       .set({
         voidedAt: new Date(),
@@ -210,7 +211,9 @@ export async function voidExpense(
         voidReason: reason.trim(),
         updatedAt: new Date(),
       })
-      .where(eq(expense.id, id))
+      .where(and(eq(expense.id, id), isNull(expense.voidedAt)))
+      .returning({ id: expense.id })
+    if (!voided[0]) throw conflict('That expense has already been voided.')
 
     // The money comes back the way it went out.
     await postByPaymentMethod(tx, {

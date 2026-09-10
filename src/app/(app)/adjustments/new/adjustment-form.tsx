@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 const REASONS = [
   { value: 'MISCOUNT', label: 'Miscount — the shelf and the system disagree' },
@@ -59,8 +60,8 @@ export function AdjustmentForm({
         kind === 'accessory'
           ? `/api/adjustments/adjustable?${q.toString()}`
           : `/api/transfers/sendable?${q.toString()}`
-      void fetch(url)
-        .then((r) => (r.ok ? r.json() : null))
+      void apiFetch(url)
+        .then((r) => (r.ok ? r.data : null))
         .then((data) => {
           if (cancelled || !data) return
           if (kind === 'accessory') setAccessories(data as Accessory[])
@@ -97,7 +98,7 @@ export function AdjustmentForm({
     }
 
     setBusy(true)
-    const res = await fetch('/api/adjustments', {
+    const res = await apiFetch('/api/adjustments', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -112,8 +113,7 @@ export function AdjustmentForm({
     setBusy(false)
 
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      return setError(data.error ?? 'Could not record the adjustment.')
+      return setError(res.error)
     }
     toast.success('Stock adjusted.')
     router.push('/adjustments')

@@ -16,6 +16,7 @@ import { formatMoney } from '@/lib/money'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { supplierOutstanding } from '@/server/services/supplier-ledger.service'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export default async function SupplierOutstandingPage({
   if (!hasPermission(session.user, 'supplier_payment.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const dues = await supplierOutstanding(session.user, page, PAGE_SIZE, p.search)
   const rows = dues.rows
   // Owed across every supplier, not just the ones on this page.

@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 const GRADES = [
   { value: 'AVAILABLE', label: 'Available — back on sale as normal' },
@@ -51,15 +52,14 @@ export function InspectButton({
   async function submit() {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/devices/${deviceId}/inspect`, {
+    const res = await apiFetch(`/api/devices/${deviceId}/inspect`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ grade, notes }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not record the inspection.')
+      setError(res.error)
       return
     }
     toast.success(`${identifier ?? 'Device'} graded ${grade.replace('_', ' ').toLowerCase()}.`)

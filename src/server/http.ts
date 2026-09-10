@@ -21,6 +21,35 @@ export const notFound = (what = 'Record') => new AppError(`${what} not found.`, 
 export const conflict = (message: string, details?: unknown) =>
   new AppError(message, 409, 'CONFLICT', details)
 
+/**
+ * Did this error come from a unique index?
+ *
+ * Several places here check "does this already exist?" and then write. Under
+ * READ COMMITTED that check can be stale by the time the INSERT lands, and the
+ * index - which is the real guarantee - rejects it. That is the database doing
+ * its job, not a fault, so the caller turns it into the same answer the check
+ * would have given rather than letting it surface as a 500.
+ *
+ * `constraint` narrows it to one index, because a transaction may touch
+ * several and only one of them means what the caller thinks it means.
+ */
+export function isUniqueViolation(error: unknown, constraint?: string): boolean {
+  /*
+   * Walk the cause chain. Drizzle wraps every driver error in one of its own -
+   * message "Failed query: …", with Postgres's actual complaint, and therefore
+   * the SQLSTATE, only on `.cause`. Checking the top-level object alone looked
+   * right and silently never matched.
+   */
+  for (let e: unknown = error, depth = 0; e != null && depth < 5; depth += 1) {
+    const candidate = e as { code?: string; constraint_name?: string; cause?: unknown }
+    if (candidate.code === '23505') {
+      return constraint === undefined || candidate.constraint_name === constraint
+    }
+    e = candidate.cause
+  }
+  return false
+}
+
 type Handler<T> = (args: {
   req: Request
   ctx: SessionContext

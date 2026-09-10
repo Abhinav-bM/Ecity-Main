@@ -83,3 +83,33 @@ describe('booleans in a query string', () => {
     expect(productQuerySchema.parse({}).includeInactive).toBe(false)
   })
 })
+
+describe('the post-login redirect', () => {
+  /**
+   * Mirrors `safeNext` in the login form. `?next=` is set by the API client
+   * from whatever was in the address bar when a request came back
+   * unauthenticated, so a link can carry anything.
+   */
+  const safeNext = (next: string | null): string => {
+    if (!next || !next.startsWith('/')) return '/dashboard'
+    if (next.startsWith('//') || next.startsWith('/\\')) return '/dashboard'
+    return next
+  }
+
+  it('returns the user to where they were', () => {
+    expect(safeNext('/sales/12')).toBe('/sales/12')
+    expect(safeNext('/analytics?from=2026-01-01')).toBe('/analytics?from=2026-01-01')
+  })
+
+  it('refuses anywhere outside this app', () => {
+    expect(safeNext('https://evil.example')).toBe('/dashboard')
+    // Protocol-relative, and the backslash form browsers normalise to it.
+    expect(safeNext('//evil.example')).toBe('/dashboard')
+    expect(safeNext('/\\evil.example')).toBe('/dashboard')
+  })
+
+  it('falls back when there is nothing to go back to', () => {
+    expect(safeNext(null)).toBe('/dashboard')
+    expect(safeNext('')).toBe('/dashboard')
+  })
+})

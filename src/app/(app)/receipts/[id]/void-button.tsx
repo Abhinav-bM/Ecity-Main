@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 /** Voided, never deleted — a bounced cheque is history, not a mistake to hide. */
 export function VoidReceiptButton({
@@ -34,15 +35,14 @@ export function VoidReceiptButton({
   async function submit() {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/customer-payments/${id}/void`, {
+    const res = await apiFetch(`/api/customer-payments/${id}/void`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
-      setError(data.error ?? 'Could not void the receipt.')
+      setError(res.error)
       return
     }
     toast.success('Receipt voided. The balance is owing again.')

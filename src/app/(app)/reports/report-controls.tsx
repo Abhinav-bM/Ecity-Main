@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AppSelect } from '@/components/app-select'
+import { apiFetch } from '@/lib/api'
 
 export type SavedView = {
   id: number
@@ -91,7 +92,7 @@ export function ReportControls({
     if (!viewName.trim()) return
     setBusy(true)
     try {
-      const res = await fetch('/api/saved-reports', {
+      const res = await apiFetch('/api/saved-reports', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -100,12 +101,12 @@ export function ReportControls({
           filters: { from, to, branchId: branchId || undefined },
         }),
       })
-      const json = (await res.json()) as { error?: string; replaced?: boolean }
       if (!res.ok) {
-        toast.error(json.error ?? 'That view could not be saved.')
+        toast.error(res.error)
         return
       }
-      toast.success(json.replaced ? 'View updated.' : 'View saved.')
+      const json = res.data as { replaced?: boolean } | null
+      toast.success(json?.replaced ? 'View updated.' : 'View saved.')
       setNaming(false)
       setViewName('')
       router.refresh()
@@ -115,9 +116,9 @@ export function ReportControls({
   }
 
   async function remove(view: SavedView) {
-    const res = await fetch(`/api/saved-reports/${view.id}`, { method: 'DELETE' })
+    const res = await apiFetch(`/api/saved-reports/${view.id}`, { method: 'DELETE' })
     if (!res.ok) {
-      toast.error('That view could not be removed.')
+      toast.error(res.error)
       return
     }
     router.refresh()

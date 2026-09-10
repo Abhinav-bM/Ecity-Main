@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/form-field";
 import { FormSelect } from "@/components/app-select";
 import { FormError } from '@/components/form-error'
+import { apiFetch } from '@/lib/api'
 
 type ProfileValues = z.infer<typeof businessProfileSchema>;
 
@@ -150,7 +151,7 @@ function ProfileForm({
 
   async function onSubmit(values: ProfileValues) {
     setFormError(null);
-    const res = await fetch("/api/business", {
+    const res = await apiFetch("/api/business", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -160,8 +161,7 @@ function ProfileForm({
       }),
     });
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      setFormError(data.error ?? "Could not save.");
+      setFormError(res.error);
       return;
     }
 
@@ -170,7 +170,7 @@ function ProfileForm({
      * handsets already on the shelf, and a silent success is exactly why this
      * looked broken before — the shop flipped the switch and saw nothing.
      */
-    const { restamped = 0 } = (await res.json()) as { restamped?: number };
+    const { restamped = 0 } = (res.data) as { restamped?: number };
     toast.success(
       restamped > 0
         ? `Saved. ${restamped} NEW handset${restamped === 1 ? "" : "s"} in stock moved to ${CHANNEL_LABEL[values.newStockSalesChannel] ?? values.newStockSalesChannel}.`
@@ -469,14 +469,13 @@ function TaxRates({
   const [pending, startTransition] = useTransition();
 
   async function add() {
-    const res = await fetch("/api/business/tax-rates", {
+    const res = await apiFetch("/api/business/tax-rates", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name, ratePercent: percent, isDefault: false }),
     });
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      toast.error(data.error ?? "Could not add the tax rate.");
+      toast.error(res.error);
       return;
     }
     setName("");
@@ -486,14 +485,13 @@ function TaxRates({
   }
 
   async function setActive(rate: TaxRate, isActive: boolean) {
-    const res = await fetch(`/api/business/tax-rates/${rate.id}`, {
+    const res = await apiFetch(`/api/business/tax-rates/${rate.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ isActive }),
     });
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      toast.error(data.error ?? "Could not update.");
+      toast.error(res.error);
       return;
     }
     startTransition(() => router.refresh());
@@ -574,14 +572,13 @@ function PaymentMethods({
   const [pending, startTransition] = useTransition();
 
   async function setActive(m: PaymentMethod, isActive: boolean) {
-    const res = await fetch(`/api/business/payment-methods/${m.id}`, {
+    const res = await apiFetch(`/api/business/payment-methods/${m.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ isActive }),
     });
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      toast.error(data.error ?? "Could not update.");
+      toast.error(res.error);
       return;
     }
     startTransition(() => router.refresh());
@@ -639,14 +636,13 @@ function ExpenseCategories({
   const [pending, startTransition] = useTransition();
 
   async function add() {
-    const res = await fetch("/api/business/expense-categories", {
+    const res = await apiFetch("/api/business/expense-categories", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name }),
     });
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      toast.error(data.error ?? "Could not add the category.");
+      toast.error(res.error);
       return;
     }
     setName("");

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { acceptTradeIn, listTradeIns } from '@/server/services/trade-in.service'
-import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
+import { MAIN_TYPES, rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { route } from '@/server/http'
 
 const schema = z.object({
@@ -16,8 +16,8 @@ const schema = z.object({
   colour: z.string().trim().max(40).optional(),
   batteryHealthPercent: z.coerce.number().int().min(1).max(100).optional(),
   conditionNotes: z.string().trim().max(500).optional(),
-  estimatedValue: z.coerce.number().min(0).optional(),
-  agreedValue: z.coerce.number().min(0),
+  estimatedValue: rupeeAmount().optional(),
+  agreedValue: rupeeAmount(),
   customerId: z.coerce.number().int().positive().nullable().optional(),
   saleId: z.coerce.number().int().positive().nullable().optional(),
 })

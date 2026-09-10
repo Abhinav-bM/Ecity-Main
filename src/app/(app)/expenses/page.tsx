@@ -18,6 +18,7 @@ import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { listExpenses } from '@/server/services/expense.service'
 import { VoidExpenseButton } from './void-expense'
+import { readPage } from '@/lib/list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +44,7 @@ export default async function ExpensesPage({
   if (!hasPermission(session.user, 'expense.view')) redirect('/dashboard')
 
   const p = await searchParams
-  const page = Math.max(1, Number(p.page ?? '1') || 1)
+  const page = readPage(p.page)
   const canRecord = hasPermission(session.user, 'expense.manage')
   const canVoid = hasPermission(session.user, 'expense.void')
 

@@ -713,6 +713,78 @@ suite('M2 inventory core (database-backed)', () => {
     })
   })
 
+  describe('retiring a product from the catalogue', () => {
+    /*
+     * The only removal the catalogue has. A product that has been bought or
+     * sold is referred to by that purchase, that bill and every stock movement
+     * between them, so the row must stay; what has to stop is it being offered.
+     *
+     * `setProductActive` had existed since M2 with nothing calling it, so a
+     * product created by mistake could not be got rid of at all - it had to be
+     * deleted straight out of the database.
+     */
+    it('drops out of the catalogue and the pickers, and comes back', async () => {
+      const { listProducts, setProductActive } = await import('@/server/services/product.service')
+      const cat = await createCategory(actor, ctx, {
+        name: 'Retirable accessories',
+        isSerialised: false,
+      })
+      const { id: productId } = await createProduct(actor, ctx, {
+        name: 'Discontinued Cable',
+        categoryId: cat.id,
+      })
+
+      const visible = async (opts: { includeInactive?: boolean } = {}) => {
+        const { rows } = await listProducts(actor, {
+          search: 'Discontinued Cable',
+          page: 1,
+          pageSize: 10,
+          ...opts,
+        })
+        return rows.some((r) => r.id === productId)
+      }
+
+      expect(await visible(), 'a new product is offered').toBe(true)
+
+      await setProductActive(actor, ctx, productId, false)
+
+      // Gone from the catalogue, and from the type-ahead the till and every
+      // form read - /api/products/search goes through this same call with
+      // includeInactive left off.
+      expect(await visible(), 'a retired product is not offered').toBe(false)
+
+      // But still there, and still findable, for the records that refer to it.
+      expect(await visible({ includeInactive: true })).toBe(true)
+
+      await setProductActive(actor, ctx, productId, true)
+      expect(await visible(), 'and it can be brought back').toBe(true)
+    })
+
+    it('writes an audit entry naming the product, both ways', async () => {
+      const { setProductActive } = await import('@/server/services/product.service')
+      const cat = await createCategory(actor, ctx, {
+        name: 'Audited accessories',
+        isSerialised: false,
+      })
+      const { id: productId } = await createProduct(actor, ctx, {
+        name: 'Audited Cable',
+        categoryId: cat.id,
+      })
+
+      await setProductActive(actor, ctx, productId, false)
+      await setProductActive(actor, ctx, productId, true)
+
+      const rows = await db.execute<{ summary: string }>(
+        `select summary from audit_log
+          where entity_type = 'product' and entity_id = '${productId}'
+          order by id`,
+      )
+      const summaries = (rows as unknown as { summary: string }[]).map((r) => r.summary)
+      expect(summaries).toContain('Deactivated Audited Cable')
+      expect(summaries).toContain('Reactivated Audited Cable')
+    })
+  })
+
   describe('stock counting — the shopkeeper question', () => {
     it('two identical handsets show as a stock of 2, not "tracked by IMEI"', async () => {
       const { listProducts, getProduct } = await import('@/server/services/product.service')

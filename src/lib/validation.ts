@@ -262,16 +262,89 @@ export const toPercent = (basisPoints: number): number => basisPoints / 100
 
 /* ============================================================ M2 schemas === */
 
-/** Rupees in the UI, integer paise in the database (docs/03 §4.1). */
-export const rupeesToPaise = (rupees: number): bigint =>
-  BigInt(Math.trunc(rupees * 100 + (rupees >= 0 ? 0.5 : -0.5)))
+/**
+ * The largest figure any money field accepts, in rupees (₹10 crore).
+ *
+ * Every amount in the app is bounded by this, for two reasons that both bite:
+ * paise are stored in a bigint column, and a figure past ~₹9.2e16 overflows it
+ * mid-transaction; and `Number` happily parses "1e400" and "Infinity" out of a
+ * text box, which `BigInt()` then refuses outright.
+ */
+export const MAX_RUPEES = 100_000_000
+
+/**
+ * A money field, in rupees.
+ *
+ * `.finite()` is the part that matters: without it `z.coerce.number()` accepts
+ * the strings "Infinity" and "1e400" as perfectly good numbers - they are only
+ * rejected later, by `BigInt()`, as an unhandled RangeError and a 500. A price
+ * that big is a typo or an attack either way, so it is refused at the edge
+ * with a message rather than in the middle of writing a bill.
+ */
+export const rupeeAmount = (
+  opts: { min?: number; minMessage?: string; max?: number } = {},
+) =>
+  z.coerce
+    .number()
+    .finite('Enter a real amount.')
+    .min(opts.min ?? 0, opts.minMessage ?? 'Cannot be negative.')
+    .max(opts.max ?? MAX_RUPEES, `Cannot exceed ₹${(opts.max ?? MAX_RUPEES).toLocaleString('en-IN')}.`)
+
+/**
+ * Rupees in the UI, integer paise in the database (docs/03 §4.1).
+ *
+ * Refuses a value it cannot convert instead of letting `BigInt()` raise a bare
+ * RangeError from somewhere deep in a transaction. Schemas above stop this at
+ * the edge; this is the second line of defence, and it names the field.
+ */
+export const rupeesToPaise = (rupees: number): bigint => {
+  if (!Number.isFinite(rupees)) {
+    throw new RangeError(`Not a usable amount: ${rupees}.`)
+  }
+  if (Math.abs(rupees) > MAX_RUPEES) {
+    throw new RangeError(`Amount out of range: ${rupees}.`)
+  }
+  return BigInt(Math.trunc(rupees * 100 + (rupees >= 0 ? 0.5 : -0.5)))
+}
+
+/**
+ * What a user typed into a money box, as a number safe to compute with.
+ *
+ * The till recalculates its totals on every keystroke, so this runs inside a
+ * render. Anything that is not a usable figure - blank, "abc", "1e400",
+ * "Infinity" - becomes 0 rather than throwing: a half-typed number must not
+ * take the screen down, and the real validation happens on the way out.
+ */
+export const parseRupees = (value: unknown): number => {
+  const n = typeof value === 'number' ? value : Number(String(value ?? '').trim())
+  if (!Number.isFinite(n)) return 0
+  if (n > MAX_RUPEES) return MAX_RUPEES
+  if (n < -MAX_RUPEES) return -MAX_RUPEES
+  return n
+}
+
+/** The most units one line may carry. Matches the purchase line rule. */
+export const MAX_QUANTITY = 9999
+
+/**
+ * A whole count typed into a quantity box, clamped to something sane.
+ *
+ * Same reasoning as `parseRupees`: `computeLine` throws on a fractional or
+ * infinite quantity, and it is called from a render. "1.5" and "1e400" are
+ * both things a keyboard can produce.
+ */
+export const parseQuantity = (value: unknown, opts: { min?: number; max?: number } = {}): number => {
+  const min = opts.min ?? 1
+  const max = opts.max ?? MAX_QUANTITY
+  const n = typeof value === 'number' ? value : Number(String(value ?? '').trim())
+  if (!Number.isFinite(n)) return min
+  return Math.min(max, Math.max(min, Math.trunc(n)))
+}
 
 export const paiseToRupees = (paise: bigint | number | null | undefined): number =>
   paise == null ? 0 : Number(paise) / 100
 
-const optionalMoney = z
-  .union([z.coerce.number().min(0, 'Cannot be negative.').max(100_000_000), z.literal('')])
-  .optional()
+const optionalMoney = z.union([rupeeAmount(), z.literal('')]).optional()
 
 export const MAIN_TYPES = ['NEW', 'USED', 'ER', 'ACT', 'GLOBAL'] as const
 
@@ -500,7 +573,7 @@ export const supplierPaymentSchema = z.object({
     .array(
       z.object({
         purchaseId: z.coerce.number().int().positive(),
-        amount: z.coerce.number().min(0),
+        amount: rupeeAmount(),
       }),
     )
     .default([]),

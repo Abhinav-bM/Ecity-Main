@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 export function ReverseButton({ purchaseId }: { purchaseId: number }) {
   const router = useRouter()
@@ -27,16 +28,15 @@ export function ReverseButton({ purchaseId }: { purchaseId: number }) {
   async function reverse() {
     setError(null)
     setBusy(true)
-    const res = await fetch(`/api/purchases/${purchaseId}/reverse`, {
+    const res = await apiFetch(`/api/purchases/${purchaseId}/reverse`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
     setBusy(false)
     if (!res.ok) {
-      const data = (await res.json()) as { error?: string }
       // The message names the units that block it, which is the useful part.
-      setError(data.error ?? 'Could not reverse this purchase.')
+      setError(res.error)
       return
     }
     toast.success('Purchase reversed.')

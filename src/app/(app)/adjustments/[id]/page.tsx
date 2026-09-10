@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Attachments } from '@/components/attachments'
@@ -28,10 +29,10 @@ export default async function AdjustmentPage({ params }: { params: Promise<{ id:
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const [a, files] = await Promise.all([
+  const [a, files] = await orNotFound(Promise.all([
     getAdjustment(session.user, id),
     listAttachments(session.user, 'stock_adjustment', id),
-  ])
+  ]))
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

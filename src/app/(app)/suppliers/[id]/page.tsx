@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
+import { orNotFound } from '@/server/page-data'
 import { PartyForm } from '@/components/party-form'
 import { SupplierHistory } from '@/components/supplier-history'
 import { Attachments } from '@/components/attachments'
@@ -21,16 +22,16 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
-  const party = await getParty(session.user, 'supplier', id)
+  const party = await orNotFound(getParty(session.user, 'supplier', id))
   const canEdit = hasPermission(session.user, 'supplier.manage')
   const canSeeMoney = hasPermission(session.user, 'supplier_payment.view')
 
-  const [history, methods, files, business] = await Promise.all([
+  const [history, methods, files, business] = await orNotFound(Promise.all([
     canSeeMoney ? supplierHistory(session.user, id) : null,
     canSeeMoney ? listPaymentMethods(session.user) : [],
     listAttachments(session.user, 'supplier', id),
       getBusiness(session.user),
-  ])
+  ]))
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

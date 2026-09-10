@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiFetch } from '@/lib/api'
 
 type Values = z.infer<typeof forgotPasswordSchema>
 
@@ -24,13 +25,15 @@ export default function ForgotPasswordPage() {
   } = useForm<Values>({ resolver: zodResolver(forgotPasswordSchema) })
 
   async function onSubmit(values: Values) {
-    const res = await fetch('/api/auth/forgot-password', {
+    const res = await apiFetch('/api/auth/forgot-password', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(values),
     })
-    const data = (await res.json()) as { devToken?: string }
-    setDevToken(data.devToken ?? null)
+    // Deliberately the same answer whether or not the address is registered,
+    // so this cannot be used to find out who has an account.
+    const data = res.ok ? (res.data as { devToken?: string } | null) : null
+    setDevToken(data?.devToken ?? null)
     setSent(true)
   }
 

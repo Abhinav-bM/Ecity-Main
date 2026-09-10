@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatMoney } from '@/lib/money'
 import { formatDateShort } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 
 type Hit = {
   id: number
@@ -34,9 +35,9 @@ export function FindSale() {
   async function search() {
     if (!term.trim()) return
     setBusy(true)
-    const res = await fetch(`/api/sales?search=${encodeURIComponent(term.trim())}&pageSize=10`)
+    const res = await apiFetch(`/api/sales?search=${encodeURIComponent(term.trim())}&pageSize=10`)
     setBusy(false)
-    const data = res.ok ? ((await res.json()) as { rows?: Hit[] }) : null
+    const data = res.ok ? ((res.data) as { rows?: Hit[] }) : null
     setHits(data?.rows ?? [])
   }
 

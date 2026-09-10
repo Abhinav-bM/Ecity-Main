@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { rupeesToPaise } from '@/lib/validation'
+import { rupeeAmount, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { createAccount } from '@/server/services/account.service'
 import { listAccounts } from '@/server/services/cash.service'
@@ -14,7 +14,7 @@ const schema = z.object({
   bankName: z.string().trim().max(80).optional(),
   ifsc: z.string().trim().max(11).optional(),
   upiId: z.string().trim().max(80).optional(),
-  openingBalance: z.coerce.number().default(0),
+  openingBalance: rupeeAmount({ min: -100_000_000 }).default(0),
 })
 
 export const GET = route({ permission: 'account.view', branchFrom: 'none' }, ({ user }) =>
