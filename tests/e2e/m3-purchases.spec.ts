@@ -406,10 +406,30 @@ test.describe('the product picker scales', () => {
     // What was searched for is already in the box.
     await expect(page.getByLabel('Name', { exact: true })).toHaveValue(name)
     await choose(page.getByRole('combobox', { name: 'Category', exact: true }), 'Cables')
-    await page.getByRole('button', { name: 'Create and use' }).click()
+
+    /*
+     * A tax rate is required on a registered shop, and there is no "none"
+     * option. This dialog used to send no rate at all, so a product added
+     * mid-delivery was saved untaxed and the first bill for it quietly used
+     * whatever the shop default happened to be.
+     */
+    const create = page.getByRole('button', { name: 'Create and use' })
+    await expect(create).toBeDisabled()
+    await choose(page.getByRole('combobox', { name: 'Tax rate', exact: true }), 'GST 18%')
+    await expect(create).toBeEnabled()
+    await create.click()
 
     // And it lands on the line that asked for it.
     await expect(page.getByRole('combobox', { name: 'Line 1 product' })).toContainText(name)
+
+    // The rate really is on the product, not merely picked in a dialog.
+    await page.goto('/products')
+    await page.getByLabel('Search products').fill(name)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name }).first().click()
+    await expect(
+      page.getByRole('combobox', { name: 'Tax rate', exact: true }),
+    ).toContainText('GST 18%')
   })
 })
 

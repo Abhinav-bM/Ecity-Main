@@ -34,17 +34,36 @@ export function NewProductDialog({
   onOpenChange,
   prefillName = '',
   onCreated,
+  taxRates,
+  gstEnabled,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Whatever the search found nothing for. */
   prefillName?: string
   onCreated: (product: PickedProduct) => void
+  /** Active rates only. Empty is a real state - the shop may have set none up. */
+  taxRates: { id: number; name: string }[]
+  gstEnabled: boolean
 }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [name, setName] = useState(prefillName)
   const [categoryId, setCategoryId] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
+  /*
+   * Required when the shop is registered, and deliberately not defaulted.
+   *
+   * This dialog used to send `taxRateId: null` outright, so a product added
+   * from a purchase line was saved with no rate - and the first bill for it
+   * quietly fell back to the shop default, or to no GST at all. Nothing on
+   * screen ever said so. A rate that is wrong is a rate somebody can correct;
+   * a rate nobody chose is one nobody knows to look at.
+   *
+   * There is no "no tax rate" option on purpose: a genuinely untaxed product
+   * is a 0% rate, set up once in Settings -> Business -> Tax and chosen here
+   * like any other.
+   */
+  const [taxRateId, setTaxRateId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -52,6 +71,7 @@ export function NewProductDialog({
     if (!open) return
     setName(prefillName)
     setSellingPrice('')
+    setTaxRateId('')
     setError(null)
     let cancelled = false
     void (async () => {
@@ -70,7 +90,13 @@ export function NewProductDialog({
     const res = await apiFetch('/api/products', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, categoryId, sellingPrice, brandId: null, taxRateId: null }),
+      body: JSON.stringify({
+        name,
+        categoryId,
+        sellingPrice,
+        brandId: null,
+        taxRateId: gstEnabled ? taxRateId : null,
+      }),
     })
     if (!res.ok) {
       setBusy(false)
@@ -151,6 +177,33 @@ export function NewProductDialog({
               onChange={(e) => setSellingPrice(e.target.value)}
             />
           </div>
+          {gstEnabled ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="np-tax">Tax rate *</Label>
+              {taxRates.length === 0 ? (
+                <Alert variant="warning">
+                  This shop has no tax rates set up, so a product cannot be given one. Add them
+                  under Settings → Business → Tax first — including a 0% rate if some of what you
+                  sell is untaxed.
+                </Alert>
+              ) : (
+                <>
+                  <AppSelect
+                    id="np-tax"
+                    label="Tax rate"
+                    value={taxRateId}
+                    onValueChange={setTaxRateId}
+                    placeholder="Choose a tax rate"
+                    options={taxRates.map((t) => ({ value: String(t.id), label: t.name }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required. If this product is not taxed, choose your 0% rate rather than
+                    leaving it unset.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>
@@ -158,7 +211,14 @@ export function NewProductDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || name.trim().length < 2 || !categoryId}
+            disabled={
+              busy ||
+              name.trim().length < 2 ||
+              !categoryId ||
+              // Registered shop: a product must arrive with a rate, and cannot
+              // be created at all until the shop has some to choose from.
+              (gstEnabled && !taxRateId)
+            }
             onClick={() => void create()}
           >
             {busy ? 'Saving…' : 'Create and use'}

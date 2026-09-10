@@ -105,6 +105,8 @@ export function PurchaseForm({
   defaultBranchId,
   canCreateProduct,
   canCreateSupplier,
+  taxRates,
+  gstEnabled,
 }: {
   branches: { id: number; code: string; name: string }[]
   defaultBranchId: number | null
@@ -112,6 +114,9 @@ export function PurchaseForm({
   canCreateProduct: boolean
   /** supplier.manage, for the same reason. */
   canCreateSupplier: boolean
+  /** Active rates only, for the quick-create product dialog. */
+  taxRates: { id: number; name: string }[]
+  gstEnabled: boolean
 }) {
   const router = useRouter()
   const [supplier, setSupplier] = useState<PickedParty | null>(null)
@@ -809,6 +814,8 @@ export function PurchaseForm({
       <NewProductDialog
         open={newProductFor !== null}
         prefillName={newProductFor?.name ?? ''}
+        taxRates={taxRates}
+        gstEnabled={gstEnabled}
         onOpenChange={(open) => {
           if (!open) setNewProductFor(null)
         }}
