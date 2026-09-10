@@ -249,6 +249,7 @@ export function DeviceForm({
                     type="button"
                     variant={mainType === t ? 'default' : 'outline'}
                     size="sm"
+                    aria-pressed={mainType === t}
                     onClick={() => {
                       setMainType(t)
                       if (t !== 'GLOBAL') setIsNewCut(false)
@@ -290,9 +291,6 @@ export function DeviceForm({
             <CardTitle className="text-sm">Specification and price</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field id="variant" label="Variant" error={errors.variant?.message}>
-              <Input id="variant" {...register('variant')} />
-            </Field>
             <Field id="colour" label="Colour" error={errors.colour?.message}>
               <Input id="colour" {...register('colour')} />
             </Field>

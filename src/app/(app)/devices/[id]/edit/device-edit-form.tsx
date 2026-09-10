@@ -18,7 +18,6 @@ export type DeviceEditValues = {
   mainType: MainType
   isNewCut: boolean
   newCutNotes: string
-  variant: string
   ram: string
   storage: string
   colour: string
@@ -154,9 +153,6 @@ export function DeviceEditForm({
           <CardTitle className="text-sm">The handset</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field id="variant" label="Variant">
-            <Input id="variant" value={v.variant} onChange={(e) => set('variant', e.target.value)} />
-          </Field>
           <Field id="ram" label="RAM">
             <Input id="ram" value={v.ram} onChange={(e) => set('ram', e.target.value)} />
           </Field>

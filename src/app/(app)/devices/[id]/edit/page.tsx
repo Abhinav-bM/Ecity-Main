@@ -54,7 +54,6 @@ export default async function EditDevicePage({ params }: { params: Promise<{ id:
           mainType: d.mainType,
           isNewCut: d.isNewCut,
           newCutNotes: str(d.newCutNotes),
-          variant: str(d.variant),
           ram: str(d.ram),
           storage: str(d.storage),
           colour: str(d.colour),

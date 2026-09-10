@@ -143,7 +143,12 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    {i.isSerialised && i.mainType ? (
+                    {/*
+                      Shown whenever the line carries one. It used to be gated
+                      on the line being serialised, so an accessory classified
+                      at purchase stored the answer and never showed it again.
+                    */}
+                    {i.mainType ? (
                       <MainTypeBadge mainType={i.mainType} isNewCut={i.isNewCut} />
                     ) : (
                       <span className="text-xs text-muted-foreground">counted</span>

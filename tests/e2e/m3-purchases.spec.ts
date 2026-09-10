@@ -26,7 +26,10 @@ async function createSupplier(page: Page, name: string) {
 /** The product field is a searchable picker, not a select. */
 async function pickProduct(page: Page, name: string, lineIndex = 1) {
   await page.getByRole('combobox', { name: `Line ${lineIndex} product` }).click()
-  await page.getByPlaceholder('Name, SKU or barcode').fill(name)
+  // `.last()`: a picker opened on an earlier line can still be mounted, and
+  // two boxes share this placeholder. The one just opened is the last in the
+  // DOM. With a single line open this is the same element either way.
+  await page.getByPlaceholder('Name, SKU or barcode').last().fill(name)
   // Scoped to the picker: a native <select> on the page also exposes options.
   await page
     .getByTestId('product-picker-list')
@@ -95,6 +98,41 @@ test.describe('recording a purchase', () => {
     await expect(page.getByTestId('identifier-grid-0')).toBeHidden()
   })
 
+  test('an accessory line can be classified too, but is not made to be', async ({ page }) => {
+    /*
+     * Main type began as a handset property - the database refused it on a
+     * counted line outright. The shop buys accessories in the same
+     * distinctions, so it is offered on everything now; it stays *required*
+     * only on a serialised line, which stamps it onto every unit it creates.
+     */
+    const id = unique()
+    await createSupplier(page, `E2E ClassSupp ${id}`)
+    await createProduct(page, `E2E ClassCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E ClassSupp ${id}`)
+    await pickProduct(page, `E2E ClassCable ${id}`)
+
+    // Offered on an accessory line.
+    const used = page.getByRole('button', { name: 'USED', exact: true })
+    await expect(used).toBeVisible()
+
+    // NEW CUT is not - it describes a physical handset.
+    await page.getByRole('button', { name: 'GLOBAL', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'NEW CUT', exact: true })).toBeHidden()
+
+    await used.click()
+    await expect(used).toHaveAttribute('aria-pressed', 'true')
+
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('5')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('200')
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+
+    // And it survives onto the saved purchase.
+    await expect(page.getByText('USED').first()).toBeVisible()
+  })
+
   test('confirms a purchase: stock rises and units are registered', async ({ page }) => {
     const id = unique()
     await createSupplier(page, `E2E Supplier ${id}`)
@@ -151,6 +189,14 @@ test.describe('recording a purchase', () => {
     await page.getByRole('textbox', { name: 'RAM', exact: true }).fill('8 GB')
     await page.getByRole('textbox', { name: 'Storage', exact: true }).fill('256 GB')
     await page.getByRole('textbox', { name: 'Colour', exact: true }).fill('Green')
+    /*
+     * No Variant box, deliberately. The model tier belongs in the product name
+     * - "iPhone 17 Pro Max" - because the product is what carries a default
+     * price and what every report groups by; a tier hidden in a spec field
+     * could be neither. RAM, storage and colour stay on the line, because a
+     * product per storage x colour is two dozen rows for one model.
+     */
+    await expect(page.getByRole('textbox', { name: 'Variant', exact: true })).toHaveCount(0)
 
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(a)
     await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(b)
@@ -246,6 +292,42 @@ test.describe('recording a purchase', () => {
     await expect(page.locator('[data-slot="alert"]')).toContainText(
       /3 units but 1 IMEI entered/i,
     )
+  })
+
+  test('a second line starts from the main type already in use', async ({ page }) => {
+    /*
+     * A shipment is nearly always all one kind. Resetting every added line to
+     * NEW meant re-picking the same answer line after line, and the one that
+     * got missed was booked in as the wrong type - which is not a cosmetic
+     * mistake: main type drives the stock reports and, for NEW, which system
+     * bills the handset.
+     */
+    const id = unique()
+    await createProduct(page, `E2E Inherit A ${id}`, 'Mobiles (IMEI)')
+    await createProduct(page, `E2E Inherit B ${id}`, 'Mobiles (IMEI)')
+
+    await page.goto('/purchases/new')
+    await pickProduct(page, `E2E Inherit A ${id}`)
+
+    const typeButton = (n: number, type: string) =>
+      page.getByTestId('purchase-line').nth(n).getByRole('button', { name: type, exact: true })
+
+    await typeButton(0, 'USED').click()
+    await expect(typeButton(0, 'USED')).toHaveAttribute('aria-pressed', 'true')
+
+    await page.getByRole('button', { name: 'Add another line' }).click()
+    // The classification block only appears once the line has a serialised
+    // product on it - the inherited value is already in the line's state.
+    await pickProduct(page, `E2E Inherit B ${id}`, 2)
+
+    // The new line arrives as USED, not back at NEW.
+    await expect(typeButton(1, 'USED')).toHaveAttribute('aria-pressed', 'true')
+    await expect(typeButton(1, 'NEW')).toHaveAttribute('aria-pressed', 'false')
+
+    // And it is still a per-line choice, not a lock.
+    await typeButton(1, 'ER').click()
+    await expect(typeButton(1, 'ER')).toHaveAttribute('aria-pressed', 'true')
+    await expect(typeButton(0, 'USED')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('NEW CUT is offered only on a GLOBAL line', async ({ page }) => {

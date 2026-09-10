@@ -273,7 +273,12 @@ export async function createPurchase(
             taxPaise: line.taxPaise ?? 0n,
             lineTotalPaise: lineTotal(line),
             isSerialised: p.isSerialised,
-            mainType: p.isSerialised ? (line.mainType ?? null) : null,
+            /*
+             * Recorded on whatever the line is, not only on handsets. A
+             * serialised line must still carry one (it stamps every unit it
+             * creates); a counted line may, and may leave it blank.
+             */
+            mainType: line.mainType ?? null,
             isNewCut: p.isSerialised ? (line.isNewCut ?? false) : false,
             newCutNotes: line.newCutNotes?.trim() || null,
             variant: p.isSerialised ? line.variant?.trim() || null : null,

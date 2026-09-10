@@ -123,8 +123,18 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
               <dd>{position.previousBranchName ?? '—'}</dd>
               <dt className="text-muted-foreground">Branch</dt>
               <dd>{branchName ?? '—'}</dd>
-              <dt className="text-muted-foreground">Variant</dt>
-              <dd>{device.variant ?? '—'}</dd>
+              {/*
+                No longer collected - the model tier lives in the product name
+                ("iPhone 17 Pro Max"), which is the field reports group by.
+                Still shown for the handsets booked in before that, so nothing
+                already recorded disappears from the record.
+              */}
+              {device.variant ? (
+                <>
+                  <dt className="text-muted-foreground">Variant</dt>
+                  <dd>{device.variant}</dd>
+                </>
+              ) : null}
               <dt className="text-muted-foreground">RAM / Storage</dt>
               <dd>{[device.ram, device.storage].filter(Boolean).join(' / ') || '—'}</dd>
               <dt className="text-muted-foreground">Colour</dt>

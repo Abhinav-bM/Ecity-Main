@@ -35,7 +35,6 @@ type Unit = {
   identifier: string
   /** Only asked for where the category wants one beside the IMEI. */
   serialNumber: string
-  variant: string
   ram: string
   storage: string
   colour: string
@@ -52,7 +51,6 @@ type Line = {
   mainType: (typeof MAIN_TYPES)[number]
   isNewCut: boolean
   /** Stamped onto every unit on this line that does not override it. */
-  variant: string
   ram: string
   storage: string
   colour: string
@@ -65,7 +63,6 @@ type Line = {
 const newUnit = (): Unit => ({
   identifier: '',
   serialNumber: '',
-  variant: '',
   ram: '',
   storage: '',
   colour: '',
@@ -73,16 +70,28 @@ const newUnit = (): Unit => ({
 })
 
 let counter = 0
-const newLine = (): Line => ({
+/**
+ * A blank line, starting from the main type already in use on this purchase.
+ *
+ * A shipment is nearly always all one kind - a box of used handsets, or a box
+ * of new ones - so resetting every added line to NEW meant re-picking the same
+ * answer on line after line, and the one that got missed was booked in as the
+ * wrong type. Inheriting is not the same as deciding for the shopkeeper: the
+ * selector is still there on every line and still changes only that line.
+ *
+ * NEW CUT is deliberately NOT carried over. It is a per-handset designation
+ * inside GLOBAL, not a property of the shipment, and silently inheriting it
+ * would put it on stock nobody looked at.
+ */
+const newLine = (mainType: (typeof MAIN_TYPES)[number] = 'NEW'): Line => ({
   key: `l${counter++}`,
   product: null,
   quantity: '1',
   unitCost: '',
   sellingPrice: '',
   discount: '0',
-  mainType: 'NEW',
+  mainType,
   isNewCut: false,
-  variant: '',
   ram: '',
   storage: '',
   colour: '',
@@ -228,18 +237,17 @@ export function PurchaseForm({
                   .map((u) => ({
                     identifier: u.identifier.trim(),
                     serialNumber: u.serialNumber.trim() || undefined,
-                    variant: u.variant,
                     ram: u.ram,
                     storage: u.storage,
                     colour: u.colour,
                     batteryHealthPercent: u.battery,
                   }))
               : [],
+            // Sent on every line now, not only serialised ones.
+            mainType: l.mainType,
             ...(product.isSerialised
               ? {
-                  mainType: l.mainType,
                   isNewCut: l.isNewCut,
-                  variant: l.variant,
                   ram: l.ram,
                   storage: l.storage,
                   colour: l.colour,
@@ -453,35 +461,56 @@ export function PurchaseForm({
                 </Field>
               </div>
 
+              {/*
+                Main type is asked for on every line, handset or not: the shop
+                buys accessories in the same distinctions, and a NEW batch of
+                chargers is not the same purchase as a job lot of used ones.
+                It is required on a serialised line, because it stamps every
+                unit that line creates; on a counted line it is optional.
+              */}
+              {product ? (
+                <div className="space-y-1.5">
+                  <span className="text-sm font-medium">
+                    Main type{product.isSerialised ? ' *' : ''}
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {MAIN_TYPES.map((t) => (
+                      <Button
+                        key={t}
+                        type="button"
+                        size="sm"
+                        variant={line.mainType === t ? 'default' : 'outline'}
+                        /* A toggle group. Without this the selected type is
+                           conveyed by colour alone, which a screen reader
+                           cannot see. */
+                        aria-pressed={line.mainType === t}
+                        onClick={() => update(line.key, { mainType: t })}
+                      >
+                        {t}
+                      </Button>
+                    ))}
+                    {/*
+                      NEW CUT stays a handset designation. It describes a
+                      physical phone, and the database keeps it to GLOBAL
+                      lines; offering it on a box of cables would be noise.
+                    */}
+                    {product.isSerialised && line.mainType === 'GLOBAL' ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={line.isNewCut ? 'default' : 'outline'}
+                        aria-pressed={line.isNewCut}
+                        onClick={() => update(line.key, { isNewCut: !line.isNewCut })}
+                      >
+                        NEW CUT
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
               {product?.isSerialised ? (
                 <>
-                  <div className="space-y-1.5">
-                    <span className="text-sm font-medium">Main type</span>
-                    <div className="flex flex-wrap gap-2">
-                      {MAIN_TYPES.map((t) => (
-                        <Button
-                          key={t}
-                          type="button"
-                          size="sm"
-                          variant={line.mainType === t ? 'default' : 'outline'}
-                          onClick={() => update(line.key, { mainType: t })}
-                        >
-                          {t}
-                        </Button>
-                      ))}
-                      {line.mainType === 'GLOBAL' ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={line.isNewCut ? 'default' : 'outline'}
-                          onClick={() => update(line.key, { isNewCut: !line.isNewCut })}
-                        >
-                          NEW CUT
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-
                   {/*
                     The specs the goods arrived with, entered where they
                     arrive. A line is one combination anyway - its unit cost
@@ -519,14 +548,6 @@ export function PurchaseForm({
                           placeholder="Green"
                           value={line.colour}
                           onChange={(e) => update(line.key, { colour: e.target.value })}
-                        />
-                      </Field>
-                      <Field id={`variant-${line.key}`} label="Variant">
-                        <Input
-                          id={`variant-${line.key}`}
-                          placeholder="Pro Max"
-                          value={line.variant}
-                          onChange={(e) => update(line.key, { variant: e.target.value })}
                         />
                       </Field>
                       {/*
@@ -613,7 +634,7 @@ export function PurchaseForm({
                         const openKey = `${line.key}:${i}`
                         const open = openUnits.has(openKey)
                         const differs =
-                          unit.variant || unit.ram || unit.storage || unit.colour || unit.battery
+                          unit.ram || unit.storage || unit.colour || unit.battery
 
                         return (
                           <div key={i} className="space-y-1.5">
@@ -718,12 +739,6 @@ export function PurchaseForm({
                                   onChange={(e) => patch({ colour: e.target.value })}
                                 />
                                 <Input
-                                  aria-label={`${label} ${i + 1} variant`}
-                                  placeholder={line.variant || 'Variant'}
-                                  value={unit.variant}
-                                  onChange={(e) => patch({ variant: e.target.value })}
-                                />
-                                <Input
                                   inputMode="numeric"
                                   aria-label={`${label} ${i + 1} battery health %`}
                                   placeholder="Battery health %"
@@ -744,7 +759,11 @@ export function PurchaseForm({
         )
       })}
 
-      <Button type="button" variant="outline" onClick={() => setLines((p) => [...p, newLine()])}>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setLines((p) => [...p, newLine(p[p.length - 1]?.mainType)])}
+      >
         <Plus className="size-4" />
         Add another line
       </Button>
