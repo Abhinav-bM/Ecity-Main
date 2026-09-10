@@ -121,7 +121,10 @@ function specFor(line: PurchaseLineInput, unit: PurchaseUnitInput) {
 export type PurchaseInput = {
   supplierId: number
   branchId: number
+  /** The date on the supplier's bill. */
   purchaseDate?: Date
+  /** The day the goods reached the shop. Defaults to the bill's date. */
+  arrivedAt?: Date
   supplierInvoiceNumber?: string
   notes?: string
   lines: PurchaseLineInput[]
@@ -203,6 +206,15 @@ export async function createPurchase(
   return db.transaction(async (tx) => {
     const products = await validateLines(actor, input.lines, tx)
 
+    /*
+     * When the goods actually landed.
+     *
+     * A shop that does not distinguish the two dates leaves this blank, and
+     * the bill's date is the best answer available - which is exactly what
+     * every purchase recorded before this field existed says.
+     */
+    const arrivedAt = input.arrivedAt ?? input.purchaseDate ?? new Date()
+
     const subtotal = input.lines.reduce(
       (sum, l) => sum + l.unitCostPaise * BigInt(l.quantity),
       0n,
@@ -228,6 +240,7 @@ export async function createPurchase(
           purchaseNumber,
           supplierInvoiceNumber: input.supplierInvoiceNumber?.trim() || null,
           purchaseDate: input.purchaseDate ?? new Date(),
+          arrivedAt: input.arrivedAt ?? null,
           status: 'CONFIRMED',
           subtotalPaise: subtotal,
           discountPaise: discount,
@@ -295,8 +308,13 @@ export async function createPurchase(
               purchasePricePaise: unitCost,
               sellingPricePaise: line.sellingPricePaise ?? null,
               supplierId: input.supplierId,
+              /*
+               * The bill's date, which is what a supplier's warranty runs
+               * from - and `receivedAt` is the day it landed on the shelf.
+               * The two are usually days apart on anything shipped.
+               */
               purchaseDate: input.purchaseDate ?? new Date(),
-              receivedAt: input.purchaseDate ?? undefined,
+              receivedAt: arrivedAt,
               branchId: input.branchId,
             },
             tx,
@@ -315,9 +333,10 @@ export async function createPurchase(
             actorId: actor.id,
             refType: 'purchase',
             refId: created.id,
-            // A backdated purchase dates its stock movement too, or M10's
-            // movement report puts the goods on the wrong day.
-            occurredAt: input.purchaseDate ?? undefined,
+            // Stock exists from the day it arrived, not from the day the
+            // supplier raised the bill - otherwise M10's movement report puts
+            // the goods on the shelf before the van got there.
+            occurredAt: arrivedAt,
           },
           {
             productId: line.productId,
@@ -666,7 +685,12 @@ export async function updatePurchaseMeta(
   actor: AuthUser,
   ctx: AuditContext,
   id: number,
-  input: { supplierInvoiceNumber?: string | null; purchaseDate?: Date; notes?: string | null },
+  input: {
+    supplierInvoiceNumber?: string | null
+    purchaseDate?: Date
+    arrivedAt?: Date
+    notes?: string | null
+  },
 ): Promise<void> {
   const before = (
     await db
@@ -690,6 +714,7 @@ export async function updatePurchaseMeta(
         ? before.supplierInvoiceNumber
         : input.supplierInvoiceNumber?.trim() || null,
     purchaseDate: input.purchaseDate ?? before.purchaseDate,
+    arrivedAt: input.arrivedAt ?? before.arrivedAt,
     notes: input.notes === undefined ? before.notes : input.notes?.trim() || null,
     updatedAt: new Date(),
   }

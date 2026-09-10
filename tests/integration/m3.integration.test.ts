@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '@/server/db'
 import * as schema from '@/server/db/schema'
 import { createCategory, createProduct } from '@/server/services/product.service'
@@ -732,6 +732,127 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
         .where(eq(schema.supplierLedgerEntry.supplierId, supplierId))
       const recomputed = rows.reduce((sum, r) => sum + r.amount, 0n)
       expect(await supplierBalance(supplierId)).toBe(recomputed)
+    })
+  })
+
+  /*
+   * Two dates, because they are two facts. The supplier's bill is dated when
+   * they raised it - that is what their statement reconciles against. The
+   * goods land whenever they land, and that is the day the stock became
+   * sellable, so it is the day the movement report has to put them on.
+   */
+  describe('the bill date and the day it arrived', () => {
+    it('keeps both, and dates the stock movement from the arrival', async () => {
+      const billed = new Date('2026-03-02T10:00:00+05:30')
+      const arrived = new Date('2026-03-09T10:00:00+05:30')
+
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        purchaseDate: billed,
+        arrivedAt: arrived,
+        lines: [{ productId: cableProductId, quantity: 3, unitCostPaise: rs(100) }],
+      })
+
+      const detail = await getPurchase(actor, result.id)
+      expect(detail.purchase.purchaseDate.toISOString()).toBe(billed.toISOString())
+      expect(detail.purchase.arrivedAt?.toISOString()).toBe(arrived.toISOString())
+
+      // The van, not the invoice, is what put the goods on the shelf.
+      const movement = (
+        await db
+          .select({ occurredAt: schema.stockLedger.occurredAt })
+          .from(schema.stockLedger)
+          .where(
+            and(
+              eq(schema.stockLedger.refType, 'purchase'),
+              eq(schema.stockLedger.refId, result.id),
+            ),
+          )
+          .limit(1)
+      )[0]
+      expect(movement?.occurredAt.toISOString()).toBe(arrived.toISOString())
+    })
+
+    it('falls back to the bill date when nobody says when it came', async () => {
+      const billed = new Date('2026-04-06T10:00:00+05:30')
+
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        purchaseDate: billed,
+        lines: [{ productId: cableProductId, quantity: 2, unitCostPaise: rs(100) }],
+      })
+
+      const detail = await getPurchase(actor, result.id)
+      // Left null on the record - it is not a fact anyone stated - but the
+      // stock still has to be dated something, and the bill is the best there
+      // is. Every purchase recorded before this field existed reads the same.
+      expect(detail.purchase.arrivedAt).toBeNull()
+
+      const movement = (
+        await db
+          .select({ occurredAt: schema.stockLedger.occurredAt })
+          .from(schema.stockLedger)
+          .where(
+            and(
+              eq(schema.stockLedger.refType, 'purchase'),
+              eq(schema.stockLedger.refId, result.id),
+            ),
+          )
+          .limit(1)
+      )[0]
+      expect(movement?.occurredAt.toISOString()).toBe(billed.toISOString())
+    })
+
+    it('dates a handset from the bill, and shelves it from the arrival', async () => {
+      const billed = new Date('2026-05-04T10:00:00+05:30')
+      const arrived = new Date('2026-05-11T10:00:00+05:30')
+
+      const result = await createPurchase(actor, ctx, {
+        supplierId,
+        branchId: branchA,
+        purchaseDate: billed,
+        arrivedAt: arrived,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 1,
+            unitCostPaise: rs(20000),
+            mainType: 'NEW',
+            warrantyMonths: 12,
+            identifiers: [imei(90)],
+          },
+        ],
+      })
+
+      const device = (
+        await db
+          .select()
+          .from(schema.deviceUnit)
+          .where(eq(schema.deviceUnit.id, result.deviceIds[0]!))
+          .limit(1)
+      )[0]!
+
+      // A supplier's warranty runs from their bill, so the handset carries
+      // that date and the expiry is counted from it.
+      expect(device.purchaseDate?.toISOString()).toBe(billed.toISOString())
+      expect(device.warrantyExpiresAt?.toISOString().slice(0, 10)).toBe('2027-05-04')
+      // And its history says it turned up the day it turned up, not the day
+      // the supplier raised the paperwork.
+      const purchased = (
+        await db
+          .select({ occurredAt: schema.deviceEvent.occurredAt })
+          .from(schema.deviceEvent)
+          .where(
+            and(
+              eq(schema.deviceEvent.deviceId, device.id),
+              eq(schema.deviceEvent.eventType, 'PURCHASED'),
+            ),
+          )
+          .limit(1)
+      )[0]
+      expect(purchased?.occurredAt.toISOString()).toBe(arrived.toISOString())
     })
   })
 })

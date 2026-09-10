@@ -104,6 +104,7 @@ export function PurchaseForm({
   const [supplier, setSupplier] = useState<PickedParty | null>(null)
   const [branchId, setBranchId] = useState(String(defaultBranchId ?? branches[0]?.id ?? ''))
   const [purchaseDate, setPurchaseDate] = useState(shopDateString())
+  const [arrivedAt, setArrivedAt] = useState(shopDateString())
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<Line[]>([newLine()])
@@ -203,6 +204,7 @@ export function PurchaseForm({
         supplierId: supplier?.id,
         branchId,
         purchaseDate,
+        arrivedAt,
         supplierInvoiceNumber,
         notes,
         lines: lines.map((l) => {
@@ -296,16 +298,31 @@ export function PurchaseForm({
             />
           </Field>
           {/*
-            "Arrived", not "purchased": the date that matters to a shop is the
-            day the box landed on the counter, which is when the stock became
-            sellable and when a warranty starts running.
+            Two dates, because they are two facts. The bill is dated when the
+            supplier raised it - that is what their statement reconciles
+            against, and what their warranty runs from. The goods land
+            whenever they land, and that is when the stock became sellable.
+            On a counter sale they are the same day, so arrival follows the
+            bill until someone says otherwise.
           */}
-          <Field id="purchaseDate" label="Arrived date">
+          <Field id="purchaseDate" label="Purchase date" hint="The date on the supplier's bill.">
             <Input
               id="purchaseDate"
               type="date"
               value={purchaseDate}
               onChange={(e) => setPurchaseDate(e.target.value)}
+            />
+          </Field>
+          <Field
+            id="arrivedAt"
+            label="Arrived date"
+            hint="When it reached the shop. Leave as is if it came the same day."
+          >
+            <Input
+              id="arrivedAt"
+              type="date"
+              value={arrivedAt}
+              onChange={(e) => setArrivedAt(e.target.value)}
             />
           </Field>
           <Field
@@ -506,7 +523,7 @@ export function PurchaseForm({
                       {/*
                         PRD FR-29.1. A warranty typed in a month later is a
                         warranty nobody typed in — and the expiry is counted
-                        from the arrival date, which is on this form already.
+                        from the purchase date, which is on this form already.
                       */}
                       <Field id={`warranty-${line.key}`} label="Warranty (months)">
                         <Input

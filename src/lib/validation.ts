@@ -468,7 +468,10 @@ export const purchaseLineSchema = z.object({
 export const purchaseSchema = z.object({
   supplierId: z.coerce.number().int().positive('Choose a supplier.'),
   branchId: z.coerce.number().int().positive('Choose a branch.'),
+  /** The date on the supplier's bill. */
   purchaseDate: z.string().trim().optional().or(z.literal('')),
+  /** The day the goods reached the shop; falls back to the bill's date. */
+  arrivedAt: z.string().trim().optional().or(z.literal('')),
   supplierInvoiceNumber: optionalText(60),
   notes: optionalText(1000),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line.'),

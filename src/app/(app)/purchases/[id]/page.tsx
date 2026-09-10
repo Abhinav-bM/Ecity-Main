@@ -61,7 +61,16 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
           <p className="text-sm text-muted-foreground">
             {detail.supplierName}
             {detail.supplierCompany ? ` · ${detail.supplierCompany}` : ''} ·{' '}
-            {formatDateTime(detail.purchase.purchaseDate)}
+            Billed {formatDateTime(detail.purchase.purchaseDate)}
+            {/*
+              Only worth saying when the goods came on a different day; on a
+              counter purchase the two are the same and repeating it is noise.
+            */}
+            {detail.purchase.arrivedAt &&
+            shopDateString(detail.purchase.arrivedAt) !==
+              shopDateString(detail.purchase.purchaseDate)
+              ? ` · Arrived ${formatDateTime(detail.purchase.arrivedAt)}`
+              : ''}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -75,6 +84,9 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
               purchaseId={id}
               supplierInvoiceNumber={detail.purchase.supplierInvoiceNumber}
               purchaseDate={shopDateString(detail.purchase.purchaseDate)}
+              arrivedAt={
+                detail.purchase.arrivedAt ? shopDateString(detail.purchase.arrivedAt) : ''
+              }
               notes={detail.purchase.notes}
             />
           ) : null}

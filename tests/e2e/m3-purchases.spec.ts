@@ -331,6 +331,34 @@ test.describe('the product picker scales', () => {
   })
 })
 
+test.describe('the bill date and the day it arrived', () => {
+  test('both are on the form, and both are kept', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const id = unique()
+    const name = `E2E TwoDate Cable ${id}`
+    await createProduct(page, name, 'Cables')
+    const supplierName = `E2E TwoDateSup ${id}`
+    await createSupplier(page, supplierName)
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, supplierName)
+
+    // The supplier billed it a week before the van turned up.
+    await page.getByLabel('Purchase date').fill('2026-03-02')
+    await page.getByLabel('Arrived date').fill('2026-03-09')
+
+    await pickProduct(page, name)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('3')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+
+    // Both dates survive, and the detail says so rather than showing one.
+    await expect(page.getByText(/Billed 2 Mar 2026/)).toBeVisible()
+    await expect(page.getByText(/Arrived 9 Mar 2026/)).toBeVisible()
+  })
+})
+
 test.describe('a message that cannot be seen is not a message', () => {
   test('a validation error scrolls itself into view on a long form', async ({ page }) => {
     await signIn(page, USERS.admin)

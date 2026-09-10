@@ -16,6 +16,7 @@ export const POST = route(
       supplierId: body.supplierId,
       branchId: body.branchId,
       purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : undefined,
+      arrivedAt: body.arrivedAt ? new Date(body.arrivedAt) : undefined,
       supplierInvoiceNumber: body.supplierInvoiceNumber || undefined,
       notes: body.notes || undefined,
       lines: body.lines.map((l) => ({

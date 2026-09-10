@@ -1082,7 +1082,24 @@ export const purchase = pgTable(
     purchaseNumber: text('purchase_number').notNull(),
     /** The supplier's own bill number, when they gave one. */
     supplierInvoiceNumber: text('supplier_invoice_number'),
+    /**
+     * The date on the supplier's bill.
+     *
+     * Not the same fact as `arrivedAt`, and a shop needs both: the bill is
+     * dated when the supplier raised it, the goods land whenever they land.
+     * Purchases are reconciled against supplier statements by bill date, and
+     * a supplier's own warranty runs from it.
+     */
     purchaseDate: timestamp('purchase_date', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * The day the goods reached the shop.
+     *
+     * When stock became sellable, and so what the stock movement is dated.
+     * Null on purchases recorded before this was asked for, and on any where
+     * the two are the same day and nobody bothered - readers fall back to the
+     * bill date rather than showing a blank.
+     */
+    arrivedAt: timestamp('arrived_at', { withTimezone: true }),
     status: purchaseStatusEnum('status').notNull().default('DRAFT'),
 
     /** Money is bigint paise throughout (docs/03 §4.1). */

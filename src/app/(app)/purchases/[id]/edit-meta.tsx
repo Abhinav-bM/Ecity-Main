@@ -30,17 +30,23 @@ export function EditPurchaseMeta({
   purchaseId,
   supplierInvoiceNumber,
   purchaseDate,
+  arrivedAt,
   notes,
 }: {
   purchaseId: number
   supplierInvoiceNumber: string | null
+  /** The date on the supplier's bill, yyyy-mm-dd. */
   purchaseDate: string
+  /** The day it reached the shop. Empty on purchases recorded before this
+   *  was asked for, where the bill's date is all there is. */
+  arrivedAt: string
   notes: string | null
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [invoice, setInvoice] = useState(supplierInvoiceNumber ?? '')
   const [date, setDate] = useState(purchaseDate)
+  const [arrived, setArrived] = useState(arrivedAt)
   const [note, setNote] = useState(notes ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -54,6 +60,9 @@ export function EditPurchaseMeta({
       body: JSON.stringify({
         supplierInvoiceNumber: invoice.trim() || null,
         purchaseDate: date,
+        // Left out entirely when blank, so a correction to the bill number
+        // does not quietly stamp an arrival date nobody entered.
+        ...(arrived ? { arrivedAt: arrived } : {}),
         notes: note.trim() || null,
       }),
     })
@@ -93,13 +102,24 @@ export function EditPurchaseMeta({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pm-date">Arrived date</Label>
+              <Label htmlFor="pm-date">Purchase date</Label>
               <Input
                 id="pm-date"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">The date on the supplier's bill.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pm-arrived">Arrived date</Label>
+              <Input
+                id="pm-arrived"
+                type="date"
+                value={arrived}
+                onChange={(e) => setArrived(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">When it reached the shop.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pm-notes">Notes</Label>

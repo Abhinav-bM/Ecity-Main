@@ -16,6 +16,7 @@ export const GET = route({ permission: 'purchase.view', branchFrom: 'none' }, ({
 const schema = z.object({
   supplierInvoiceNumber: z.string().trim().max(60).nullable().optional(),
   purchaseDate: z.coerce.date().optional(),
+  arrivedAt: z.coerce.date().optional(),
   notes: z.string().trim().max(500).nullable().optional(),
 })
 

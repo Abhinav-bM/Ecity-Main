@@ -183,6 +183,13 @@
       "when": 1788871420271,
       "tag": "0025_m13_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789029500687,
+      "tag": "0026_purchase_arrived_at",
+      "breakpoints": true
     }
   ]
 }
