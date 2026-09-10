@@ -536,9 +536,22 @@ export const purchaseLineSchema = z.object({
   ram: optionalText(30),
   storage: optionalText(30),
   colour: optionalText(40),
+  /**
+   * How long the cover runs. Kept for the importer and for anything already
+   * sending months; the purchase screen now asks for the date instead.
+   */
   warrantyMonths: z
     .union([z.coerce.number().int().min(0).max(120), z.literal('')])
     .optional(),
+  /**
+   * The day cover ends, as the shop was told it (PRD FR-29.1).
+   *
+   * A period only answers the question after arithmetic, and the arithmetic
+   * needs a start date the buyer has to agree with. A used handset is sold
+   * with "covered until the 14th", so that is what is recorded. Where both
+   * arrive, this wins - it is the figure a person actually stated.
+   */
+  warrantyUntil: z.string().trim().optional().or(z.literal('')),
   warrantyProvider: optionalText(60),
   /** What it will be sold for. Blank leaves the product's list price to stand. */
   sellingPrice: z.union([z.coerce.number().min(0).max(100_000_000), z.literal('')]).optional(),

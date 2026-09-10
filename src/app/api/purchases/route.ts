@@ -1,7 +1,16 @@
 import { purchaseQuerySchema, purchaseSchema, rupeesToPaise } from '@/lib/validation'
 import { auditContextFromRequest } from '@/server/db/audit'
 import { createPurchase, listPurchases } from '@/server/services/purchase.service'
-import { route } from '@/server/http'
+import { AppError, route } from '@/server/http'
+import { parseShopDate } from '@/lib/date'
+
+/** A yyyy-mm-dd from the form, or nothing. Anything else is said, not ignored. */
+function day(value: string | undefined, what: string): Date | undefined {
+  if (!value) return undefined
+  const parsed = parseShopDate(value)
+  if (!parsed) throw new AppError(`That ${what} is not a real date.`, 422, 'BAD_DATE')
+  return parsed
+}
 
 export const GET = route(
   { permission: 'purchase.view', branchFrom: 'none', schema: purchaseQuerySchema },
@@ -15,8 +24,13 @@ export const POST = route(
     return createPurchase(user, audit, {
       supplierId: body.supplierId,
       branchId: body.branchId,
-      purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : undefined,
-      arrivedAt: body.arrivedAt ? new Date(body.arrivedAt) : undefined,
+      /*
+       * `parseShopDate`, not `new Date`: these arrive as free text, and an
+       * Invalid Date survives every check until the driver refuses it, which
+       * fails the whole purchase with a message about nothing.
+       */
+      purchaseDate: day(body.purchaseDate, 'bill date'),
+      arrivedAt: day(body.arrivedAt, 'arrival date'),
       supplierInvoiceNumber: body.supplierInvoiceNumber || undefined,
       notes: body.notes || undefined,
       lines: body.lines.map((l) => ({
@@ -46,6 +60,7 @@ export const POST = route(
           l.warrantyMonths === '' || l.warrantyMonths === undefined
             ? undefined
             : l.warrantyMonths,
+        warrantyUntil: day(l.warrantyUntil, 'warranty end date') ?? null,
         warrantyProvider: l.warrantyProvider || undefined,
         sellingPricePaise:
           l.sellingPrice === '' || l.sellingPrice === undefined

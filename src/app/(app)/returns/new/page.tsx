@@ -70,7 +70,11 @@ export default async function NewReturnPage({
           customerName={detail.customerName}
           lines={lines}
           branches={branches}
-          methods={methods.map((m) => ({ id: m.id, name: m.name }))}
+          // Active only. A retired method must not be offered for a new
+          // refund - and because the list is ordered by sortOrder, a
+          // deactivated method could sort first and become the default,
+          // which the server then rightly refuses as BAD_METHOD.
+          methods={methods.filter((m) => m.isActive).map((m) => ({ id: m.id, name: m.name }))}
           defaultBranchId={session.activeBranchId ?? branches[0]?.id ?? null}
           canRefund={hasPermission(session.user, 'return.refund')}
         />

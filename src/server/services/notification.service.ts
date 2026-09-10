@@ -799,10 +799,20 @@ export async function warrantyExpiring(
   const page = Math.max(1, opts.page ?? 1)
   const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 25))
 
+  /*
+   * A window either side of today, not everything ever.
+   *
+   * There was no lower bound: a handset whose cover lapsed three years ago sat
+   * in "expiring within 60 days" for ever, and on a shop that has been running
+   * a while the list became mostly ancient history with the few pieces
+   * actually running out buried in it. Expired stock is worth showing while it
+   * is still news - the same span back as the one being looked forward.
+   */
   const conditions = [
     sql`d.business_id = ${actor.businessId}`,
     sql`d.warranty_expires_at is not null`,
     sql`d.warranty_expires_at < now() + (${withinDays} || ' days')::interval`,
+    sql`d.warranty_expires_at > now() - (${withinDays} || ' days')::interval`,
   ]
   if (scope !== null) {
     conditions.push(

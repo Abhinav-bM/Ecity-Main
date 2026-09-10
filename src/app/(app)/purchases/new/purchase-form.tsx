@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Copy, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
@@ -20,7 +20,9 @@ import { NewProductDialog } from '@/components/new-product-dialog'
 import { NewPartyDialog, splitTypedTerm } from '@/components/new-party-dialog'
 import { BarcodeScanner } from '@/components/barcode-scanner'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
+import { cn } from '@/lib/utils'
 import { AppSelect } from '@/components/app-select'
+import { WARRANTY_PROVIDERS } from '@/lib/warranty'
 import { apiFetch } from '@/lib/api'
 
 /**
@@ -54,7 +56,15 @@ type Line = {
   ram: string
   storage: string
   colour: string
-  warrantyMonths: string
+  /**
+   * The day cover ends (PRD FR-29.1).
+   *
+   * A date rather than a period: a used handset is sold with "covered until
+   * the 14th", and a period only answers that after arithmetic against a start
+   * date the buyer never agreed. NEW stock does not carry one here at all -
+   * its cover is the manufacturer's, and it is billed in the other system.
+   */
+  warrantyUntil: string
   warrantyProvider: string
   /** One per unit. Length must equal quantity for a serialised line. */
   units: Unit[]
@@ -68,6 +78,15 @@ const newUnit = (): Unit => ({
   colour: '',
   battery: '',
 })
+
+/** The day after a yyyy-mm-dd, for a date box that must be strictly later. */
+function dayAfter(day: string): string | undefined {
+  if (!day) return undefined
+  const at = new Date(`${day}T00:00:00Z`)
+  if (Number.isNaN(at.getTime())) return undefined
+  at.setUTCDate(at.getUTCDate() + 1)
+  return at.toISOString().slice(0, 10)
+}
 
 let counter = 0
 /**
@@ -95,7 +114,7 @@ const newLine = (mainType: (typeof MAIN_TYPES)[number] = 'NEW'): Line => ({
   ram: '',
   storage: '',
   colour: '',
-  warrantyMonths: '',
+  warrantyUntil: '',
   warrantyProvider: '',
   units: [newUnit()],
 })
@@ -128,6 +147,36 @@ export function PurchaseForm({
   const [lines, setLines] = useState<Line[]>([newLine()])
   /** Which unit rows have their own specs showing, as `lineKey:index`. */
   const [openUnits, setOpenUnits] = useState<Set<string>>(new Set())
+
+  /*
+   * Identifiers typed more than once on this delivery.
+   *
+   * Only the camera guarded against this, and only within one line - a typed
+   * IMEI, or the same handset entered on two lines, went through untouched.
+   * The server does refuse it, but only once the whole purchase is submitted,
+   * and the message then names a device it created moments earlier in the same
+   * transaction, which reads as nonsense. Twenty boxes of digits is exactly
+   * where a finger slips, so it is said here, against the box it was typed in.
+   *
+   * Compared case-insensitively and across every line, because a serial number
+   * may carry letters and a duplicate is a duplicate wherever it sits.
+   */
+  const duplicateIdentifiers = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const l of lines) {
+      for (const u of l.units) {
+        const value = u.identifier.trim().toUpperCase()
+        if (!value) continue
+        counts.set(value, (counts.get(value) ?? 0) + 1)
+      }
+    }
+    return new Set([...counts].filter(([, n]) => n > 1).map(([value]) => value))
+  }, [lines])
+
+  const isDuplicate = (identifier: string) => {
+    const value = identifier.trim().toUpperCase()
+    return value !== '' && duplicateIdentifiers.has(value)
+  }
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   /** Which line asked for a new product, and what it was searching for. */
@@ -196,11 +245,37 @@ export function PurchaseForm({
   async function submit() {
     setFormError(null)
 
+    /*
+     * The duplicate is already marked on both boxes; this stops the send and
+     * names the value, because on a twenty-unit delivery the offending pair
+     * may be scrolled off the screen.
+     */
+    if (duplicateIdentifiers.size > 0) {
+      const shown = [...duplicateIdentifiers].slice(0, 3).join(', ')
+      const more = duplicateIdentifiers.size - Math.min(3, duplicateIdentifiers.size)
+      setFormError(
+        `The same identifier is entered more than once: ${shown}${more > 0 ? `, and ${more} more` : ''}. Every unit needs its own.`,
+      )
+      return
+    }
+
     // Catch the common mistake here rather than after a round trip.
     for (const l of lines) {
       const product = l.product
       if (!product) {
         setFormError('Every line needs a product.')
+        return
+      }
+      /*
+       * Cover has to end after it starts. Compared as yyyy-mm-dd strings,
+       * which sort correctly as dates, against the bill date rather than
+       * today - booking in is routinely backdated, and a warranty that lapsed
+       * before the goods were entered is a real thing to record.
+       */
+      if (l.warrantyUntil && purchaseDate && l.warrantyUntil <= purchaseDate) {
+        setFormError(
+          `${product.name}: the warranty has to end after the bill date (${purchaseDate}). Leave it blank if there is none.`,
+        )
         return
       }
       if (product.isSerialised) {
@@ -256,8 +331,10 @@ export function PurchaseForm({
                   ram: l.ram,
                   storage: l.storage,
                   colour: l.colour,
-                  warrantyMonths: l.warrantyMonths,
-                  warrantyProvider: l.warrantyProvider,
+                  // NEW carries no warranty here; anything already typed
+                  // before the type was switched is deliberately not sent.
+                  warrantyUntil: l.mainType === 'NEW' ? '' : l.warrantyUntil,
+                  warrantyProvider: l.mainType === 'NEW' ? '' : l.warrantyProvider,
                 }
               : {}),
           }
@@ -557,26 +634,42 @@ export function PurchaseForm({
                       </Field>
                       {/*
                         PRD FR-29.1. A warranty typed in a month later is a
-                        warranty nobody typed in — and the expiry is counted
-                        from the purchase date, which is on this form already.
+                        warranty nobody typed in, so it is asked for here.
+                        Not for NEW: that cover is the manufacturer's, runs
+                        from the customer's invoice, and the handset is billed
+                        in the other system anyway.
                       */}
-                      <Field id={`warranty-${line.key}`} label="Warranty (months)">
-                        <Input
-                          id={`warranty-${line.key}`}
-                          inputMode="numeric"
-                          placeholder="12"
-                          value={line.warrantyMonths}
-                          onChange={(e) => update(line.key, { warrantyMonths: e.target.value })}
-                        />
-                      </Field>
-                      <Field id={`warrantyBy-${line.key}`} label="Warranty by">
-                        <Input
-                          id={`warrantyBy-${line.key}`}
-                          placeholder="Brand"
-                          value={line.warrantyProvider}
-                          onChange={(e) => update(line.key, { warrantyProvider: e.target.value })}
-                        />
-                      </Field>
+                      {line.mainType === 'NEW' ? null : (
+                        <>
+                          <Field
+                            id={`warranty-${line.key}`}
+                            label="Warranty until"
+                            hint="The day cover ends. Leave blank if none."
+                          >
+                            <Input
+                              id={`warranty-${line.key}`}
+                              type="date"
+                              // The day after the bill: cover cannot end on
+                              // the day the goods were bought.
+                              min={dayAfter(purchaseDate)}
+                              value={line.warrantyUntil}
+                              onChange={(e) => update(line.key, { warrantyUntil: e.target.value })}
+                            />
+                          </Field>
+                          <Field id={`warrantyBy-${line.key}`} label="Warranty by">
+                            <AppSelect
+                              id={`warrantyBy-${line.key}`}
+                              label="Warranty by"
+                              value={line.warrantyProvider}
+                              onValueChange={(v) => update(line.key, { warrantyProvider: v })}
+                              allowEmpty
+                              emptyLabel="Not recorded"
+                              placeholder="Not recorded"
+                              options={[...WARRANTY_PROVIDERS]}
+                            />
+                          </Field>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -640,16 +733,21 @@ export function PurchaseForm({
                         const open = openUnits.has(openKey)
                         const differs =
                           unit.ram || unit.storage || unit.colour || unit.battery
+                        const dupe = isDuplicate(unit.identifier)
 
                         return (
                           <div key={i} className="space-y-1.5">
                             <div className="flex items-center gap-1">
                               <Input
                                 data-identifier="true"
-                                className="font-mono"
+                                className={cn(
+                                  'font-mono',
+                                  dupe && 'border-destructive focus-visible:ring-destructive',
+                                )}
                                 inputMode={isSerial ? 'text' : 'numeric'}
                                 placeholder={`${label} ${i + 1}`}
                                 aria-label={`Line ${index + 1} ${label} ${i + 1}`}
+                                aria-invalid={dupe || undefined}
                                 value={unit.identifier}
                                 onChange={(e) => patch({ identifier: e.target.value })}
                                 onKeyDown={(e) => {
@@ -695,6 +793,19 @@ export function PurchaseForm({
                                 <SlidersHorizontal className="size-4" />
                               </Button>
                             </div>
+
+                            {/*
+                              Said against the box it was typed into. Both
+                              copies are marked, because which of the two is
+                              the mistake is the buyer's to decide.
+                            */}
+                            {dupe ? (
+                              <p className="text-xs text-destructive">
+                                {/* "imei" reads as a typo; the acronym keeps its case. */}
+                                This {isSerial ? 'serial number' : 'IMEI'} is already on this
+                                purchase.
+                              </p>
+                            ) : null}
 
                             {/*
                               The serial off the box, where the category asks

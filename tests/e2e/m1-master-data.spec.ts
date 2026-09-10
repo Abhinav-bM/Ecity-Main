@@ -82,6 +82,22 @@ test.describe('as admin', () => {
     await expect(page.getByRole('button', { name: `+ ${renamed}` })).toHaveCount(0)
     // The seeded methods are untouched.
     await expect(page.getByRole('button', { name: '+ Cash' })).toBeVisible()
+
+    /*
+     * And it is gone from every other screen that pays money out or takes it.
+     *
+     * The refund picker on a return is ordered by sortOrder, and a method
+     * added here starts at 0 - so a deactivated one sorted FIRST and became
+     * the default, and every return was refused with "That payment method is
+     * not available." The till was fine; returns were not. Checked here,
+     * beside the deactivation that causes it.
+     */
+    const sale = await page.request.get('/api/sales?pageSize=1')
+    const rows = ((await sale.json()) as { rows?: { id: number }[] }).rows ?? []
+    if (rows.length > 0) {
+      await page.goto(`/returns/new?saleId=${rows[0]!.id}`)
+      await expect(page.getByRole('option', { name: renamed })).toHaveCount(0)
+    }
   })
 
   test('creates a customer, finds it by search, then deactivates it', async ({ page }) => {

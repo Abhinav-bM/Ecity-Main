@@ -622,5 +622,136 @@ suite('M13 notifications, alerts and warranty (database-backed)', () => {
       const rows = await warrantyExpiring(branchManager, { withinDays: 30 })
       expect(rows.rows.every((r) => r.branchName === 'M13 Branch A')).toBe(true)
     })
+
+    /*
+     * The purchase screen asks for the day cover ends rather than a period: a
+     * used handset is sold with "covered until the 14th", and a period only
+     * answers that after arithmetic against a start date the buyer never saw.
+     */
+    it('takes an explicit end date, and lets it beat a period', async () => {
+      const until = new Date()
+      until.setDate(until.getDate() + 20)
+      until.setHours(0, 0, 0, 0)
+
+      const device = await createDevice(owner, ctx, {
+        productId: phoneProductId,
+        identifiers: [imei(31)],
+        mainType: 'USED',
+        branchId: branchA,
+        purchaseDate: new Date(),
+        // Both supplied: 12 months would land a year out, the date is 20 days.
+        warrantyMonths: 12,
+        warrantyUntil: until,
+        warrantyProvider: 'Shop',
+      })
+
+      const row = (
+        await db
+          .select()
+          .from(schema.deviceUnit)
+          .where(eq(schema.deviceUnit.id, device.id))
+      )[0]!
+      expect(row.warrantyExpiresAt?.toISOString().slice(0, 10)).toBe(
+        until.toISOString().slice(0, 10),
+      )
+      // The period is still kept as it was given; the date is what governs.
+      expect(row.warrantyMonths).toBe(12)
+
+      const { rows } = await warrantyExpiring(owner, { withinDays: 30 })
+      expect(rows.some((r) => r.id === device.id)).toBe(true)
+    })
+
+    it('refuses a warranty that ends on or before the day of purchase', async () => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const make = (warrantyUntil: Date) =>
+        createDevice(owner, ctx, {
+          productId: phoneProductId,
+          identifiers: [imei(40 + warrantyUntil.getDate())],
+          mainType: 'USED',
+          branchId: branchA,
+          purchaseDate: today,
+          warrantyUntil,
+        })
+
+      // The case the shopkeeper actually hits: a used handset bought today,
+      // with cover typed as today. That is a typo, not a one-day warranty.
+      await expect(make(today)).rejects.toThrow(/end after the day the goods were bought/i)
+
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+      await expect(make(yesterday)).rejects.toThrow(/end after the day/i)
+    })
+
+    /*
+     * Anchored to the purchase date, not to today - or a shop booking in last
+     * week's delivery, or migrating old stock at go-live, could not record a
+     * warranty that has genuinely already lapsed.
+     */
+    it('still accepts a lapsed warranty on a backdated purchase', async () => {
+      const boughtLongAgo = new Date()
+      boughtLongAgo.setDate(boughtLongAgo.getDate() - 400)
+      const coverEnded = new Date()
+      coverEnded.setDate(coverEnded.getDate() - 35)
+
+      const device = await createDevice(owner, ctx, {
+        productId: phoneProductId,
+        identifiers: [imei(45)],
+        mainType: 'USED',
+        branchId: branchA,
+        purchaseDate: boughtLongAgo,
+        warrantyUntil: coverEnded,
+      })
+
+      const row = (
+        await db.select().from(schema.deviceUnit).where(eq(schema.deviceUnit.id, device.id))
+      )[0]!
+      expect(row.warrantyExpiresAt?.toISOString().slice(0, 10)).toBe(
+        coverEnded.toISOString().slice(0, 10),
+      )
+    })
+
+    /*
+     * There was no lower bound at all, so a handset whose cover lapsed years
+     * ago sat in "expiring within 60 days" for ever and buried the few pieces
+     * actually running out.
+     */
+    it('drops a warranty that lapsed long ago, but keeps a recent one', async () => {
+      const longGone = new Date()
+      longGone.setDate(longGone.getDate() - 400)
+      const justGone = new Date()
+      justGone.setDate(justGone.getDate() - 5)
+
+      const make = async (n: number, expiresAt: Date) => {
+        const d = await createDevice(owner, ctx, {
+          productId: phoneProductId,
+          identifiers: [imei(n)],
+          mainType: 'USED',
+          branchId: branchA,
+        })
+        await db
+          .update(schema.deviceUnit)
+          .set({ warrantyExpiresAt: expiresAt })
+          .where(eq(schema.deviceUnit.id, d.id))
+        return d.id
+      }
+
+      const ancient = await make(32, longGone)
+      const recent = await make(33, justGone)
+
+      const { rows } = await warrantyExpiring(owner, { withinDays: 30 })
+      expect(rows.some((r) => r.id === recent), 'lapsed 5 days ago is still news').toBe(true)
+      expect(rows.some((r) => r.id === ancient), 'lapsed 400 days ago is not').toBe(false)
+
+      /*
+       * A wider window does reach it. The screen offers up to a year, so a
+       * warranty that lapsed more than a year ago is off this list for good -
+       * which is the point: it is not something anyone can still act on. The
+       * date itself is not lost, it is on the handset's own page.
+       */
+      const veryWide = await warrantyExpiring(owner, { withinDays: 500 })
+      expect(veryWide.rows.some((r) => r.id === ancient)).toBe(true)
+    })
   })
 })

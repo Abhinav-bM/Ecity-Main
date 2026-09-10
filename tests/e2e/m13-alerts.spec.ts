@@ -162,6 +162,26 @@ test.describe('warranty (FR-29)', () => {
   })
 
   test('the new-device and edit forms both ask who honours it', async ({ page }) => {
+    /*
+     * The form shows an empty state instead of its fields when the catalogue
+     * has no serialised product, and the seed creates none - so this used to
+     * pass only when an earlier spec in the same run happened to have made
+     * one, and failed whenever it ran on its own. It makes its own now.
+     */
+    const existing = await page.request.get('/api/products?serialised=true&pageSize=1')
+    const found = ((await existing.json()) as { rows?: unknown[] }).rows ?? []
+    if (found.length === 0) {
+      const cats = await page.request.get('/api/categories')
+      const serialised = ((await cats.json()) as { id: number; isSerialised: boolean }[]).find(
+        (c) => c.isSerialised,
+      )
+      expect(serialised, 'the seed provides a serialised category').toBeTruthy()
+      const made = await page.request.post('/api/products', {
+        data: { name: `M13 Warranty Product ${unique()}`, categoryId: serialised!.id },
+      })
+      expect(made.ok(), await made.text()).toBe(true)
+    }
+
     await page.goto('/devices/new')
     await expect(page.getByLabel('Warranty by')).toBeVisible()
     await expect(page.getByLabel('Warranty (months)')).toBeVisible()

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DeviceStatusBadge, MainTypeBadge } from '@/components/main-type-badge'
 import { formatDateShort, formatDateTime } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
+import { warrantyProviderLabel } from '@/lib/warranty'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getDevice } from '@/server/services/device.service'
@@ -184,7 +185,9 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
                   <>
                     {formatDateShort(device.warrantyExpiresAt)}
                     {device.warrantyMonths ? ` · ${device.warrantyMonths} months` : ''}
-                    {device.warrantyProvider ? ` · ${device.warrantyProvider}` : ''}
+                    {device.warrantyProvider
+                      ? ` · ${warrantyProviderLabel(device.warrantyProvider)}`
+                      : ''}
                     <WarrantyState expiresAt={device.warrantyExpiresAt} />
                   </>
                 ) : (

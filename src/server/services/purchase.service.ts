@@ -82,6 +82,8 @@ export type PurchaseLineInput = {
    * month later is a warranty nobody recorded.
    */
   warrantyMonths?: number
+  /** The day cover ends. Stamped onto every unit the line creates. */
+  warrantyUntil?: Date | null
   warrantyProvider?: string
   /**
    * What the units will be sold for.
@@ -312,6 +314,7 @@ export async function createPurchase(
                */
               ...specFor(line, unit),
               warrantyMonths: line.warrantyMonths ?? null,
+              warrantyUntil: line.warrantyUntil ?? null,
               warrantyProvider: line.warrantyProvider,
               purchasePricePaise: unitCost,
               sellingPricePaise: line.sellingPricePaise ?? null,

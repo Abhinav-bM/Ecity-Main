@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
-import { addMonths } from '@/lib/date'
+import { addMonths, shopDateString } from '@/lib/date'
 import { db, type DbOrTx } from '@/server/db'
 import {
   brand,
@@ -53,6 +53,8 @@ export type DeviceInput = {
   supplierId?: number | null
   purchaseDate?: Date | null
   warrantyMonths?: number | null
+  /** The day cover ends, where the shop was told a date rather than a period. */
+  warrantyUntil?: Date | null
   /** Who honours it (PRD FR-29.1): the brand, the shop, or a third party. */
   warrantyProvider?: string
   branchId: number
@@ -253,12 +255,43 @@ export async function createDevice(
       await assertIdentifiersFree([serialNumber], 'SERIAL', undefined, t)
     }
 
-    // Counted from the day the goods arrived. addMonths rather than setMonth:
-    // the last day of a month must not roll into the next one (FR-29.1).
+    /*
+     * An explicit end date wins over a period.
+     *
+     * A period has to be turned into a date against a start the buyer never
+     * saw, so where somebody has actually been told "covered until the 14th",
+     * that is the figure to keep. A period still works, for the importer and
+     * for stock booked in before the screen asked for a date: counted from the
+     * day the goods arrived, with addMonths rather than setMonth so the last
+     * day of a month cannot roll into the next one (FR-29.1).
+     */
+    /*
+     * Cover has to end after it starts.
+     *
+     * Anchored to the purchase date, NOT to today, because booking in is
+     * routinely backdated - a delivery entered on Monday for goods that came
+     * on Friday, or a shop migrating old stock at go-live. Against "today" the
+     * first would be refused for no reason and the second could never record a
+     * warranty that has genuinely lapsed. Against the purchase date, a handset
+     * bought today still cannot be covered until today, which is the case that
+     * is actually a typo.
+     */
+    if (input.warrantyUntil) {
+      const from = input.purchaseDate ? new Date(input.purchaseDate) : new Date()
+      if (input.warrantyUntil <= from) {
+        throw new AppError(
+          `A warranty has to end after the day the goods were bought (${shopDateString(from)}).`,
+          422,
+          'WARRANTY_NOT_AFTER_PURCHASE',
+        )
+      }
+    }
+
     const warrantyExpiresAt =
-      input.warrantyMonths && input.purchaseDate
+      input.warrantyUntil ??
+      (input.warrantyMonths && input.purchaseDate
         ? addMonths(new Date(input.purchaseDate), input.warrantyMonths)
-        : null
+        : null)
 
     const created = (
       await t

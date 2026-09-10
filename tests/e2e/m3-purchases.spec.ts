@@ -330,6 +330,129 @@ test.describe('recording a purchase', () => {
     await expect(typeButton(0, 'USED')).toHaveAttribute('aria-pressed', 'true')
   })
 
+  test('the same IMEI twice is caught in the box, not after submitting', async ({ page }) => {
+    /*
+     * Only the camera guarded against this, and only within one line. A typed
+     * IMEI went through untouched until the server refused the whole purchase,
+     * with a message naming a device it had created moments earlier in the
+     * same transaction.
+     */
+    const id = unique()
+    await createSupplier(page, `E2E DupSupp ${id}`)
+    await createProduct(page, `E2E DupPhone ${id}`, 'Mobiles (IMEI)')
+    const same = imei(1)
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E DupSupp ${id}`)
+    await pickProduct(page, `E2E DupPhone ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
+
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(same)
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(same)
+
+    // Both copies are marked — which one is the mistake is the buyer's call.
+    await expect(page.getByRole('textbox', { name: 'Line 1 IMEI 1' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    await expect(page.getByRole('textbox', { name: 'Line 1 IMEI 2' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    await expect(page.getByText(/This IMEI is already on this purchase/).first()).toBeVisible()
+
+    // And it cannot be sent.
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page.locator('[data-slot="alert"]')).toContainText(same)
+    await expect(page).toHaveURL(/\/purchases\/new$/)
+
+    // Correcting one clears both marks.
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(imei(2))
+    await expect(page.getByRole('textbox', { name: 'Line 1 IMEI 1' })).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  })
+
+  test('a duplicate IMEI is caught across two lines as well', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E DupSupp2 ${id}`)
+    await createProduct(page, `E2E DupPhoneA ${id}`, 'Mobiles (IMEI)')
+    await createProduct(page, `E2E DupPhoneB ${id}`, 'Mobiles (IMEI)')
+    const same = imei(3)
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E DupSupp2 ${id}`)
+    await pickProduct(page, `E2E DupPhoneA ${id}`)
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(same)
+
+    await page.getByRole('button', { name: 'Add another line' }).click()
+    await pickProduct(page, `E2E DupPhoneB ${id}`, 2)
+    await page.getByRole('textbox', { name: 'Line 2 IMEI 1' }).fill(same)
+
+    // The same handset cannot arrive on two lines of one delivery.
+    await expect(page.getByRole('textbox', { name: 'Line 1 IMEI 1' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    await expect(page.getByRole('textbox', { name: 'Line 2 IMEI 1' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  })
+
+  test('warranty is a date, and NEW is not asked for one', async ({ page }) => {
+    /*
+     * A period only answers "is it still covered?" after arithmetic against a
+     * start date the buyer never agreed to. A used handset is sold with
+     * "covered until the 14th", so that is what is recorded. NEW carries no
+     * warranty here: that cover is the manufacturer's, and the handset is
+     * billed in the other system anyway.
+     */
+    const id = unique()
+    await createSupplier(page, `E2E WarrSupp ${id}`)
+    await createProduct(page, `E2E WarrPhone ${id}`, 'Mobiles (IMEI)')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E WarrSupp ${id}`)
+    await pickProduct(page, `E2E WarrPhone ${id}`)
+
+    // The line starts as NEW, so there is nothing to fill in.
+    const until = page.getByRole('textbox', { name: 'Warranty until' })
+    await expect(until).toHaveCount(0)
+    await expect(page.getByRole('combobox', { name: 'Warranty by' })).toHaveCount(0)
+
+    // Any other type asks for the day cover ends.
+    await page.getByRole('button', { name: 'USED', exact: true }).click()
+    const box = page.locator('#warranty-l0')
+    await expect(box).toBeVisible()
+    await expect(box).toHaveAttribute('type', 'date')
+
+    const ends = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10)
+    await box.fill(ends)
+    // Two fixed answers rather than free text, so a report can group by it.
+    await choose(page.getByRole('combobox', { name: 'Warranty by' }), 'Shop warranty')
+
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('9000')
+    const serial = imei(7)
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(serial)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+
+    // The date reached the handset, not a period converted into one.
+    await page.goto('/devices')
+    await page.getByLabel('Search devices').fill(serial)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name: serial }).first().click()
+    await expect(page.getByTestId('device-warranty')).toContainText('Shop warranty')
+
+    // And it is on the warranty screen, which is the point of recording it.
+    await page.goto('/inventory/warranty?days=30')
+    // Card and table both render; only one is on screen at this width.
+    await expect(page.getByText(serial).and(page.locator(':visible')).first()).toBeVisible()
+  })
+
   test('NEW CUT is offered only on a GLOBAL line', async ({ page }) => {
     const id = unique()
     await createProduct(page, `E2E GlobalLine ${id}`, 'Mobiles (IMEI)')

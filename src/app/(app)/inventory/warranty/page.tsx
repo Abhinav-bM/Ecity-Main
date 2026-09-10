@@ -16,6 +16,7 @@ import { warrantyExpiring } from '@/server/services/notification.service'
 import { Pagination } from '@/components/pagination'
 import { WarrantyWindow } from './warranty-window'
 import { readPage } from '@/lib/list-view'
+import { warrantyProviderLabel } from '@/lib/warranty'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,8 @@ export default async function WarrantyPage({
       <div>
         <h1 className="text-lg font-semibold tracking-tight sm:text-xl">Warranty</h1>
         <p className="text-sm text-muted-foreground">
-          Handsets whose warranty runs out soon, and those where it already has.
+          Handsets whose warranty runs out soon, and those where it lapsed just as
+          recently — the same span either side of today.
         </p>
       </div>
 
@@ -65,8 +67,9 @@ export default async function WarrantyPage({
       {total === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Nothing expiring in the next {withinDays} days. Warranty is recorded when a handset is
-            booked in — a purchase line with a warranty period fills it for every unit.
+            Nothing expiring or newly lapsed within {withinDays} days. Warranty is recorded when a
+            handset is booked in — a purchase line carries a “warranty until” date onto every unit
+            it creates. NEW stock is not asked for one: that cover is the manufacturer&apos;s.
           </CardContent>
         </Card>
       ) : (
@@ -87,7 +90,7 @@ export default async function WarrantyPage({
                   <p>{r.productName}</p>
                   <p className="text-xs text-muted-foreground">
                     {r.expires}
-                    {r.provider ? ` · ${r.provider}` : ''}
+                    {r.provider ? ` · ${warrantyProviderLabel(r.provider)}` : ''}
                     {r.customerName ? ` · ${r.customerName}` : ''}
                     {r.branchName ? ` · ${r.branchName}` : ''}
                   </p>
@@ -124,7 +127,9 @@ export default async function WarrantyPage({
                       </Link>
                     </TableCell>
                     <TableCell>{r.productName}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.provider ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {warrantyProviderLabel(r.provider) ?? '—'}
+                    </TableCell>
                     <TableCell>
                       {r.customerId ? (
                         <Link

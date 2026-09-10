@@ -64,7 +64,15 @@ export function ReturnForm({
   const [branchId, setBranchId] = useState(String(defaultBranchId ?? branches[0]?.id ?? ''))
   const [reason, setReason] = useState('')
   const [deduction, setDeduction] = useState('')
-  const [refundMethod, setRefundMethod] = useState(canRefund ? 'PAYMENT_METHOD' : 'NONE')
+  /*
+   * Paying the money back needs something to pay it back with. A shop with no
+   * active payment method set up would otherwise land on PAYMENT_METHOD with
+   * an empty picker and be refused at save time with a message about the
+   * method, which is not the thing that is missing.
+   */
+  const [refundMethod, setRefundMethod] = useState(
+    canRefund && methods.length > 0 ? 'PAYMENT_METHOD' : 'NONE',
+  )
   const [methodId, setMethodId] = useState(String(methods[0]?.id ?? ''))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
