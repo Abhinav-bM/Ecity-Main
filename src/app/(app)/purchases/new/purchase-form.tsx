@@ -32,6 +32,8 @@ import { AppSelect } from '@/components/app-select'
  */
 type Unit = {
   identifier: string
+  /** Only asked for where the category wants one beside the IMEI. */
+  serialNumber: string
   variant: string
   ram: string
   storage: string
@@ -61,6 +63,7 @@ type Line = {
 
 const newUnit = (): Unit => ({
   identifier: '',
+  serialNumber: '',
   variant: '',
   ram: '',
   storage: '',
@@ -221,6 +224,7 @@ export function PurchaseForm({
                   .filter((u) => u.identifier.trim())
                   .map((u) => ({
                     identifier: u.identifier.trim(),
+                    serialNumber: u.serialNumber.trim() || undefined,
                     variant: u.variant,
                     ram: u.ram,
                     storage: u.storage,
@@ -342,6 +346,9 @@ export function PurchaseForm({
       {lines.map((line, index) => {
         const product = line.product
         const isSerial = product?.identifierType === 'SERIAL'
+        // A phone whose category also wants the serial off the box. The IMEI
+        // stays the required one; this is the extra.
+        const wantsSerial = product?.capturesSerial === true && !isSerial
         const label = isSerial ? 'Serial number' : 'IMEI'
 
         return (
@@ -660,6 +667,30 @@ export function PurchaseForm({
                                 <SlidersHorizontal className="size-4" />
                               </Button>
                             </div>
+
+                            {/*
+                              The serial off the box, where the category asks
+                              for one. Beneath the IMEI rather than beside it,
+                              because it is the optional half: a handset with
+                              no serial to hand still books in, and a row that
+                              refused to save without one would have people
+                              typing anything to get past it.
+                            */}
+                            {wantsSerial ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  className="font-mono text-xs"
+                                  placeholder={`Serial ${i + 1} (optional)`}
+                                  aria-label={`Line ${index + 1} serial ${i + 1}`}
+                                  value={unit.serialNumber}
+                                  onChange={(e) => patch({ serialNumber: e.target.value })}
+                                />
+                                <BarcodeScanner
+                                  label={`Scan serial ${i + 1} on line ${index + 1}`}
+                                  onScan={(value) => patch({ serialNumber: value })}
+                                />
+                              </div>
+                            ) : null}
 
                             {open ? (
                               <div className="grid gap-2 rounded-md border p-2">

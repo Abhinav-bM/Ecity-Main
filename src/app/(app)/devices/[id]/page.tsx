@@ -86,9 +86,20 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
           </CardHeader>
           <CardContent>
             <ul className="space-y-1.5">
+              {/*
+                What each one IS, not just where it sits. A handset can carry
+                two IMEIs and the serial from its box, and "Slot 3" says
+                nothing about which of those is being read out to a customer.
+              */}
               {identifiers.map((i) => (
                 <li key={i.id} className="flex items-center gap-2 font-mono text-sm">
-                  <span className="text-xs text-muted-foreground">Slot {i.slot}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {i.type === 'SERIAL'
+                      ? 'Serial'
+                      : identifiers.filter((o) => o.type === 'IMEI').length > 1
+                        ? `IMEI ${i.slot}`
+                        : 'IMEI'}
+                  </span>
                   {i.value}
                   {i.isPrimary ? (
                     <Badge variant="secondary" className="ml-auto">

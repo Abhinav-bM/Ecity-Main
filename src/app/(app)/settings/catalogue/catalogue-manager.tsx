@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { trackingLabel } from '@/lib/tracking'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { FormError } from '@/components/form-error'
@@ -14,7 +15,37 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppSelect } from '@/components/app-select'
 
 type Brand = { id: number; name: string; isActive: boolean; productCount: number }
-type Category = Brand & { isSerialised: boolean; identifierType: string }
+type Category = Brand & {
+  isSerialised: boolean
+  identifierType: string
+  capturesSerial: boolean
+}
+
+/*
+ * The three ways a tracked item is identified, as one choice.
+ *
+ * Underneath, "IMEI and serial" is an IMEI category with a flag - a serial is
+ * not a third kind of identifier, it is an extra fact about a handset the
+ * IMEI already identifies. But a shop does not think in flags: it thinks
+ * "phones, and I want their box serials too". So one list of three.
+ */
+const TRACKING_OPTIONS = [
+  { value: 'IMEI', label: 'IMEI (phones)' },
+  { value: 'IMEI_SERIAL', label: 'IMEI and serial number (phones)' },
+  { value: 'SERIAL', label: 'Serial number only (laptops, speakers)' },
+]
+
+/** The stored pair, as the single value the list above offers. */
+function trackingValue(identifierType: string, capturesSerial: boolean): string {
+  if (identifierType === 'IMEI' && capturesSerial) return 'IMEI_SERIAL'
+  return identifierType === 'SERIAL' ? 'SERIAL' : 'IMEI'
+}
+
+/** And back again, for the two columns the server keeps. */
+function trackingFields(value: string): { identifierType: string; capturesSerial: boolean } {
+  if (value === 'SERIAL') return { identifierType: 'SERIAL', capturesSerial: false }
+  return { identifierType: 'IMEI', capturesSerial: value === 'IMEI_SERIAL' }
+}
 
 /**
  * Managing the catalogue's two lists.
@@ -65,7 +96,7 @@ export function CatalogueManager({
             testId="category-list"
             describe={(r) => {
               const c = r as Category
-              const tracking = c.isSerialised ? `${c.identifierType}-tracked` : 'counted'
+              const tracking = trackingLabel(c)
               return `${tracking} · ${c.productCount} product${c.productCount === 1 ? '' : 's'}`
             }}
           />
@@ -97,6 +128,18 @@ function List({
   const router = useRouter()
   const [editing, setEditing] = useState<number | null>(null)
   const [name, setName] = useState('')
+  /*
+   * How a category tracks its items, while it is being edited.
+   *
+   * Only meaningful for categories, and only changeable while the category
+   * still has no products - the server refuses otherwise, and rightly:
+   * whether items carry identifiers decides whether their stock is a count
+   * or a row per handset, so flipping it later would reinterpret stock that
+   * already exists. The form says so rather than letting someone try and
+   * meet a 409.
+   */
+  const [isSerialised, setIsSerialised] = useState(false)
+  const [tracking, setTracking] = useState('IMEI')
   const [error, setError] = useState<string | null>(null)
 
   async function save(id: number, body: Record<string, unknown>) {
@@ -128,22 +171,47 @@ function List({
               data-testid={`${kind}-row`}
             >
               {editing === r.id ? (
-                <>
+                <div className="w-full space-y-3">
                   <Input
                     className="h-8 max-w-xs"
                     aria-label={`Rename ${r.name}`}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
+
+                  {kind === 'category' ? (
+                    <TrackingFields
+                      locked={r.productCount > 0}
+                      isSerialised={isSerialised}
+                      tracking={tracking}
+                      onSerialisedChange={setIsSerialised}
+                      onTrackingChange={setTracking}
+                    />
+                  ) : null}
+
                   <span className="flex gap-2">
-                    <Button size="sm" onClick={() => void save(r.id, { name })}>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        void save(r.id, {
+                          name,
+                          // A category in use can still gain the serial box:
+                          // the server keeps the rest as it was.
+                          ...(kind === 'category'
+                            ? r.productCount === 0
+                              ? { isSerialised, ...trackingFields(tracking) }
+                              : { capturesSerial: trackingFields(tracking).capturesSerial }
+                            : {}),
+                        })
+                      }
+                    >
                       Save
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
                       Cancel
                     </Button>
                   </span>
-                </>
+                </div>
               ) : (
                 <>
                   <span className="min-w-0">
@@ -162,9 +230,12 @@ function List({
                       onClick={() => {
                         setEditing(r.id)
                         setName(r.name)
+                        const c = r as Category
+                        setIsSerialised(c.isSerialised ?? false)
+                        setTracking(trackingValue(c.identifierType ?? 'IMEI', c.capturesSerial))
                       }}
                     >
-                      Rename
+                      {kind === 'category' ? 'Edit' : 'Rename'}
                     </Button>
                     <Button
                       size="sm"
@@ -228,11 +299,80 @@ function NewBrand() {
   )
 }
 
+/**
+ * How a category tracks its items.
+ *
+ * The same pair of controls the add form uses, so the two cannot describe the
+ * same decision differently. On an existing category they are read-only once
+ * it has products: whether items carry identifiers decides whether their
+ * stock is a count or a row per handset, and flipping that afterwards would
+ * reinterpret stock that already exists. The server refuses it; this says why
+ * before anyone tries.
+ */
+function TrackingFields({
+  locked,
+  isSerialised,
+  tracking,
+  onSerialisedChange,
+  onTrackingChange,
+}: {
+  locked: boolean
+  isSerialised: boolean
+  tracking: string
+  onSerialisedChange: (value: boolean) => void
+  onTrackingChange: (value: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={isSerialised}
+          disabled={locked}
+          onCheckedChange={(c) => onSerialisedChange(c === true)}
+          aria-label="Tracked individually"
+        />
+        Tracked individually
+      </label>
+      {isSerialised ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-identifier-type" className="text-xs">
+            Identified by
+          </Label>
+          <AppSelect
+            id="edit-identifier-type"
+            label="Identified by"
+            // Not locked with the rest: adding the serial box does not
+            // reinterpret anything, so a shop can decide it wants them later.
+            disabled={locked && tracking !== 'IMEI' && tracking !== 'IMEI_SERIAL'}
+            className="w-72"
+            value={tracking}
+            onValueChange={onTrackingChange}
+            options={TRACKING_OPTIONS.map((o) => ({
+              ...o,
+              // Moving between IMEI and serial IS a tracking change.
+              disabled:
+                locked && o.value !== 'IMEI' && o.value !== 'IMEI_SERIAL',
+            }))}
+          />
+        </div>
+      ) : null}
+      {locked ? (
+        <p className="w-full text-xs text-muted-foreground">
+          This category already has products, so whether items are tracked individually and
+          whether they carry an IMEI or a serial are fixed — their stock is recorded that way.
+          Asking for the serial alongside the IMEI can still be turned on: it adds a box to the
+          purchase form and leaves existing handsets alone.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function NewCategory() {
   const router = useRouter()
   const [name, setName] = useState('')
   const [isSerialised, setIsSerialised] = useState(false)
-  const [identifierType, setIdentifierType] = useState('IMEI')
+  const [tracking, setTracking] = useState('IMEI')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -243,7 +383,7 @@ function NewCategory() {
     const res = await fetch('/api/categories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, isSerialised, identifierType }),
+      body: JSON.stringify({ name, isSerialised, ...trackingFields(tracking) }),
     })
     setBusy(false)
     if (!res.ok) {
@@ -280,16 +420,14 @@ function NewCategory() {
         </label>
         {isSerialised ? (
           <div className="space-y-1.5">
-            <Label htmlFor="identifier-type">Identifier</Label>
+            <Label htmlFor="identifier-type">Identified by</Label>
             <AppSelect
               id="identifier-type"
-              label="Identifier"
-              value={identifierType}
-              onValueChange={setIdentifierType}
-              options={[
-                { value: 'IMEI', label: 'IMEI (phones)' },
-                { value: 'SERIAL', label: 'Serial number (laptops, speakers)' },
-              ]}
+              label="Identified by"
+              className="w-72"
+              value={tracking}
+              onValueChange={setTracking}
+              options={TRACKING_OPTIONS}
             />
           </div>
         ) : null}

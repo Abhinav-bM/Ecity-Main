@@ -28,6 +28,7 @@ export const POST = route(
         identifiers: l.identifiers,
         units: l.units.map((u) => ({
           identifier: u.identifier,
+          serialNumber: u.serialNumber || undefined,
           variant: u.variant || undefined,
           ram: u.ram || undefined,
           storage: u.storage || undefined,

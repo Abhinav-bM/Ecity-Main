@@ -733,6 +733,19 @@ export const category = pgTable(
      * and the label the form shows ("IMEI" vs "Serial number").
      */
     identifierType: identifierTypeEnum('identifier_type').notNull().default('NONE'),
+    /**
+     * Whether a unit also carries a serial number alongside its IMEI.
+     *
+     * A flag rather than a fourth `identifier_type`, because "IMEI and
+     * serial" is not a kind of identifier - `device_identifier.type` has to
+     * say what a given row IS, and a row is one or the other. This is the
+     * category's policy: the IMEI identifies the handset and is required,
+     * the serial is an extra the box happens to carry and is optional.
+     *
+     * Only meaningful when identifierType is IMEI. A serial-only category
+     * already captures a serial as its identifier.
+     */
+    capturesSerial: boolean('captures_serial').notNull().default(false),
     sortOrder: smallint('sort_order').notNull().default(0),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

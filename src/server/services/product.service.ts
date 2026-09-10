@@ -39,6 +39,8 @@ export async function createCategory(
     isSerialised: boolean
     /** IMEI for phones, SERIAL for laptops and other electronics. */
     identifierType?: 'IMEI' | 'SERIAL' | 'NONE'
+    /** Whether a phone also carries the serial printed on its box. */
+    capturesSerial?: boolean
   },
 ) {
   const clash = await db
@@ -58,6 +60,13 @@ export async function createCategory(
         // A counted category has no identifier; a serialised one defaults to
         // IMEI unless it is told otherwise.
         identifierType: input.isSerialised ? (input.identifierType ?? 'IMEI') : 'NONE',
+        // Only an IMEI category can also want a serial: on a serial-only one
+        // the serial IS the identifier, and on a counted one there is no unit
+        // to carry it.
+        capturesSerial:
+          input.isSerialised && (input.identifierType ?? 'IMEI') === 'IMEI'
+            ? (input.capturesSerial ?? false)
+            : false,
       })
       .returning()
   )[0]!
@@ -392,6 +401,7 @@ export async function listProducts(actor: AuthUser, filters: ProductFilters) {
       brandName: brand.name,
       isSerialised: product.isSerialised,
       identifierType: category.identifierType,
+      capturesSerial: category.capturesSerial,
       isActive: product.isActive,
       sellingPricePaise: product.defaultSellingPricePaise,
       purchasePricePaise: showCost ? product.defaultPurchasePricePaise : sql<null>`null`,
@@ -584,6 +594,7 @@ export async function updateCategory(
     isActive?: boolean
     isSerialised?: boolean
     identifierType?: 'IMEI' | 'SERIAL' | 'NONE'
+    capturesSerial?: boolean
   },
 ) {
   const before = (
@@ -630,11 +641,21 @@ export async function updateCategory(
   }
 
   const isSerialised = input.isSerialised ?? before.isSerialised
+  const identifierType = isSerialised ? (input.identifierType ?? before.identifierType) : 'NONE'
   const values = {
     name,
     isActive: input.isActive ?? before.isActive,
     isSerialised,
-    identifierType: isSerialised ? (input.identifierType ?? before.identifierType) : 'NONE',
+    identifierType,
+    /*
+     * Asking for a serial is NOT a tracking change, and is deliberately not
+     * caught by the guard above. Nothing already recorded is reinterpreted by
+     * it: existing handsets simply have no serial, and the next one booked in
+     * gets the extra box. A shop that realises after a month that it wants
+     * the serials should not have to build a second Mobiles category.
+     */
+    capturesSerial:
+      identifierType === 'IMEI' ? (input.capturesSerial ?? before.capturesSerial) : false,
     updatedAt: new Date(),
   } as const
 

@@ -13,6 +13,11 @@ const schema = z.object({
    */
   isSerialised: z.boolean().optional(),
   identifierType: z.enum(['IMEI', 'SERIAL', 'NONE']).optional(),
+  /*
+   * Unlike the two above, this stays editable for the life of the category.
+   * It adds a box to a form; it does not reinterpret stock that exists.
+   */
+  capturesSerial: z.boolean().optional(),
 })
 
 export const PATCH = route(

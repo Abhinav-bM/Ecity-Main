@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { trackingDescription, trackingLabel, type Tracking } from '@/lib/tracking'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -30,7 +31,7 @@ export function ProductForm({
 }: {
   id?: number
   initial?: Partial<Values>
-  categories: { id: number; name: string; isSerialised: boolean; identifierType: string }[]
+  categories: ({ id: number; name: string } & Tracking)[]
   brands: { id: number; name: string }[]
   taxRates: { id: number; name: string }[]
   suppliers: { id: number; name: string }[]
@@ -103,11 +104,8 @@ export function ProductForm({
               <CardDescription className="flex items-center gap-2">
                 {chosen.isSerialised ? (
                   <>
-                    <Badge variant="outline">
-                      {chosen.identifierType === 'SERIAL' ? 'Serial-tracked' : 'IMEI-tracked'}
-                    </Badge>
-                    Each unit is registered individually, by{' '}
-                    {chosen.identifierType === 'SERIAL' ? 'serial number' : 'IMEI'}.
+                    <Badge variant="outline">{trackingLabel(chosen)}</Badge>
+                    {trackingDescription(chosen)}
                   </>
                 ) : (
                   <>
@@ -133,7 +131,7 @@ export function ProductForm({
                   value: String(c.id),
                   // The identifier type is part of the label: a shop needs to
                   // see that "Mobiles" means IMEI-tracked before choosing it.
-                  label: `${c.name}${c.isSerialised ? ` (${c.identifierType})` : ''}`,
+                  label: `${c.name}${c.isSerialised ? ` (${trackingLabel(c)})` : ''}`,
                 }))}
               />
             </Field>

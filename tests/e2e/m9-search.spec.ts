@@ -40,9 +40,15 @@ async function registerDevice(
    * "IMEI 1", "IMEI 2" when there are several.
    */
   await page.goto('/settings/business')
-  await page
-    .getByRole('textbox', { name: 'IMEI fields per device', exact: true })
-    .fill(String(identifiers.length))
+  // Cleared, then typed. fill() alone left the previous value with the new
+  // one appended ("12"), which failed validation, sent no request, and looked
+  // exactly like a hang.
+  const slots = page.getByRole('textbox', { name: 'IMEI fields per device', exact: true })
+  await slots.click()
+  await slots.press('ControlOrMeta+a')
+  await slots.press('Backspace')
+  await slots.pressSequentially(String(identifiers.length))
+  await expect(slots).toHaveValue(String(identifiers.length))
   await page.getByRole('button', { name: /^Save/ }).last().click()
   await expect(page.getByText(/Saved/i).first()).toBeVisible({ timeout: 10_000 })
 
@@ -131,6 +137,10 @@ test.describe('global search', () => {
   test('the box is reachable from every screen, by keyboard', async ({ page }) => {
     for (const path of ['/dashboard', '/devices', '/sales']) {
       await page.goto(path)
+      // The shortcut is bound on hydration, so pressing it the instant the
+      // HTML lands does nothing. Waiting for the button that carries the same
+      // action is waiting for exactly the code that listens for the key.
+      await expect(page.getByRole('button', { name: 'Find anything' })).toBeVisible()
       await page.keyboard.press('ControlOrMeta+k')
       await expect(page.getByRole('textbox', { name: 'Find anything' })).toBeVisible()
       await page.keyboard.press('Escape')

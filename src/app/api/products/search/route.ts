@@ -30,6 +30,8 @@ export const GET = route({ permission: 'product.view', branchFrom: 'none', schem
     sku: r.sku,
     isSerialised: r.isSerialised,
     identifierType: r.identifierType,
+    // So a purchase line knows whether to offer a serial box beside the IMEI.
+    capturesSerial: r.capturesSerial,
     quantity: r.quantity,
     purchasePricePaise: r.purchasePricePaise ? String(r.purchasePricePaise) : null,
     // So a purchase line can prefill what the shop sells it for, not only

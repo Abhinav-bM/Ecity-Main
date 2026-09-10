@@ -345,7 +345,18 @@ test.describe('battery health', () => {
 test.describe('imei_slots — a setting, not a release', () => {
   async function setSlots(page: Page, value: string) {
     await page.goto('/settings/business')
-    await page.getByRole('textbox', { name: 'IMEI fields per device' }).fill(value)
+    /*
+     * Cleared, then filled. fill() alone was leaving "12" in the box - the
+     * previous value with the new one appended - which failed validation at
+     * "At most four", so no request was ever sent and the wait below timed
+     * out looking like the save had hung.
+     */
+    const slots = page.getByRole('textbox', { name: 'IMEI fields per device' })
+    await slots.click()
+    await slots.press('ControlOrMeta+a')
+    await slots.press('Backspace')
+    await slots.pressSequentially(value)
+    await expect(slots).toHaveValue(value)
 
     /*
      * Wait for the save itself, not for the toast that announces it.
@@ -411,7 +422,7 @@ test.describe('non-phone electronics', () => {
 
   test('a laptop asks for a serial number, not an IMEI', async ({ page }) => {
     const name = `E2E MacBook ${Date.now()}`
-    await createProductIn(page, name, 'MacBooks (SERIAL)')
+    await createProductIn(page, name, 'MacBooks (serial number)')
 
     await page.goto('/devices/new')
     await page.getByRole('combobox', { name: 'Product', exact: true }).click()
@@ -423,7 +434,7 @@ test.describe('non-phone electronics', () => {
 
   test('a laptop takes the same classification as a phone', async ({ page }) => {
     const name = `E2E Laptop ${Date.now()}`
-    await createProductIn(page, name, 'Laptops (SERIAL)')
+    await createProductIn(page, name, 'Laptops (serial number)')
     const serial = `C02E2E${String(Date.now()).slice(-6)}`
 
     await page.goto('/devices/new')

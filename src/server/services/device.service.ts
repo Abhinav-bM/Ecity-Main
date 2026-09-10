@@ -29,6 +29,16 @@ import { branchScope, hasPermission, type AuthUser } from '@/server/auth/permiss
 export type DeviceInput = {
   productId: number
   identifiers: string[]
+  /**
+   * A serial number carried alongside the IMEIs (FR-4.8).
+   *
+   * Optional, and only for a category that asks for one. A phone's IMEI is
+   * what identifies it and is required; the serial printed on the box is
+   * useful for a warranty claim with the brand, and is what a customer often
+   * quotes - but a shop that does not have it must still be able to book the
+   * handset in, so nothing here depends on it.
+   */
+  serialNumber?: string | null
   mainType: MainType
   isNewCut?: boolean
   newCutNotes?: string
@@ -155,6 +165,28 @@ async function assertIdentifiersFree(
 }
 
 /**
+ * Whether this product's category asks for a serial alongside the IMEI.
+ *
+ * Read separately from the identifier type because it is a different
+ * question: the type says what identifies a unit, this says what else is
+ * worth writing down about it.
+ */
+export async function capturesSerialForProduct(
+  productId: number,
+  tx: DbOrTx = db,
+): Promise<boolean> {
+  const rows = await tx
+    .select({ capturesSerial: category.capturesSerial, identifierType: category.identifierType })
+    .from(product)
+    .innerJoin(category, eq(category.id, product.categoryId))
+    .where(eq(product.id, productId))
+    .limit(1)
+  const row = rows[0]
+  // Meaningless on a serial-only category: its identifier IS the serial.
+  return Boolean(row?.capturesSerial) && row?.identifierType === 'IMEI'
+}
+
+/**
  * How this product's units are identified, taken from its category. A phone
  * category is IMEI; a laptop or speaker category is SERIAL.
  */
@@ -203,6 +235,23 @@ export async function createDevice(
     const identifierType = await identifierTypeForProduct(input.productId, t)
     const identifiers = normaliseIdentifiers(input.identifiers, identifierType)
     await assertIdentifiersFree(identifiers, identifierType, undefined, t)
+
+    /*
+     * The serial, if the category asks for one and the box had it.
+     *
+     * Validated by the same rules as a serial-identified device, and checked
+     * for clashes against every identifier in the shop - the uniqueness index
+     * spans both kinds, so a serial cannot quietly collide with an IMEI.
+     * Offered on a category that does not ask for one it is simply ignored,
+     * rather than stored where nothing would ever read it.
+     */
+    const wantsSerial = identifierType === 'IMEI' && (await capturesSerialForProduct(input.productId, t))
+    const typedSerial = input.serialNumber?.trim()
+    let serialNumber: string | null = null
+    if (wantsSerial && typedSerial) {
+      serialNumber = normaliseIdentifiers([typedSerial], 'SERIAL')[0]!
+      await assertIdentifiersFree([serialNumber], 'SERIAL', undefined, t)
+    }
 
     // Counted from the day the goods arrived. addMonths rather than setMonth:
     // the last day of a month must not roll into the next one (FR-29.1).
@@ -256,6 +305,18 @@ export async function createDevice(
         isPrimary: i === 0,
       })),
     )
+
+    if (serialNumber) {
+      // After the IMEIs, never primary: the handset is identified by its
+      // IMEI, and the serial is the extra fact about it.
+      await t.insert(deviceIdentifier).values({
+        deviceId: created.id,
+        value: serialNumber,
+        type: 'SERIAL',
+        slot: identifiers.length + 1,
+        isPrimary: false,
+      })
+    }
 
     await appendDeviceEvent(
       {

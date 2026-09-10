@@ -40,6 +40,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             name: c.name,
             isSerialised: c.isSerialised,
             identifierType: c.identifierType,
+            capturesSerial: c.capturesSerial,
           }))}
           brands={brands.map((b) => ({ id: b.id, name: b.name }))}
           taxRates={taxRates.map((t) => ({ id: t.id, name: t.name }))}

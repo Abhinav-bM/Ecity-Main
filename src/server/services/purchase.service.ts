@@ -44,6 +44,8 @@ import {
  */
 export type PurchaseUnitInput = {
   identifier: string
+  /** Optional, and only where the category asks for one alongside the IMEI. */
+  serialNumber?: string
   variant?: string
   ram?: string
   storage?: string
@@ -294,6 +296,7 @@ export async function createPurchase(
             {
               productId: line.productId,
               identifiers: [unit.identifier],
+              serialNumber: unit.serialNumber,
               mainType: line.mainType!,
               isNewCut: line.isNewCut,
               newCutNotes: line.newCutNotes,

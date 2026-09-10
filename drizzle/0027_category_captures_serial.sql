@@ -1,0 +1,1 @@
+ALTER TABLE "category" ADD COLUMN "captures_serial" boolean DEFAULT false NOT NULL;

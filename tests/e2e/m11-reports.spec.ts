@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
+import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } from './helpers'
 
 /**
  * M11 — reports, exports, imports and the catalogue screens.
@@ -177,12 +177,44 @@ test.describe('the catalogue (carried in from M5)', () => {
     ).toContainText('Inactive')
   })
 
+  test('a new category can have how it is tracked changed after the fact', async ({ page }) => {
+    const name = `E2E Cat ${unique()}`
+    await page.goto('/settings/catalogue')
+    await page.getByRole('tab', { name: 'Categories' }).click()
+
+    // Added as a counted category - somebody ticked the wrong box.
+    await page.getByRole('textbox', { name: 'Name', exact: true }).last().fill(name)
+    await page.getByRole('button', { name: 'Add category' }).click()
+    const row = page.locator('[data-testid="category-row"]').filter({ hasText: name })
+    await expect(row).toContainText('counted')
+
+    // It has no products yet, so it can still be corrected rather than
+    // abandoned and replaced with a near-identical one.
+    await row.getByRole('button', { name: 'Edit' }).click()
+    await page.getByRole('checkbox', { name: 'Tracked individually' }).last().check()
+    await choose(
+      page.getByRole('combobox', { name: 'Identified by' }).last(),
+      'Serial number only (laptops, speakers)',
+    )
+    await page.getByRole('button', { name: 'Save' }).click()
+
+    await expect(
+      page.locator('[data-testid="category-row"]').filter({ hasText: name }),
+    ).toContainText('serial number')
+  })
+
   test('a category with products cannot change how it is tracked', async ({ page }) => {
     await page.goto('/settings/catalogue')
     await page.getByRole('tab', { name: 'Categories' }).click()
     // The categories the seed created already carry products.
     await expect(page.getByTestId('category-list')).toBeVisible()
-    await expect(page.locator('[data-testid="category-row"]').first()).toContainText('product')
+    const inUse = page.locator('[data-testid="category-row"]').filter({ hasText: 'Mobiles' }).first()
+    await expect(inUse).toContainText('product')
+
+    // The controls are there, and say why they cannot be used.
+    await inUse.getByRole('button', { name: 'Edit' }).click()
+    await expect(page.getByRole('checkbox', { name: 'Tracked individually' }).last()).toBeDisabled()
+    await expect(page.getByText(/already has products/)).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 

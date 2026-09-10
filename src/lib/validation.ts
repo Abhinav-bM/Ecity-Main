@@ -280,6 +280,8 @@ export const categorySchema = z.object({
   isSerialised: z.boolean().default(false),
   /** IMEI for phones, SERIAL for laptops and other electronics. */
   identifierType: z.enum(['IMEI', 'SERIAL', 'NONE']).default('NONE'),
+  /** Whether a phone also carries the serial printed on its box. */
+  capturesSerial: z.boolean().default(false),
 })
 
 export const brandSchema = z.object({
@@ -332,6 +334,8 @@ export const deviceSchema = z
       .array(z.string().trim())
       .min(1, 'At least one identifier is required.')
       .transform((list) => list.map((i) => i.trim()).filter(Boolean)),
+    /** Optional, and only where the category asks for one beside the IMEI. */
+    serialNumber: optionalText(50),
     mainType: z.enum(MAIN_TYPES, { message: 'Choose a main type.' }),
     isNewCut: z.boolean().default(false),
     newCutNotes: optionalText(300),
@@ -438,6 +442,8 @@ export const purchaseLineSchema = z.object({
     .array(
       z.object({
         identifier: z.string().trim(),
+        /** Only where the category asks for one alongside the IMEI. */
+        serialNumber: optionalText(50),
         variant: optionalText(60),
         ram: optionalText(30),
         storage: optionalText(30),

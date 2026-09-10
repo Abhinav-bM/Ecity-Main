@@ -852,4 +852,107 @@ suite('M2 inventory core (database-backed)', () => {
       await setChannel('EXTERNAL')
     })
   })
+
+  /*
+   * A phone is identified by its IMEI. The serial printed on its box is a
+   * different thing: useful for a warranty claim with the brand, often what a
+   * customer quotes, and not always to hand when the stock is booked in. So
+   * the category asks for it, the IMEI stays required, and the serial does not.
+   */
+  describe('a serial number beside the IMEI', () => {
+    let dualProductId: number
+
+    beforeAll(async () => {
+      const cat = await createCategory(actor, ctx, {
+        name: `Mobiles With Serial ${stamp}`,
+        isSerialised: true,
+        identifierType: 'IMEI',
+        capturesSerial: true,
+      })
+      dualProductId = (
+        await createProduct(actor, ctx, {
+          name: `M2 DualId Phone ${stamp}`,
+          categoryId: cat.id,
+        })
+      ).id
+    })
+
+    it('keeps both, each as its own identifier', async () => {
+      const { id } = await createDevice(actor, ctx, {
+        productId: dualProductId,
+        identifiers: [imei(11)],
+        serialNumber: `SN-${stamp}-A`,
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+
+      const rows = await db
+        .select({ value: schema.deviceIdentifier.value, type: schema.deviceIdentifier.type })
+        .from(schema.deviceIdentifier)
+        .where(eq(schema.deviceIdentifier.deviceId, id))
+
+      expect(rows).toHaveLength(2)
+      expect(rows.find((r) => r.type === 'IMEI')?.value).toBe(imei(11))
+      expect(rows.find((r) => r.type === 'SERIAL')?.value).toBe(`SN-${stamp}-A`)
+      // The IMEI is what names the handset; the serial is the extra.
+      expect((await getDevice(actor, id)).device.primaryIdentifier).toBe(imei(11))
+    })
+
+    it('books the handset in without one', async () => {
+      const { id } = await createDevice(actor, ctx, {
+        productId: dualProductId,
+        identifiers: [imei(12)],
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      const rows = await db
+        .select({ type: schema.deviceIdentifier.type })
+        .from(schema.deviceIdentifier)
+        .where(eq(schema.deviceIdentifier.deviceId, id))
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.type).toBe('IMEI')
+    })
+
+    it('still refuses a device with no IMEI', async () => {
+      await expect(
+        createDevice(actor, ctx, {
+          productId: dualProductId,
+          identifiers: [],
+          serialNumber: `SN-${stamp}-B`,
+          mainType: 'NEW',
+          branchId: branchA,
+        }),
+      ).rejects.toThrow(/at least one imei/i)
+    })
+
+    it('will not let a serial collide with an identifier already in the shop', async () => {
+      // The uniqueness index spans both kinds, so this has to be caught even
+      // though one is a serial and the other an IMEI.
+      await expect(
+        createDevice(actor, ctx, {
+          productId: dualProductId,
+          identifiers: [imei(13)],
+          serialNumber: imei(11),
+          mainType: 'NEW',
+          branchId: branchA,
+        }),
+      ).rejects.toThrow(/already belongs to/i)
+    })
+
+    it('ignores a serial offered for a category that does not ask for one', async () => {
+      const { id } = await createDevice(actor, ctx, {
+        productId: mobileProductId,
+        identifiers: [imei(14)],
+        serialNumber: `SN-${stamp}-C`,
+        mainType: 'NEW',
+        branchId: branchA,
+      })
+      const rows = await db
+        .select({ type: schema.deviceIdentifier.type })
+        .from(schema.deviceIdentifier)
+        .where(eq(schema.deviceIdentifier.deviceId, id))
+      // Stored nowhere rather than somewhere nothing would read it.
+      expect(rows.every((r) => r.type === 'IMEI')).toBe(true)
+    })
+  })
 })

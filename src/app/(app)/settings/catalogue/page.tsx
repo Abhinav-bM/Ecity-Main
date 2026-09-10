@@ -42,6 +42,7 @@ export default async function CataloguePage() {
         isActive: c.isActive,
         isSerialised: c.isSerialised,
         identifierType: c.identifierType,
+        capturesSerial: c.capturesSerial,
         productCount: usage.byCategory.get(c.id) ?? 0,
       }))}
     />

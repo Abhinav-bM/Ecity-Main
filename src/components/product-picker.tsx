@@ -19,6 +19,8 @@ export type PickedProduct = {
   sku: string | null
   isSerialised: boolean
   identifierType: 'IMEI' | 'SERIAL' | 'NONE'
+  /** Whether the category wants a serial beside the IMEI (FR-4.8). */
+  capturesSerial: boolean
   quantity: number
   purchasePricePaise: string | null
   sellingPricePaise: string | null

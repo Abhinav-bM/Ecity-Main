@@ -23,6 +23,7 @@ export const POST = route(
     return createDevice(user, audit, {
       productId: body.productId,
       identifiers: body.identifiers,
+      serialNumber: body.serialNumber || undefined,
       mainType: body.mainType,
       isNewCut: body.isNewCut,
       newCutNotes: body.newCutNotes || undefined,

@@ -359,6 +359,58 @@ test.describe('the bill date and the day it arrived', () => {
   })
 })
 
+test.describe('a serial number beside the IMEI', () => {
+  test('the category asks for it, and the purchase line offers it', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const id = unique()
+    const categoryName = `E2E DualId ${id}`
+    const productName = `E2E DualId Phone ${id}`
+    // Captured once: imei() reads the clock, so calling it twice gives two
+    // different numbers and the assertion would look for one never entered.
+    const phoneImei = imei(60)
+
+    // A phone category that also wants the serial off the box.
+    await page.goto('/settings/catalogue')
+    await page.getByRole('tab', { name: 'Categories' }).click()
+    await page.getByRole('textbox', { name: 'Name', exact: true }).last().fill(categoryName)
+    await page.getByRole('checkbox', { name: 'Tracked individually' }).first().check()
+    await choose(
+      page.getByRole('combobox', { name: 'Identified by' }).first(),
+      'IMEI and serial number (phones)',
+    )
+    await page.getByRole('button', { name: 'Add category' }).click()
+    await expect(
+      page.locator('[data-testid="category-row"]').filter({ hasText: categoryName }),
+    ).toContainText('IMEI + serial')
+
+    await createProduct(page, productName, `${categoryName} (IMEI + serial)`)
+    await createSupplier(page, `E2E DualIdSup ${id}`)
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E DualIdSup ${id}`)
+    await pickProduct(page, productName)
+    await page.getByRole('button', { name: 'NEW', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
+
+    // The IMEI is required; the serial box is offered beneath it, marked
+    // optional, and a handset books in whether or not it is filled.
+    const serial = page.getByRole('textbox', { name: 'Line 1 serial 1' })
+    await expect(serial).toBeVisible()
+    await expect(serial).toHaveAttribute('placeholder', /optional/i)
+
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(phoneImei)
+    await serial.fill(`E2ESN${id}`)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+
+    // And the handset carries both, each labelled for what it is. The
+    // purchase we just confirmed links to the units it created.
+    await page.getByRole('link', { name: phoneImei }).first().click()
+    await expect(page.getByText(`E2ESN${id}`)).toBeVisible()
+    await expect(page.getByText('Serial', { exact: true })).toBeVisible()
+  })
+})
+
 test.describe('a message that cannot be seen is not a message', () => {
   test('a validation error scrolls itself into view on a long form', async ({ page }) => {
     await signIn(page, USERS.admin)
