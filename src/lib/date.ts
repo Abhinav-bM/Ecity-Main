@@ -53,3 +53,23 @@ export function parseShopDateEnd(value: string | undefined | null): Date | undef
   at.setDate(at.getDate() + 1)
   return at
 }
+
+/**
+ * The same day of the month, `months` later.
+ *
+ * `setMonth` overflows: 31 August plus six months is 31 February, which the
+ * browser silently turns into 3 March. A warranty sold on the last day of a
+ * month would then run three days long, and the shop would honour a claim it
+ * had not agreed to. The last day of a month maps to the last day of the
+ * target month instead.
+ */
+export function addMonths(from: Date, months: number): Date {
+  const at = new Date(from.getTime())
+  const day = at.getDate()
+  at.setDate(1)
+  at.setMonth(at.getMonth() + months)
+  // Day 0 of the next month is the last day of this one.
+  const lastDay = new Date(at.getFullYear(), at.getMonth() + 1, 0).getDate()
+  at.setDate(Math.min(day, lastDay))
+  return at
+}

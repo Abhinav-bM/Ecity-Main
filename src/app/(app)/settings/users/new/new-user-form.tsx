@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import type { z } from 'zod'
 import { createUserSchema } from '@/lib/validation'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -79,7 +79,7 @@ export function NewUserForm({
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-            {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+            <FormError message={formError} />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">

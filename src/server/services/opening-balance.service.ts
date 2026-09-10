@@ -5,8 +5,10 @@ import {
   accountTransaction,
   cashMovement,
   customer,
+  customerLedgerEntry,
   importJob,
   supplier,
+  supplierLedgerEntry,
 } from '@/server/db/schema'
 import { writeAudit, type AuditContext } from '@/server/db/audit'
 import { AppError, conflict, notFound } from '@/server/http'
@@ -78,6 +80,32 @@ export async function postOpeningCustomerDue(
   )[0]
   if (!exists) throw notFound('Customer')
 
+  /*
+   * Declared once, and only once.
+   *
+   * The ledger is append-only, so a second opening entry cannot be taken back
+   * - it simply doubles what the customer owes, for good. Nothing stopped a
+   * second save, or the same file being imported twice, and the screen that
+   * says how much is owed would have been wrong from then on with no way to
+   * see why. Correcting a figure that is already in is a payment or a credit
+   * note, both of which leave a trail.
+   */
+  const already = (
+    await tx
+      .select({ id: customerLedgerEntry.id })
+      .from(customerLedgerEntry)
+      .where(
+        and(
+          eq(customerLedgerEntry.customerId, input.customerId),
+          eq(customerLedgerEntry.entryType, 'OPENING'),
+        ),
+      )
+      .limit(1)
+  )[0]
+  if (already) {
+    throw conflict('This customer already has an opening balance. Adjust it with a payment or a credit note.')
+  }
+
   await postCustomerLedgerEntry(tx, {
     businessId: actor.businessId,
     customerId: input.customerId,
@@ -104,6 +132,23 @@ export async function postOpeningSupplierDue(
       .limit(1)
   )[0]
   if (!exists) throw notFound('Supplier')
+
+  // As for a customer: append-only, so a second one doubles the debt.
+  const already = (
+    await tx
+      .select({ id: supplierLedgerEntry.id })
+      .from(supplierLedgerEntry)
+      .where(
+        and(
+          eq(supplierLedgerEntry.supplierId, input.supplierId),
+          eq(supplierLedgerEntry.entryType, 'OPENING'),
+        ),
+      )
+      .limit(1)
+  )[0]
+  if (already) {
+    throw conflict('This supplier already has an opening balance. Adjust it with a payment or a debit note.')
+  }
 
   await postSupplierLedgerEntry(tx, {
     businessId: actor.businessId,
@@ -169,69 +214,100 @@ export async function openingCash(
   const scope = branchScope(actor, null)
   const occurredAt = new Date(`${input.asOf}T00:00:00+05:30`)
 
-  for (const row of input.branches) {
-    if (row.amountPaise === 0n) continue
-    if (scope !== null && !scope.includes(row.branchId)) throw notFound('Branch')
+  /*
+   * One transaction for the whole declaration.
+   *
+   * These used to be posted one at a time. A shop declaring three branches
+   * where the second already had a figure kept the first branch's cash and
+   * refused the rest - and the retry then failed on the first branch too,
+   * leaving no way forward that did not need a developer. Either the whole
+   * opening position is taken, or none of it is.
+   */
+  await db.transaction(async (tx) => {
+    for (const row of input.branches) {
+      if (row.amountPaise === 0n) continue
+      if (scope !== null && !scope.includes(row.branchId)) throw notFound('Branch')
 
-    const existing = (
-      await db
-        .select({ id: cashMovement.id })
-        .from(cashMovement)
-        .where(
-          and(
-            eq(cashMovement.branchId, row.branchId),
-            eq(cashMovement.movement, 'OPENING'),
-            eq(cashMovement.refType, 'opening_balance'),
-          ),
-        )
-        .limit(1)
-    )[0]
-    if (existing) {
-      throw conflict('This branch already has an opening cash figure. Adjust it instead.')
+      const existing = (
+        await tx
+          .select({ id: cashMovement.id })
+          .from(cashMovement)
+          .where(
+            and(
+              eq(cashMovement.businessId, actor.businessId),
+              eq(cashMovement.branchId, row.branchId),
+              eq(cashMovement.movement, 'OPENING'),
+              eq(cashMovement.refType, 'opening_balance'),
+            ),
+          )
+          .limit(1)
+      )[0]
+      if (existing) {
+        throw conflict('This branch already has an opening cash figure. Adjust it instead.')
+      }
+
+      const day = await openDrawerDay(tx, {
+        businessId: actor.businessId,
+        branchId: row.branchId,
+        businessDate: input.asOf,
+      })
+      await tx.insert(cashMovement).values({
+        businessId: actor.businessId,
+        drawerDayId: day.id,
+        branchId: row.branchId,
+        movement: 'OPENING',
+        amountPaise: row.amountPaise,
+        refType: 'opening_balance',
+        note: `Cash in hand as at ${input.asOf}`,
+        occurredAt,
+        createdBy: actor.id,
+      })
     }
 
-    const day = await openDrawerDay(db, {
-      businessId: actor.businessId,
-      branchId: row.branchId,
-      businessDate: input.asOf,
-    })
-    await db.insert(cashMovement).values({
-      businessId: actor.businessId,
-      drawerDayId: day.id,
-      branchId: row.branchId,
-      movement: 'OPENING',
-      amountPaise: row.amountPaise,
-      refType: 'opening_balance',
-      note: `Cash in hand as at ${input.asOf}`,
-      occurredAt,
-      createdBy: actor.id,
-    })
-  }
+    for (const row of input.accounts) {
+      if (row.amountPaise === 0n) continue
+      const acc = (
+        await tx
+          .select({ id: account.id, branchId: account.branchId })
+          .from(account)
+          .where(and(eq(account.id, row.accountId), eq(account.businessId, actor.businessId)))
+          .limit(1)
+      )[0]
+      if (!acc) throw notFound('Account')
 
-  for (const row of input.accounts) {
-    if (row.amountPaise === 0n) continue
-    const acc = (
-      await db
-        .select({ id: account.id, branchId: account.branchId })
-        .from(account)
-        .where(and(eq(account.id, row.accountId), eq(account.businessId, actor.businessId)))
-        .limit(1)
-    )[0]
-    if (!acc) throw notFound('Account')
+      // The same guard the till gets. Without it an account could be given
+      // its opening balance twice over and quietly hold double.
+      const existing = (
+        await tx
+          .select({ id: accountTransaction.id })
+          .from(accountTransaction)
+          .where(
+            and(
+              eq(accountTransaction.accountId, acc.id),
+              eq(accountTransaction.movement, 'OPENING'),
+              eq(accountTransaction.refType, 'opening_balance'),
+            ),
+          )
+          .limit(1)
+      )[0]
+      if (existing) {
+        throw conflict('This account already has an opening balance. Adjust it instead.')
+      }
 
-    await db.insert(accountTransaction).values({
-      businessId: actor.businessId,
-      accountId: acc.id,
-      branchId: acc.branchId,
-      movement: 'OPENING',
-      amountPaise: row.amountPaise,
-      businessDate: input.asOf,
-      refType: 'opening_balance',
-      note: `Balance as at ${input.asOf}`,
-      occurredAt,
-      createdBy: actor.id,
-    })
-  }
+      await tx.insert(accountTransaction).values({
+        businessId: actor.businessId,
+        accountId: acc.id,
+        branchId: acc.branchId,
+        movement: 'OPENING',
+        amountPaise: row.amountPaise,
+        businessDate: input.asOf,
+        refType: 'opening_balance',
+        note: `Balance as at ${input.asOf}`,
+        occurredAt,
+        createdBy: actor.id,
+      })
+    }
+  })
 
   await writeAudit(ctx, {
     action: 'CREATE',

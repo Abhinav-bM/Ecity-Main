@@ -9,7 +9,7 @@ import { formatMoney } from '@/lib/money'
 import { rupeesToPaise } from '@/lib/validation'
 import { shopDateString } from '@/lib/date'
 import { useCart, type CartLine } from '@/stores/cart'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -239,7 +239,7 @@ export function BillingScreen({
         ) : null}
       </div>
 
-      {error ? <Alert variant="destructive">{error}</Alert> : null}
+      <FormError message={error} />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
         <div className="space-y-4">

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -132,7 +132,7 @@ export function AdjustmentForm({
         </p>
       </div>
 
-      {error ? <Alert variant="destructive">{error}</Alert> : null}
+      <FormError message={error} />
 
       <Card>
         <CardHeader className="pb-3">

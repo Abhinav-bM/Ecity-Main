@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/form-field'
@@ -88,7 +88,7 @@ export function DeviceEditForm({
 
   return (
     <div className="space-y-4">
-      {error ? <Alert variant="destructive">{error}</Alert> : null}
+      <FormError message={error} />
 
       <Card>
         <CardHeader className="pb-3">

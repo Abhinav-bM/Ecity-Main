@@ -496,6 +496,114 @@ suite('M11 reports, imports and opening balances (database-backed)', () => {
     })
 
     /*
+     * The ledger is append-only: a second opening entry cannot be taken back,
+     * it just doubles the debt for good. Nothing used to stop a second save,
+     * or the same file being imported twice.
+     */
+    it('refuses a second opening balance for the same party', async () => {
+      const twice = (await createParty(actor, ctx, 'customer', { name: `M11 Twice ${stamp}` })).id
+      const seller = (await createParty(actor, ctx, 'supplier', { name: `M11 STwice ${stamp}` })).id
+
+      await openingDues(actor, ctx, {
+        asOf: DAY,
+        customers: [{ customerId: twice, amountPaise: rs(500) }],
+        suppliers: [{ supplierId: seller, amountPaise: rs(600) }],
+      })
+
+      await expect(
+        openingDues(actor, ctx, {
+          asOf: DAY,
+          customers: [{ customerId: twice, amountPaise: rs(500) }],
+          suppliers: [],
+        }),
+      ).rejects.toThrow(/already has an opening balance/i)
+
+      await expect(
+        openingDues(actor, ctx, {
+          asOf: DAY,
+          customers: [],
+          suppliers: [{ supplierId: seller, amountPaise: rs(600) }],
+        }),
+      ).rejects.toThrow(/already has an opening balance/i)
+
+      // And the figure is still the one that was declared, not twice it.
+      const dues = await customerDues(actor, { search: `M11 Twice ${stamp}`, page: 1, pageSize: 10 })
+      expect(dues.rows.find((r) => r.customerId === twice)?.balancePaise).toBe(rs(500))
+    })
+
+    /*
+     * A declaration covering several branches is one act. Half of it landing
+     * used to leave a shop with no way forward: the retry failed on the
+     * branch that had already gone in.
+     */
+    it('takes the whole opening cash position or none of it', async () => {
+      const fresh = (
+        await db
+          .insert(schema.branch)
+          .values({
+            businessId,
+            code: `M11A${stamp}`.slice(0, 12),
+            name: 'M11 Atomic Branch',
+          })
+          .returning()
+      )[0]!.id
+
+      // branchA already has its opening cash from the test above, so this
+      // pair must be refused as a whole.
+      await expect(
+        openingCash(actor, ctx, {
+          asOf: DAY,
+          branches: [
+            { branchId: fresh, amountPaise: rs(1000) },
+            { branchId: branchA, amountPaise: rs(2000) },
+          ],
+          accounts: [],
+        }),
+      ).rejects.toThrow(/already has an opening cash figure/i)
+
+      // The first branch in the list kept nothing, so declaring it alone works.
+      await expect(
+        openingCash(actor, ctx, {
+          asOf: DAY,
+          branches: [{ branchId: fresh, amountPaise: rs(1000) }],
+          accounts: [],
+        }),
+      ).resolves.toMatchObject({ branches: 1 })
+    })
+
+    /*
+     * The dues screen is built from two halves - open bills, and balances
+     * carried in from before the system. The second half used to ignore the
+     * search box and the branch filter entirely, so a search for one debtor
+     * still listed everyone who had ever had an opening balance.
+     */
+    it('filters the carried-in balances the same way it filters the bills', async () => {
+      const wanted = (await createParty(actor, ctx, 'customer', { name: `M11 Sought ${stamp}` })).id
+      const other = (await createParty(actor, ctx, 'customer', { name: `M11 Unsought ${stamp}` }))
+        .id
+
+      await openingDues(actor, ctx, {
+        asOf: DAY,
+        customers: [
+          { customerId: wanted, amountPaise: rs(400) },
+          { customerId: other, amountPaise: rs(900) },
+        ],
+        suppliers: [],
+      })
+
+      const found = await customerDues(actor, {
+        search: `M11 Sought ${stamp}`,
+        page: 1,
+        pageSize: 50,
+      })
+      expect(found.rows.map((r) => r.customerId)).toContain(wanted)
+      expect(found.rows.map((r) => r.customerId)).not.toContain(other)
+
+      // And the total at the top counts only what the filter left.
+      expect(found.totalPaise).toBe(rs(400))
+    })
+
+    /*
      * A shop with three debtors types them in; a shop with three hundred sends
      * a file. Both must land in the same ledger, or the dues screen would
      * depend on how the figure happened to arrive.

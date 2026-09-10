@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, ChevronsUpDown, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -33,6 +32,7 @@ export function PartyPicker({
   placeholder,
   allowNone,
   noneLabel = 'None',
+  onCreateNew,
 }: {
   kind: 'customer' | 'supplier'
   value: PickedParty | null
@@ -43,6 +43,14 @@ export function PartyPicker({
   /** Offer an explicit "no selection" row (a walk-in has no customer). */
   allowNone?: boolean
   noneLabel?: string
+  /*
+   * Offered a way out when the search finds nobody. A counter reaches for
+   * this constantly: the phone number is typed, nothing comes back because
+   * the customer is new, and without this the only route on is to abandon
+   * the bill for the customers screen. What was typed is handed over so it
+   * does not have to be typed a second time.
+   */
+  onCreateNew?: (query: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -100,9 +108,11 @@ export function PartyPicker({
           <CommandList data-testid={`${kind}-picker-list`}>
             {loading ? (
               <div className="p-3 text-sm text-muted-foreground">Searching…</div>
-            ) : (
-              <CommandEmpty>No {kind}s match.</CommandEmpty>
-            )}
+            ) : rows.length === 0 ? (
+              // Not <CommandEmpty>: with a create row below there is an item
+              // in the list, and cmdk would judge the list non-empty.
+              <div className="px-3 py-2 text-sm text-muted-foreground">No {kind}s match.</div>
+            ) : null}
             <CommandGroup>
               {allowNone ? (
                 <CommandItem
@@ -137,6 +147,20 @@ export function PartyPicker({
                 </CommandItem>
               ))}
             </CommandGroup>
+            {onCreateNew && !loading && query.trim() ? (
+              <CommandGroup className="border-t">
+                <CommandItem
+                  value="__create__"
+                  onSelect={() => {
+                    onCreateNew(query.trim())
+                    setOpen(false)
+                  }}
+                >
+                  <Plus className="mr-2 size-4" />
+                  <span className="truncate">Add “{query.trim()}” as a new {kind}</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
           </CommandList>
         </Command>
       </PopoverContent>

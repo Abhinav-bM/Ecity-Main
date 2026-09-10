@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -94,7 +95,7 @@ export function TransferActions({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
 
         {status === 'IN_TRANSIT' && canReceive ? (
           <ReceivePanel items={items} busy={busy} onReceive={act} />

@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, ChevronsUpDown, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -38,12 +37,18 @@ export function ProductPicker({
   serialisedOnly,
   label = 'Product',
   id,
+  onCreateNew,
 }: {
   value: PickedProduct | null
   onSelect: (product: PickedProduct) => void
   serialisedOnly?: boolean
   label?: string
   id?: string
+  /*
+   * A way out when the catalogue has never heard of what is being booked in.
+   * What was typed is handed over so it need not be typed again.
+   */
+  onCreateNew?: (query: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -101,9 +106,11 @@ export function ProductPicker({
           <CommandList data-testid="product-picker-list">
             {loading ? (
               <div className="p-3 text-sm text-muted-foreground">Searching…</div>
-            ) : (
-              <CommandEmpty>No products match.</CommandEmpty>
-            )}
+            ) : rows.length === 0 ? (
+              // Not <CommandEmpty>: with a create row below there is an item
+              // in the list, and cmdk would judge the list non-empty.
+              <div className="px-3 py-2 text-sm text-muted-foreground">No products match.</div>
+            ) : null}
             <CommandGroup>
               {rows.map((p) => (
                 <CommandItem
@@ -129,6 +136,20 @@ export function ProductPicker({
                 </CommandItem>
               ))}
             </CommandGroup>
+            {onCreateNew && !loading && query.trim() ? (
+              <CommandGroup className="border-t">
+                <CommandItem
+                  value="__create__"
+                  onSelect={() => {
+                    onCreateNew(query.trim())
+                    setOpen(false)
+                  }}
+                >
+                  <Plus className="mr-2 size-4" />
+                  <span className="truncate">Add “{query.trim()}” as a new product</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
           </CommandList>
         </Command>
       </PopoverContent>

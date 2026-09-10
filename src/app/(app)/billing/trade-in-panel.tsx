@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { ArrowLeftRight } from 'lucide-react'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -173,7 +173,7 @@ function TradeInDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
 
         <div className="space-y-3">
           <div className="space-y-1.5">

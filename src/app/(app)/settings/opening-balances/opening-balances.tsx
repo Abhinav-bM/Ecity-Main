@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -185,7 +185,7 @@ export function OpeningBalances({
         </CardContent>
       </Card>
 
-      {error ? <Alert variant="destructive">{error}</Alert> : null}
+      <FormError message={error} />
 
       <Tabs defaultValue="cash">
         <TabsList>

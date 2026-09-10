@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -173,7 +173,7 @@ export function ImportWizard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
 
         {!staged ? (
           <div className="grid gap-3 sm:grid-cols-3">

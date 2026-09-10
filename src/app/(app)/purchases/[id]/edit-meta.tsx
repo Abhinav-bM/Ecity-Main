@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -82,7 +82,7 @@ export function EditPurchaseMeta({
               so those are corrected by reversing the purchase.
             </DialogDescription>
           </DialogHeader>
-          {error ? <Alert variant="destructive">{error}</Alert> : null}
+          <FormError message={error} />
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="pm-invoice">Supplier bill number</Label>
@@ -93,7 +93,7 @@ export function EditPurchaseMeta({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pm-date">Purchase date</Label>
+              <Label htmlFor="pm-date">Arrived date</Label>
               <Input
                 id="pm-date"
                 type="date"

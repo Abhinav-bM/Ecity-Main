@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import type { z } from 'zod'
 import { branchSchema } from '@/lib/validation'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -82,7 +82,7 @@ export function BranchForm({
       </div>
 
       <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4" noValidate>
-        {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+        <FormError message={formError} />
 
         <Card>
           <CardHeader className="pb-3">

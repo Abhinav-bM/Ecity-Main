@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -119,7 +119,7 @@ function List({
   return (
     <Card>
       <CardContent className="space-y-2 py-3">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
         <ul className="space-y-1.5" data-testid={testId}>
           {rows.map((r) => (
             <li
@@ -215,7 +215,7 @@ function NewBrand() {
         <CardTitle className="text-sm">Add a brand</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-wrap items-end gap-2">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
         <div className="space-y-1.5">
           <Label htmlFor="brand-name">Name</Label>
           <Input id="brand-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -265,7 +265,7 @@ function NewCategory() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-end gap-3">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
         <div className="space-y-1.5">
           <Label htmlFor="category-name">Name</Label>
           <Input id="category-name" value={name} onChange={(e) => setName(e.target.value)} />

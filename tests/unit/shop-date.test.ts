@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseShopDate, parseShopDateEnd, shopDateString } from '@/lib/date'
+import { addMonths, parseShopDate, parseShopDateEnd, shopDateString } from '@/lib/date'
 
 /*
  * These filters come off a query string, which anyone can edit and which some
@@ -49,5 +49,37 @@ describe('reading a day off a URL', () => {
 
   it('passes a refusal through the end of the range too', () => {
     expect(parseShopDateEnd('09/09/2026')).toBeUndefined()
+  })
+})
+
+/*
+ * A warranty runs from the day the handset arrived. The arithmetic used to be
+ * `setMonth`, which overflows: the shop would have honoured a claim three days
+ * past what it agreed.
+ */
+describe('counting months for a warranty', () => {
+  it('keeps the same day of the month', () => {
+    expect(addMonths(new Date('2026-03-15T00:00:00'), 6).toDateString()).toBe(
+      new Date('2026-09-15T00:00:00').toDateString(),
+    )
+  })
+
+  it('does not run past the end of a shorter month', () => {
+    // 31 August + 6 months is not 31 February.
+    expect(addMonths(new Date('2025-08-31T00:00:00'), 6).toDateString()).toBe(
+      new Date('2026-02-28T00:00:00').toDateString(),
+    )
+  })
+
+  it('uses the 29th in a leap year', () => {
+    expect(addMonths(new Date('2023-08-31T00:00:00'), 6).toDateString()).toBe(
+      new Date('2024-02-29T00:00:00').toDateString(),
+    )
+  })
+
+  it('carries across a year end', () => {
+    expect(addMonths(new Date('2026-11-20T00:00:00'), 3).toDateString()).toBe(
+      new Date('2027-02-20T00:00:00').toDateString(),
+    )
   })
 })

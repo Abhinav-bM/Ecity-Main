@@ -310,6 +310,18 @@ export async function customerDues(
    * exactly as an unpaid invoice of that date would be, and only what is still
    * outstanding after later payments counts.
    */
+  const openingConditions: SQL[] = []
+  if (scope !== null) {
+    openingConditions.push(
+      sql`(${customerLedgerEntry.branchId} is null
+        or ${customerLedgerEntry.branchId} in ${scope.length ? scope : [-1]})`,
+    )
+  }
+  if (filters.search?.trim()) {
+    const term = `%${filters.search.trim()}%`
+    openingConditions.push(sql`(${customer.name} ilike ${term} or ${customer.phone} ilike ${term})`)
+  }
+
   const opening = await db
     .select({
       customerId: customerLedgerEntry.customerId,
@@ -333,6 +345,20 @@ export async function customerDues(
       and(
         eq(customerLedgerEntry.businessId, actor.businessId),
         eq(customerLedgerEntry.entryType, 'OPENING'),
+        /*
+         * The same filters the bills above are read under.
+         *
+         * This half of the screen used to ignore them: searching for one
+         * customer still listed everyone carrying an opening balance, and a
+         * branch filter showed balances declared at branches the person
+         * cannot see. A filter that half the rows ignore is worse than no
+         * filter, because the list looks filtered.
+         *
+         * An opening entry with no branch belongs to the shop rather than to
+         * any one counter, so it stays visible under a branch filter - the
+         * debt is real wherever it is looked at from.
+         */
+        ...openingConditions,
       ),
     )
     .groupBy(customerLedgerEntry.customerId, customer.name, customer.phone)

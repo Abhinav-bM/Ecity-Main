@@ -379,6 +379,31 @@ test.describe('the bill, after it is saved', () => {
     await expect(page.getByRole('combobox', { name: 'Customer' })).toContainText(customerName)
   })
 
+  test('a phone number that matches nobody offers to create, with it filled in', async ({
+    page,
+  }) => {
+    const id = unique()
+    const phone = `97${id}`
+
+    await page.goto('/billing')
+    await page.getByRole('combobox', { name: 'Customer' }).click()
+    await page.getByPlaceholder('Name, phone, email or GST').fill(phone)
+
+    // Nobody has that number, so the way on is offered rather than the
+    // salesperson being sent to the customers screen mid-bill.
+    await page.getByRole('option', { name: `Add “${phone}” as a new customer` }).click()
+
+    // The number is already in the phone box - a search term that reads as a
+    // number is a number, not a name.
+    await expect(page.getByLabel('Phone', { exact: true })).toHaveValue(phone)
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('')
+
+    const customerName = `E2E Prefill Cust ${id}`
+    await page.getByLabel('Name', { exact: true }).fill(customerName)
+    await page.getByRole('button', { name: 'Add to bill' }).click()
+    await expect(page.getByRole('combobox', { name: 'Customer' })).toContainText(customerName)
+  })
+
   test('marks an external-channel handset sold in the other system (FR-38.3)', async ({ page }) => {
     const id = unique()
     const name = `E2E Ext Phone ${id}`

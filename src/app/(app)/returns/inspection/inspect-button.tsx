@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -81,7 +81,7 @@ export function InspectButton({
           </DialogDescription>
         </DialogHeader>
 
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
 
         <div className="space-y-3">
           <div className="space-y-1.5">

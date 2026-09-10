@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -121,7 +121,7 @@ function CloseForm({
         <CardTitle className="text-sm">Count the till and close</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -255,7 +255,7 @@ function ReopenButton({ closingId, businessDate }: { closingId: number; business
               the record. This is refused once a later day has been closed.
             </DialogDescription>
           </DialogHeader>
-          {error ? <Alert variant="destructive">{error}</Alert> : null}
+          <FormError message={error} />
           <div className="space-y-1.5">
             <Label htmlFor="reopen-reason">Reason</Label>
             <Input

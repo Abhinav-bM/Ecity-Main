@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { MAIN_TYPES, rupeesToPaise } from '@/lib/validation'
 import { formatMoney } from '@/lib/money'
 import { shopDateString } from '@/lib/date'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
+import { NewProductDialog } from '@/components/new-product-dialog'
 import { BarcodeScanner } from '@/components/barcode-scanner'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
 import { AppSelect } from '@/components/app-select'
@@ -88,9 +89,12 @@ const newLine = (): Line => ({
 export function PurchaseForm({
   branches,
   defaultBranchId,
+  canCreateProduct,
 }: {
   branches: { id: number; code: string; name: string }[]
   defaultBranchId: number | null
+  /** product.manage. Without it the quick-add would only ever 403. */
+  canCreateProduct: boolean
 }) {
   const router = useRouter()
   const [supplier, setSupplier] = useState<PickedParty | null>(null)
@@ -103,6 +107,25 @@ export function PurchaseForm({
   const [openUnits, setOpenUnits] = useState<Set<string>>(new Set())
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  /** Which line asked for a new product, and what it was searching for. */
+  const [newProductFor, setNewProductFor] = useState<{ key: string; name: string } | null>(null)
+
+  /*
+   * Putting a product on a line. Shared, because a product created from the
+   * picker has to land on the line exactly as a chosen one does - prices
+   * carried across, identifier slots opened if it is serialised.
+   */
+  function selectProduct(key: string, p: PickedProduct) {
+    const patch: Partial<Line> = { product: p }
+    // Only what the product actually knows: a blank price must not wipe a
+    // cost the buyer has already typed against this line.
+    if (p.purchasePricePaise) patch.unitCost = String(Number(p.purchasePricePaise) / 100)
+    if (p.sellingPricePaise) patch.sellingPrice = String(Number(p.sellingPricePaise) / 100)
+    // Serialised lines get their identifier slots from update(), which keeps
+    // one per unit; anything else carries none.
+    if (!p.isSerialised) patch.units = []
+    update(key, patch)
+  }
 
   function update(key: string, patch: Partial<Line>) {
     setLines((prev) =>
@@ -236,7 +259,7 @@ export function PurchaseForm({
         </p>
       </div>
 
-      {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+      <FormError message={formError} />
 
       <Card>
         <CardHeader className="pb-3">
@@ -263,7 +286,12 @@ export function PurchaseForm({
               options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
             />
           </Field>
-          <Field id="purchaseDate" label="Purchase date">
+          {/*
+            "Arrived", not "purchased": the date that matters to a shop is the
+            day the box landed on the counter, which is when the stock became
+            sellable and when a warranty starts running.
+          */}
+          <Field id="purchaseDate" label="Arrived date">
             <Input
               id="purchaseDate"
               type="date"
@@ -347,22 +375,11 @@ export function PurchaseForm({
                     id={`product-${line.key}`}
                     label={`Line ${index + 1} product`}
                     value={line.product}
-                    onSelect={(p) =>
-                      update(line.key, {
-                        product: p,
-                        unitCost: p.purchasePricePaise
-                          ? String(Number(p.purchasePricePaise) / 100)
-                          : line.unitCost,
-                        sellingPrice: p.sellingPricePaise
-                          ? String(Number(p.sellingPricePaise) / 100)
-                          : line.sellingPrice,
-                        units: p.isSerialised
-                          ? Array.from(
-                              { length: Math.max(1, Number(line.quantity) || 1) },
-                              newUnit,
-                            )
-                          : [],
-                      })
+                    onSelect={(p) => selectProduct(line.key, p)}
+                    onCreateNew={
+                      canCreateProduct
+                        ? (query) => setNewProductFor({ key: line.key, name: query })
+                        : undefined
                     }
                   />
                 </Field>
@@ -480,7 +497,7 @@ export function PurchaseForm({
                       {/*
                         PRD FR-29.1. A warranty typed in a month later is a
                         warranty nobody typed in — and the expiry is counted
-                        from the purchase date, which is on this form already.
+                        from the arrival date, which is on this form already.
                       */}
                       <Field id={`warranty-${line.key}`} label="Warranty (months)">
                         <Input
@@ -697,6 +714,18 @@ export function PurchaseForm({
           {saving ? 'Saving…' : 'Confirm purchase'}
         </Button>
       </div>
+
+      <NewProductDialog
+        open={newProductFor !== null}
+        prefillName={newProductFor?.name ?? ''}
+        onOpenChange={(open) => {
+          if (!open) setNewProductFor(null)
+        }}
+        onCreated={(p) => {
+          if (newProductFor) selectProduct(newProductFor.key, p)
+          setNewProductFor(null)
+        }}
+      />
     </div>
   )
 }

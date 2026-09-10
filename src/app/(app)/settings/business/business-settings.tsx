@@ -13,7 +13,6 @@ import type {
   PaymentMethod,
   TaxRate,
 } from "@/server/db/schema";
-import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/form-field";
 import { FormSelect } from "@/components/app-select";
+import { FormError } from '@/components/form-error'
 
 type ProfileValues = z.infer<typeof businessProfileSchema>;
 
@@ -185,7 +185,7 @@ function ProfileForm({
       className="space-y-4"
       noValidate
     >
-      {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+      <FormError message={formError} />
 
       <Card>
         <CardHeader className="pb-3">

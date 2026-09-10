@@ -287,6 +287,52 @@ test.describe('the product picker scales', () => {
       page.getByTestId('product-picker-list').getByRole('option').first(),
     ).toContainText(name)
   })
+
+  test('a product the catalogue has never heard of can be added from the line', async ({
+    page,
+  }) => {
+    await signIn(page, USERS.admin)
+    const id = unique()
+    const name = `E2E Unheard Cable ${id}`
+
+    await page.goto('/purchases/new')
+    await page.getByRole('combobox', { name: 'Line 1 product' }).click()
+    await page.getByPlaceholder('Name, SKU or barcode').fill(name)
+
+    // Nothing matches, so the way on is offered rather than the buyer being
+    // sent to the products screen with a half-typed delivery behind them.
+    await page.getByRole('option', { name: `Add “${name}” as a new product` }).click()
+
+    // What was searched for is already in the box.
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue(name)
+    await choose(page.getByRole('combobox', { name: 'Category', exact: true }), 'Cables')
+    await page.getByRole('button', { name: 'Create and use' }).click()
+
+    // And it lands on the line that asked for it.
+    await expect(page.getByRole('combobox', { name: 'Line 1 product' })).toContainText(name)
+  })
+})
+
+test.describe('a message that cannot be seen is not a message', () => {
+  test('a validation error scrolls itself into view on a long form', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    await page.goto('/purchases/new')
+
+    // Long enough that the top of the form is well off the screen.
+    for (let i = 0; i < 4; i++) {
+      await page.getByRole('button', { name: 'Add another line' }).click()
+    }
+    const confirm = page.getByRole('button', { name: 'Confirm purchase' })
+    await confirm.scrollIntoViewIfNeeded()
+
+    // No product on any line, so this fails at the top of the form - which
+    // used to mean nothing visibly happened at all.
+    await confirm.click()
+
+    const error = page.getByRole('alert').filter({ hasText: 'Every line needs a product.' })
+    await expect(error).toBeVisible()
+    await expect(error).toBeInViewport()
+  })
 })
 
 test.describe('supplier money', () => {

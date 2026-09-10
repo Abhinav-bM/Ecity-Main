@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
+import { addMonths } from '@/lib/date'
 import { db, type DbOrTx } from '@/server/db'
 import {
   brand,
@@ -203,13 +204,11 @@ export async function createDevice(
     const identifiers = normaliseIdentifiers(input.identifiers, identifierType)
     await assertIdentifiersFree(identifiers, identifierType, undefined, t)
 
+    // Counted from the day the goods arrived. addMonths rather than setMonth:
+    // the last day of a month must not roll into the next one (FR-29.1).
     const warrantyExpiresAt =
       input.warrantyMonths && input.purchaseDate
-        ? new Date(
-            new Date(input.purchaseDate).setMonth(
-              new Date(input.purchaseDate).getMonth() + input.warrantyMonths,
-            ),
-          )
+        ? addMonths(new Date(input.purchaseDate), input.warrantyMonths)
         : null
 
     const created = (

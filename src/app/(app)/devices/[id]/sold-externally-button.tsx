@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Alert } from '@/components/ui/alert'
+import { FormError } from '@/components/form-error'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -64,7 +64,7 @@ export function SoldExternallyButton({ deviceId }: { deviceId: number }) {
           </DialogDescription>
         </DialogHeader>
 
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <FormError message={error} />
 
         <div className="space-y-1.5">
           <Label htmlFor="external-note">Note (optional)</Label>
