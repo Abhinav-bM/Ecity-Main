@@ -19,6 +19,7 @@ export default async function NewPurchasePage() {
     <PurchaseForm
       branches={branches}
       canCreateProduct={hasPermission(session.user, 'product.manage')}
+      canCreateSupplier={hasPermission(session.user, 'supplier.manage')}
       defaultBranchId={session.activeBranchId ?? branches[0]?.id ?? null}
     />
   )

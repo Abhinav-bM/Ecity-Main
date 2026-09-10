@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
 import { NewProductDialog } from '@/components/new-product-dialog'
+import { NewPartyDialog, splitTypedTerm } from '@/components/new-party-dialog'
 import { BarcodeScanner } from '@/components/barcode-scanner'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
 import { AppSelect } from '@/components/app-select'
@@ -90,11 +91,14 @@ export function PurchaseForm({
   branches,
   defaultBranchId,
   canCreateProduct,
+  canCreateSupplier,
 }: {
   branches: { id: number; code: string; name: string }[]
   defaultBranchId: number | null
   /** product.manage. Without it the quick-add would only ever 403. */
   canCreateProduct: boolean
+  /** supplier.manage, for the same reason. */
+  canCreateSupplier: boolean
 }) {
   const router = useRouter()
   const [supplier, setSupplier] = useState<PickedParty | null>(null)
@@ -109,6 +113,8 @@ export function PurchaseForm({
   const [saving, setSaving] = useState(false)
   /** Which line asked for a new product, and what it was searching for. */
   const [newProductFor, setNewProductFor] = useState<{ key: string; name: string } | null>(null)
+  /** What the supplier search found nothing for, if anything. */
+  const [newSupplier, setNewSupplier] = useState<{ name: string; phone: string } | null>(null)
 
   /*
    * Putting a product on a line. Shared, because a product created from the
@@ -275,6 +281,9 @@ export function PurchaseForm({
               placeholder="Choose a supplier…"
               value={supplier}
               onSelect={(s) => setSupplier(s)}
+              onCreateNew={
+                canCreateSupplier ? (query) => setNewSupplier(splitTypedTerm(query)) : undefined
+              }
             />
           </Field>
           <Field id="branchId" label="Received at branch" required>
@@ -714,6 +723,19 @@ export function PurchaseForm({
           {saving ? 'Saving…' : 'Confirm purchase'}
         </Button>
       </div>
+
+      <NewPartyDialog
+        kind="supplier"
+        open={newSupplier !== null}
+        prefill={newSupplier ?? { name: '', phone: '' }}
+        onOpenChange={(open) => {
+          if (!open) setNewSupplier(null)
+        }}
+        onCreated={(s) => {
+          setSupplier(s)
+          setNewSupplier(null)
+        }}
+      />
 
       <NewProductDialog
         open={newProductFor !== null}

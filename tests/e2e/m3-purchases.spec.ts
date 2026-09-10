@@ -288,6 +288,24 @@ test.describe('the product picker scales', () => {
     ).toContainText(name)
   })
 
+  test('a supplier nobody has bought from before can be added from the form', async ({ page }) => {
+    await signIn(page, USERS.admin)
+    const id = unique()
+    const name = `E2E NewSup ${id}`
+
+    await page.goto('/purchases/new')
+    await page.getByRole('combobox', { name: 'Supplier' }).click()
+    await page.getByPlaceholder('Name, phone, email or GST').fill(name)
+    await page.getByRole('option', { name: `Add “${name}” as a new supplier` }).click()
+
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue(name)
+    await page.getByLabel('Phone', { exact: true }).fill(`91${id}`)
+    await page.getByRole('button', { name: 'Create and use' }).click()
+
+    // Chosen on the form that asked for it, with the delivery still half-typed.
+    await expect(page.getByRole('combobox', { name: 'Supplier' })).toContainText(name)
+  })
+
   test('a product the catalogue has never heard of can be added from the line', async ({
     page,
   }) => {
