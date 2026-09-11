@@ -10,7 +10,7 @@ const unique = () => String(Date.now()).slice(-8)
  * `n` is spaced by 100, not by 10: the previous version reserved a single
  * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
  * eight milliseconds earlier — which showed up as an unrelated test failing
- * with "already belongs to another device". Two digits is more numbers than
+ * with "already in the shop on ...". Two digits is more numbers than
  * any one spec uses.
  */
 const imei = (n: number) =>
@@ -54,11 +54,11 @@ async function purchase(page: Page, opts: {
   await page.getByTestId('product-picker-list').getByRole('option', { name: new RegExp(opts.product) }).first().click()
   await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill(opts.quantity)
   await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill(opts.cost)
-  if (opts.sellingPrice) {
-    await page
-      .getByRole('textbox', { name: 'Selling price (₹)', exact: true })
-      .fill(opts.sellingPrice)
-  }
+  // Required on every line now. Where a test does not care, the cost stands
+  // in - the purchase total does not depend on it either way.
+  await page
+    .getByRole('textbox', { name: 'Selling price (₹)', exact: true })
+    .fill(opts.sellingPrice ?? opts.cost)
   if (opts.mainType) {
     await page.getByRole('button', { name: opts.mainType, exact: true }).click()
   }
@@ -66,6 +66,7 @@ async function purchase(page: Page, opts: {
     await page.getByRole('textbox', { name: `Line 1 IMEI ${i + 1}` }).fill(value)
   }
   await page.getByRole('button', { name: 'Confirm purchase' }).click()
+  await page.getByRole('button', { name: 'Yes, save it' }).click()
   await expect(page).toHaveURL(/\/purchases\/\d+$/)
 }
 
@@ -699,14 +700,27 @@ test.describe('scanning and pricing', () => {
     const one = imei(61)
 
     await createProduct(page, name, 'Mobiles (IMEI)', '15000')
-    await purchase(page, {
-      supplier: `E2E FallSup ${id}`,
-      product: name,
-      quantity: '1',
-      cost: '11000',
-      mainType: 'USED',
-      identifiers: [one],
-    })
+
+    /*
+     * Registered directly rather than bought in, because the purchase form now
+     * requires a selling price on every line - a handset booked in through it
+     * always has one of its own. This path (opening stock and corrections,
+     * `/api/devices`) still does not, and neither does an import, so the
+     * fallback is still the behaviour a real shop depends on.
+     */
+    await page.goto('/devices/new')
+    await page.getByRole('textbox', { name: 'IMEI', exact: true }).fill(one)
+    await page.getByRole('combobox', { name: 'Product', exact: true }).click()
+    await page.getByPlaceholder('Name, SKU or barcode').fill(name)
+    await page
+      .getByTestId('product-picker-list')
+      .getByRole('option', { name: new RegExp(name) })
+      .first()
+      .click()
+    await page.getByRole('button', { name: 'USED', exact: true }).click()
+    // Selling price deliberately left blank.
+    await page.getByRole('button', { name: 'Add device' }).click()
+    await expect(page).toHaveURL(/\/devices$/)
 
     await page.goto('/billing')
     await page.getByRole('textbox', { name: 'Scan or search' }).fill(one)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -57,6 +57,17 @@ export function PayPurchaseButton({
   const [reference, setReference] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  /*
+   * Follow the outstanding amount as the page learns it.
+   *
+   * Resetting only when the dialog opens is not enough: a part payment closes
+   * it and calls `router.refresh()`, and the smaller amount arrives a moment
+   * later. Reopening in that gap offered to pay the part again.
+   */
+  useEffect(() => {
+    setAmount(String(paiseToRupees(owingPaise)))
+  }, [owingPaise])
 
   // Integer paise throughout (docs/03 §4.1) - never float rupees.
   const enteredPaise = amount.trim() ? rupeesToPaise(parseRupees(amount)) : 0n

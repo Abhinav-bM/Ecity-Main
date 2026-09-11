@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { addMonths, shopDateString } from '@/lib/date'
 import { db, type DbOrTx } from '@/server/db'
 import {
@@ -138,6 +138,14 @@ export function normaliseIdentifiers(
  * Duplicate detection across EVERY identifier of every device, not just
  * primaries (PRD FR-4.9). The message names the conflicting device so staff
  * can go and look at it.
+ *
+ * Scoped to devices the shop currently HOLDS (`released_at is null`). Two
+ * units in stock cannot share a number - that is a real duplicate, and one of
+ * the two entries is wrong. A unit that has left, though, has no claim on it:
+ * a handset sold last year and bought back as a trade-in is a legitimate new
+ * purchase of the same IMEI, and refusing it was refusing ordinary trade. The
+ * partial unique index behind this says the same thing, so a race that slips
+ * past this check still cannot write two live claims.
  */
 async function assertIdentifiersFree(
   values: string[],
@@ -151,17 +159,18 @@ async function assertIdentifiersFree(
       deviceId: deviceIdentifier.deviceId,
       primaryIdentifier: deviceUnit.primaryIdentifier,
       productName: product.name,
+      status: deviceUnit.status,
     })
     .from(deviceIdentifier)
     .innerJoin(deviceUnit, eq(deviceUnit.id, deviceIdentifier.deviceId))
     .innerJoin(product, eq(product.id, deviceUnit.productId))
-    .where(inArray(deviceIdentifier.value, values))
+    .where(and(inArray(deviceIdentifier.value, values), isNull(deviceIdentifier.releasedAt)))
 
   for (const clash of clashes) {
     if (clash.deviceId === excludeDeviceId) continue
     throw conflict(
-      `${IDENTIFIER_LABEL[type]} ${clash.value} already belongs to ${clash.productName} (${clash.primaryIdentifier ?? `device #${clash.deviceId}`}).`,
-      { value: clash.value, deviceId: clash.deviceId },
+      `${IDENTIFIER_LABEL[type]} ${clash.value} is already in the shop on ${clash.productName} (${clash.primaryIdentifier ?? `device #${clash.deviceId}`}, ${clash.status}). Two units cannot carry the same number at once.`,
+      { value: clash.value, deviceId: clash.deviceId, status: clash.status },
     )
   }
 }
@@ -516,6 +525,17 @@ export async function findDeviceByIdentifier(actor: AuthUser, value: string) {
         eq(deviceUnit.businessId, actor.businessId),
       ),
     )
+    /*
+     * The unit currently holding the number first.
+     *
+     * An IMEI can belong to more than one device over time - a handset sold
+     * and later bought back as a trade-in is a new unit carrying the same
+     * number. Without an order this returned whichever row Postgres happened
+     * to reach first, which is usually the oldest: scanning a re-purchased
+     * handset at the till found the one sold years ago. The holder is the
+     * answer; failing that, the most recent.
+     */
+    .orderBy(asc(sql`${deviceIdentifier.releasedAt} is not null`), desc(deviceIdentifier.id))
     .limit(1)
   return rows[0]?.deviceId ?? null
 }

@@ -56,7 +56,9 @@ async function sellForCash(page: Page, rupees: string) {
     .click()
   await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('1')
   await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+  await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
   await page.getByRole('button', { name: 'Confirm purchase' }).click()
+  await page.getByRole('button', { name: 'Yes, save it' }).click()
   await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
   await page.goto('/billing')

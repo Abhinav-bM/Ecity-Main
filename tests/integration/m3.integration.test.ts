@@ -575,7 +575,7 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
             },
           ],
         }),
-      ).rejects.toThrow(/already belongs to Test Phone Pro/)
+      ).rejects.toThrow(/already in the shop on Test Phone Pro/)
     })
 
     it('leaves nothing behind when a line is rejected', async () => {

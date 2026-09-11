@@ -991,10 +991,27 @@ export const deviceIdentifier = pgTable(
     /** 1 = first SIM slot, or simply the first identifier. */
     slot: smallint('slot').notNull().default(1),
     isPrimary: boolean('is_primary').notNull().default(false),
+    /**
+     * When this row gave up its claim on the number - NULL while the device
+     * still holds it.
+     *
+     * An identifier is unique among devices the shop *currently holds*, not
+     * across all history: a handset sold two years ago and bought back as a
+     * trade-in is a legitimate new purchase of the same IMEI. The row stays
+     * either way, so warranty, returns and IMEI history still resolve against
+     * the old unit. Maintained by a trigger on `device_unit.status`, not by
+     * the service - see drizzle/0029.
+     */
+    releasedAt: timestamp('released_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('device_identifier_value_uq').on(t.value),
+    // Partial: at most one HELD device per identifier value. Two concurrent
+    // purchases of the same IMEI cannot both win this.
+    uniqueIndex('device_identifier_value_held_uq')
+      .on(t.value)
+      .where(sql`${t.releasedAt} is null`),
+    index('device_identifier_value_idx').on(t.value),
     uniqueIndex('device_identifier_device_slot_uq').on(t.deviceId, t.slot),
     index('device_identifier_device_idx').on(t.deviceId),
   ],

@@ -204,6 +204,13 @@
       "when": 1789050169484,
       "tag": "0028_main_type_on_any_line",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789106387822,
+      "tag": "0029_identifier_released_on_exit",
+      "breakpoints": true
     }
   ]
 }

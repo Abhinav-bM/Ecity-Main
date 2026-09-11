@@ -82,10 +82,8 @@ export const POST = route(
             : l.warrantyMonths,
         warrantyUntil: day(l.warrantyUntil, 'warranty end date') ?? null,
         warrantyProvider: l.warrantyProvider || undefined,
-        sellingPricePaise:
-          l.sellingPrice === '' || l.sellingPrice === undefined
-            ? undefined
-            : rupeesToPaise(l.sellingPrice),
+        // Required on every line now, so there is always a number to convert.
+        sellingPricePaise: rupeesToPaise(l.sellingPrice),
       })),
     })
   },

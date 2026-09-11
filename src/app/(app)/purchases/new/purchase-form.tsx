@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
 import { NewProductDialog } from '@/components/new-product-dialog'
+import { ConfirmPurchaseDialog } from './confirm-dialog'
 import { NewPartyDialog, splitTypedTerm } from '@/components/new-party-dialog'
 import { BarcodeScanner } from '@/components/barcode-scanner'
 import { PartyPicker, type PickedParty } from '@/components/party-picker'
@@ -195,7 +196,28 @@ export function PurchaseForm({
     return value !== '' && duplicateIdentifiers.has(value)
   }
   const [formError, setFormError] = useState<string | null>(null)
+  /*
+   * Errors against the field that caused them, not only in the banner.
+   *
+   * Every check here used to `setFormError` and stop at the first one, so a
+   * form with three problems reported one, at the top, describing a box that
+   * might be scrolled off the screen - and fixing it revealed the next. These
+   * are keyed `${lineKey}:${field}` for a line, or a plain name for the rest,
+   * and every check runs so the whole form is marked in one go.
+   */
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  /** Drop the error on a field the moment its value changes. */
+  function clearErrors(...keys: string[]) {
+    setFieldErrors((prev) => {
+      if (!keys.some((k) => k in prev)) return prev
+      const next = { ...prev }
+      for (const k of keys) delete next[k]
+      return next
+    })
+  }
   const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   /** Which line asked for a new product, and what it was searching for. */
   const [newProductFor, setNewProductFor] = useState<{ key: string; name: string } | null>(null)
   /** What the supplier search found nothing for, if anything. */
@@ -207,6 +229,7 @@ export function PurchaseForm({
    * carried across, identifier slots opened if it is serialised.
    */
   function selectProduct(key: string, p: PickedProduct) {
+    clearErrors(`${key}:product`, `${key}:unitCost`, `${key}:sellingPrice`)
     const patch: Partial<Line> = { product: p }
     // Only what the product actually knows: a blank price must not wipe a
     // cost the buyer has already typed against this line.
@@ -219,6 +242,7 @@ export function PurchaseForm({
   }
 
   function update(key: string, patch: Partial<Line>) {
+    clearErrors(...Object.keys(patch).map((field) => `${key}:${field}`))
     setLines((prev) =>
       prev.map((l) => {
         if (l.key !== key) return l
@@ -274,30 +298,48 @@ export function PurchaseForm({
     return paid >= total ? 0n : total - paid
   }, [payNow, payAmount, total])
 
-  async function submit() {
-    setFormError(null)
+  /**
+   * Every problem on the form at once, against the field that caused it.
+   *
+   * Returns the map rather than setting it, so the caller decides what to do
+   * with an empty one. Nothing here returns early: a buyer who has mistyped
+   * two lines should see both marked, not be walked through them one round
+   * trip at a time.
+   */
+  function validate(): Record<string, string> {
+    const errors: Record<string, string> = {}
 
-    /*
-     * The duplicate is already marked on both boxes; this stops the send and
-     * names the value, because on a twenty-unit delivery the offending pair
-     * may be scrolled off the screen.
-     */
-    if (duplicateIdentifiers.size > 0) {
-      const shown = [...duplicateIdentifiers].slice(0, 3).join(', ')
-      const more = duplicateIdentifiers.size - Math.min(3, duplicateIdentifiers.size)
-      setFormError(
-        `The same identifier is entered more than once: ${shown}${more > 0 ? `, and ${more} more` : ''}. Every unit needs its own.`,
-      )
-      return
-    }
+    if (!supplier) errors.supplier = 'Choose a supplier.'
+    if (!branchId) errors.branchId = 'Choose a branch.'
 
-    // Catch the common mistake here rather than after a round trip.
     for (const l of lines) {
       const product = l.product
       if (!product) {
-        setFormError('Every line needs a product.')
-        return
+        errors[`${l.key}:product`] = 'Choose a product.'
+        continue
       }
+
+      if (parseQuantity(l.quantity, { min: 0 }) < 1) {
+        errors[`${l.key}:quantity`] = 'At least 1.'
+      }
+
+      /*
+       * Both prices are required. A blank box used to reach the server as a
+       * confident 0, so a delivery could be booked in at no cost at all and
+       * the stock valuation carried a zero nobody typed. A deliberate 0 is
+       * still fine - free replacement stock is a real thing.
+       */
+      if (!l.unitCost.trim()) {
+        errors[`${l.key}:unitCost`] = 'Enter the unit cost.'
+      } else if (parseRupees(l.unitCost) < 0) {
+        errors[`${l.key}:unitCost`] = 'Cannot be negative.'
+      }
+      if (!l.sellingPrice.trim()) {
+        errors[`${l.key}:sellingPrice`] = 'Enter the selling price.'
+      } else if (parseRupees(l.sellingPrice) < 0) {
+        errors[`${l.key}:sellingPrice`] = 'Cannot be negative.'
+      }
+
       /*
        * Cover has to end after it starts. Compared as yyyy-mm-dd strings,
        * which sort correctly as dates, against the bill date rather than
@@ -305,20 +347,17 @@ export function PurchaseForm({
        * before the goods were entered is a real thing to record.
        */
       if (l.warrantyUntil && purchaseDate && l.warrantyUntil <= purchaseDate) {
-        setFormError(
-          `${product.name}: the warranty has to end after the bill date (${purchaseDate}). Leave it blank if there is none.`,
-        )
-        return
+        errors[`${l.key}:warrantyUntil`] =
+          `Has to end after the bill date (${purchaseDate}). Leave it blank if there is none.`
       }
+
       if (product.isSerialised) {
         const filled = l.units.filter((u) => u.identifier.trim()).length
         const qty = parseQuantity(l.quantity, { min: 0 })
         if (filled !== qty) {
           const what = product.identifierType === 'SERIAL' ? 'serial number' : 'IMEI'
-          setFormError(
-            `${product.name}: ${qty} unit${qty === 1 ? '' : 's'} but ${filled} ${what}${filled === 1 ? '' : 's'} entered. Each unit needs its own.`,
-          )
-          return
+          errors[`${l.key}:identifiers`] =
+            `${qty} unit${qty === 1 ? '' : 's'} but ${filled} ${what}${filled === 1 ? '' : 's'} entered. Each unit needs its own.`
         }
       }
     }
@@ -328,25 +367,60 @@ export function PurchaseForm({
      * purchase and then refused the payment - which the transaction rolls back
      * wholesale, so the buyer loses the whole delivery over a typo.
      */
-    if (payNow && payAmount.trim()) {
-      // parseRupees answers 0 for anything unparseable, so one check covers both.
-      const amount = parseRupees(payAmount)
-      if (amount <= 0) {
-        setFormError('The amount paid has to be a number above zero. Leave it blank for the whole bill.')
-        return
-      }
-      if (rupeesToPaise(amount) > total) {
-        setFormError(
-          `The amount paid (${formatMoney(rupeesToPaise(amount))}) is more than the bill total (${formatMoney(total)}).`,
-        )
-        return
+    if (payNow) {
+      if (!paymentMethodId) errors['payment:method'] = 'Choose how the bill was paid.'
+      if (payAmount.trim()) {
+        // parseRupees answers 0 for anything unparseable, so one check covers both.
+        const amount = parseRupees(payAmount)
+        if (amount <= 0) {
+          errors['payment:amount'] = 'Has to be above zero. Leave it blank for the whole bill.'
+        } else if (rupeesToPaise(amount) > total) {
+          errors['payment:amount'] =
+            `More than the bill total (${formatMoney(total)}).`
+        }
       }
     }
-    if (payNow && !paymentMethodId) {
-      setFormError('Choose how the bill was paid.')
+
+    return errors
+  }
+
+  /**
+   * The Confirm button. Validates, then asks - it never writes directly.
+   *
+   * Fields are checked first so the dialog only ever appears over a form that
+   * would actually go through; being asked "are you sure" and then told about
+   * a blank price box would be two interruptions for one mistake.
+   */
+  function requestConfirm() {
+    setFormError(null)
+    setFieldErrors({})
+
+    if (duplicateIdentifiers.size > 0) {
+      const shown = [...duplicateIdentifiers].slice(0, 3).join(', ')
+      const more = duplicateIdentifiers.size - Math.min(3, duplicateIdentifiers.size)
+      setFormError(
+        `The same identifier is entered more than once: ${shown}${more > 0 ? `, and ${more} more` : ''}. Every unit needs its own.`,
+      )
       return
     }
 
+    const errors = validate()
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      const n = Object.keys(errors).length
+      setFormError(
+        n === 1
+          ? 'One field needs attention — it is marked below.'
+          : `${n} fields need attention — they are marked below.`,
+      )
+      return
+    }
+
+    setConfirming(true)
+  }
+
+  /** Writes the purchase. Only ever reached through the confirmation step. */
+  async function submit() {
     setSaving(true)
     const res = await apiFetch('/api/purchases', {
       method: 'POST',
@@ -409,6 +483,8 @@ export function PurchaseForm({
     setSaving(false)
 
     if (!res.ok) {
+      // Out of the way, so the message is not behind a dialog.
+      setConfirming(false)
       setFormError(res.error)
       return
     }
@@ -443,7 +519,7 @@ export function PurchaseForm({
           <CardTitle className="text-sm">Supplier and delivery</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field id="supplierId" label="Supplier" required>
+          <Field id="supplierId" label="Supplier" required error={fieldErrors.supplier}>
             {/* Searchable, not a capped list — see PartyPicker. */}
             <PartyPicker
               kind="supplier"
@@ -451,18 +527,25 @@ export function PurchaseForm({
               label="Supplier"
               placeholder="Choose a supplier…"
               value={supplier}
-              onSelect={(s) => setSupplier(s)}
+              onSelect={(s) => {
+                clearErrors('supplier')
+                clearErrors('supplier')
+          setSupplier(s)
+              }}
               onCreateNew={
                 canCreateSupplier ? (query) => setNewSupplier(splitTypedTerm(query)) : undefined
               }
             />
           </Field>
-          <Field id="branchId" label="Received at branch" required>
+          <Field id="branchId" label="Received at branch" required error={fieldErrors.branchId}>
             <AppSelect
               id="branchId"
               label="Received at branch"
               value={branchId}
-              onValueChange={setBranchId}
+              onValueChange={(v) => {
+                clearErrors('branchId')
+                setBranchId(v)
+              }}
               options={branches.map((b) => ({ value: String(b.id), label: b.name }))}
             />
           </Field>
@@ -568,7 +651,13 @@ export function PurchaseForm({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Field id={`product-${line.key}`} label="Product" required className="lg:col-span-2">
+                <Field
+                  id={`product-${line.key}`}
+                  label="Product"
+                  required
+                  error={fieldErrors[`${line.key}:product`]}
+                  className="lg:col-span-2"
+                >
                   <ProductPicker
                     id={`product-${line.key}`}
                     label={`Line ${index + 1} product`}
@@ -581,7 +670,12 @@ export function PurchaseForm({
                     }
                   />
                 </Field>
-                <Field id={`qty-${line.key}`} label="Quantity" required>
+                <Field
+                  id={`qty-${line.key}`}
+                  label="Quantity"
+                  required
+                  error={fieldErrors[`${line.key}:quantity`]}
+                >
                   <Input
                     id={`qty-${line.key}`}
                     inputMode="numeric"
@@ -589,7 +683,12 @@ export function PurchaseForm({
                     onChange={(e) => update(line.key, { quantity: e.target.value })}
                   />
                 </Field>
-                <Field id={`cost-${line.key}`} label="Unit cost (₹)" required>
+                <Field
+                  id={`cost-${line.key}`}
+                  label="Unit cost (₹)"
+                  required
+                  error={fieldErrors[`${line.key}:unitCost`]}
+                >
                   <Input
                     id={`cost-${line.key}`}
                     inputMode="decimal"
@@ -599,13 +698,17 @@ export function PurchaseForm({
                 </Field>
                 {/*
                   Beside the cost, because the moment stock arrives is when
-                  somebody knows both numbers. Left blank, the till falls back
-                  to the product's list price rather than showing nothing.
+                  somebody knows both numbers - and required for the same
+                  reason. A handset booked in without one leaves the counter
+                  typing a price on every sale. Choosing a product carries its
+                  list price across, so this is usually already filled.
                 */}
                 <Field
                   id={`price-${line.key}`}
                   label="Selling price (₹)"
-                  hint="Blank uses the product's list price"
+                  required
+                  error={fieldErrors[`${line.key}:sellingPrice`]}
+                  hint="What this batch will be sold at"
                 >
                   <Input
                     id={`price-${line.key}`}
@@ -717,6 +820,7 @@ export function PurchaseForm({
                           <Field
                             id={`warranty-${line.key}`}
                             label="Warranty until"
+                            error={fieldErrors[`${line.key}:warrantyUntil`]}
                             hint="The day cover ends. Leave blank if none."
                           >
                             <Input
@@ -759,7 +863,12 @@ export function PurchaseForm({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-medium">
                         {label}s
-                        <Badge variant="muted" className="ml-2">
+                        <Badge
+                          variant={
+                            fieldErrors[`${line.key}:identifiers`] ? 'destructive' : 'muted'
+                          }
+                          className="ml-2"
+                        >
                           {line.units.filter((u) => u.identifier.trim()).length} of{' '}
                           {line.units.length}
                         </Badge>
@@ -792,6 +901,11 @@ export function PurchaseForm({
                         }}
                       />
                     </div>
+                    {fieldErrors[`${line.key}:identifiers`] ? (
+                      <p className="text-xs text-destructive" role="alert">
+                        {fieldErrors[`${line.key}:identifiers`]}
+                      </p>
+                    ) : null}
                     <div
                       className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
                       data-testid={`identifier-grid-${index}`}
@@ -996,27 +1110,41 @@ export function PurchaseForm({
               ) : (
                 <>
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <AppSelect
-                      id="payment-method"
-                      label="Payment method"
-                      value={paymentMethodId}
-                      onValueChange={setPaymentMethodId}
-                      placeholder="Choose a method"
-                      options={paymentMethods.map((m) => ({ value: String(m.id), label: m.name }))}
-                    />
-                    <Input
-                      inputMode="decimal"
-                      aria-label="Amount paid"
-                      placeholder={`Leave blank for ${formatMoney(total)}`}
-                      value={payAmount}
-                      onChange={(e) => setPayAmount(e.target.value)}
-                    />
-                    <Input
-                      aria-label="Payment reference"
-                      placeholder="Reference (optional)"
-                      value={payReference}
-                      onChange={(e) => setPayReference(e.target.value)}
-                    />
+                    <Field id="payment-method" label="Payment method" error={fieldErrors['payment:method']}>
+                      <AppSelect
+                        id="payment-method"
+                        label="Payment method"
+                        value={paymentMethodId}
+                        onValueChange={(v) => {
+                          clearErrors('payment:method')
+                          setPaymentMethodId(v)
+                        }}
+                        placeholder="Choose a method"
+                        options={paymentMethods.map((m) => ({ value: String(m.id), label: m.name }))}
+                      />
+                    </Field>
+                    <Field id="payment-amount" label="Amount paid" error={fieldErrors['payment:amount']}>
+                      <Input
+                        id="payment-amount"
+                        inputMode="decimal"
+                        aria-label="Amount paid"
+                        placeholder={`Leave blank for ${formatMoney(total)}`}
+                        value={payAmount}
+                        onChange={(e) => {
+                          clearErrors('payment:amount')
+                          setPayAmount(e.target.value)
+                        }}
+                      />
+                    </Field>
+                    <Field id="payment-reference" label="Reference">
+                      <Input
+                        id="payment-reference"
+                        aria-label="Payment reference"
+                        placeholder="Optional"
+                        value={payReference}
+                        onChange={(e) => setPayReference(e.target.value)}
+                      />
+                    </Field>
                   </div>
 
                   <p className="text-xs text-muted-foreground">
@@ -1053,7 +1181,7 @@ export function PurchaseForm({
         <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
           <Link href="/purchases">Cancel</Link>
         </Button>
-        <Button type="button" onClick={() => void submit()} disabled={saving} className="w-full sm:w-auto">
+        <Button type="button" onClick={requestConfirm} disabled={saving} className="w-full sm:w-auto">
           {saving ? 'Saving…' : 'Confirm purchase'}
         </Button>
       </div>
@@ -1069,6 +1197,15 @@ export function PurchaseForm({
           setSupplier(s)
           setNewSupplier(null)
         }}
+      />
+
+      <ConfirmPurchaseDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        onConfirm={() => void submit()}
+        saving={saving}
+        supplierName={supplier?.name ?? 'this supplier'}
+        totalPaise={total}
       />
 
       <NewProductDialog

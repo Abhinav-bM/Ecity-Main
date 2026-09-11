@@ -351,7 +351,35 @@ export const parseQuantity = (value: unknown, opts: { min?: number; max?: number
 export const paiseToRupees = (paise: bigint | number | null | undefined): number =>
   paise == null ? 0 : Number(paise) / 100
 
-const optionalMoney = z.union([rupeeAmount(), z.literal('')]).optional()
+/**
+ * Money that has to be entered, not left blank.
+ *
+ * `z.coerce.number()` alone will not do: it turns '' into 0 and passes, so a
+ * blank box arrived as a confident zero. The preprocess makes an empty string
+ * `undefined` so the field is reported missing under its own message instead.
+ * A deliberate 0 is still accepted - free replacement stock is a real thing.
+ */
+export const requiredMoney = (message: string) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.coerce
+      .number({ required_error: message, invalid_type_error: message })
+      .min(0, 'Cannot be negative.')
+      .max(MAX_RUPEES, `Cannot exceed ₹${MAX_RUPEES.toLocaleString('en-IN')}.`),
+  )
+
+/**
+ * A money field that may be left blank.
+ *
+ * The empty literal comes FIRST, and the order is the whole point. With
+ * `rupeeAmount()` first, `z.coerce.number()` turned '' into 0 and passed
+ * `min(0)` - so blank never survived validation, and every route that checks
+ * `body.price === ''` before converting was checking for something that could
+ * no longer arrive. A product or handset saved with no price got a confident
+ * zero instead of NULL, which reads as "free" everywhere downstream: the till
+ * showed 0 rather than falling back to the product's list price.
+ */
+const optionalMoney = z.union([z.literal(''), rupeeAmount()]).optional()
 
 export const MAIN_TYPES = ['NEW', 'USED', 'ER', 'ACT', 'GLOBAL'] as const
 
@@ -507,7 +535,17 @@ export const minQuantitySchema = z.object({
 export const purchaseLineSchema = z.object({
   productId: z.coerce.number().int().positive('Choose a product.'),
   quantity: z.coerce.number().int().min(1, 'At least 1.').max(9999),
-  unitCost: z.coerce.number().min(0, 'Cannot be negative.').max(100_000_000),
+  /*
+   * Both prices are required on every line.
+   *
+   * They were not, and `z.coerce.number()` turned a blank box into 0 without
+   * complaint - so a delivery could be booked in at no cost at all, and the
+   * stock valuation quietly carried a zero nobody typed. The selling price
+   * matters for the same reason from the other end: a handset booked in
+   * without one leaves the counter typing a price on every sale.
+   */
+  unitCost: requiredMoney('Enter the unit cost.'),
+  sellingPrice: requiredMoney('Enter the selling price.'),
   discount: z.coerce.number().min(0).max(100_000_000).default(0),
   taxRateId: z.preprocess(
     (v) => (v === '' || v === undefined || v === null ? null : v),
@@ -561,7 +599,7 @@ export const purchaseLineSchema = z.object({
   warrantyUntil: z.string().trim().optional().or(z.literal('')),
   warrantyProvider: optionalText(60),
   /** What it will be sold for. Blank leaves the product's list price to stand. */
-  sellingPrice: z.union([z.coerce.number().min(0).max(100_000_000), z.literal('')]).optional(),
+
 })
 
 export const purchaseSchema = z.object({
@@ -584,11 +622,9 @@ export const purchaseSchema = z.object({
       /*
        * Blank is the whole bill, as the server totals it - not as the form did.
        *
-       * The empty literal comes FIRST on purpose, and this cannot use
-       * `optionalMoney`. That puts `z.coerce.number()` first, which happily
-       * turns '' into 0 and passes `min(0)` - so a blank box arrived as a
-       * zero-rupee payment and the whole purchase was refused with "A payment
-       * must be more than zero." A union returns its first matching branch.
+       * Spelled out rather than using `optionalMoney` because a payment of
+       * exactly zero is not a payment: the minimum here is a paisa, with a
+       * message that says so.
        */
       amount: z
         .union([

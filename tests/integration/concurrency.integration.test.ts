@@ -63,6 +63,8 @@ suite('concurrent operations cannot double-count money or stock', () => {
   let branchId: number
   let customerId: number
   let cableProductId: number
+  /** Serialised, for the identifier-claim race. */
+  let phoneProductId: number
   let supplierId: number
   let cashMethodId: number
   let actor: AuthUser
@@ -102,6 +104,12 @@ suite('concurrent operations cannot double-count money or stock', () => {
     supplierId = (await createParty(actor, ctx, 'supplier', { name: `CC Supplier ${stamp}` })).id
     const cables = await createCategory(actor, ctx, { name: 'CC Cables', isSerialised: false })
     cableProductId = (await createProduct(actor, ctx, { name: 'CC Cable', categoryId: cables.id })).id
+    const phones = await createCategory(actor, ctx, {
+      name: 'CC Phones',
+      isSerialised: true,
+      identifierType: 'IMEI',
+    })
+    phoneProductId = (await createProduct(actor, ctx, { name: 'CC Phone', categoryId: phones.id })).id
     await increaseStock(
       { businessId },
       { productId: cableProductId, branchId, quantity: 5000, movement: 'PURCHASE' },
@@ -130,7 +138,16 @@ suite('concurrent operations cannot double-count money or stock', () => {
         (select id from purchase where business_id = ${businessId})`)
       await db.execute(`delete from purchase where business_id = ${businessId}`)
       await db.execute(`delete from stock_ledger where business_id = ${businessId}`)
-      await db.delete(schema.branchStock).where(eq(schema.branchStock.productId, cableProductId))
+      // The identifier race books in real handsets, so the units it creates
+      // have to go before their product can.
+      await db.execute(`delete from device_event where device_id in
+        (select id from device_unit where business_id = ${businessId})`)
+      await db.execute(`delete from device_identifier where device_id in
+        (select id from device_unit where business_id = ${businessId})`)
+      await db.execute(`delete from device_unit where business_id = ${businessId}`)
+      // Every product of this business, not one named one.
+      await db.execute(`delete from branch_stock where product_id in
+        (select id from product where business_id = ${businessId})`)
       await db.delete(schema.documentSequence).where(eq(schema.documentSequence.businessId, businessId))
       await db.delete(schema.product).where(eq(schema.product.businessId, businessId))
       await db.delete(schema.category).where(eq(schema.category.businessId, businessId))
@@ -321,6 +338,41 @@ suite('concurrent operations cannot double-count money or stock', () => {
             and entry_type = 'REVERSAL'`,
     )
     expect(Number((reversals as unknown as { n: string }[])[0]!.n)).toBe(1)
+  })
+
+  /*
+   * An identifier is claimed by the device holding it, and that claim is a
+   * partial unique index rather than a check in the service - precisely so
+   * this race cannot write two live units carrying one IMEI. The service check
+   * reads the same state both transactions see, so on its own both would pass.
+   */
+  it('registers one device when the same IMEI is booked in twice at once', async () => {
+    const contested = String(35_900_000_000_000 + (Date.now() % 1_000_000) * 10)
+    const book = () =>
+      createPurchase(actor, ctx, {
+        supplierId,
+        branchId,
+        lines: [
+          {
+            productId: phoneProductId,
+            quantity: 1,
+            unitCostPaise: rs(10000),
+            mainType: 'NEW',
+            identifiers: [contested],
+          },
+        ],
+      })
+
+    const results = await Promise.allSettled([book(), book()])
+    expectExactlyOneWinner(results, [409, 422])
+
+    // Exactly one device holds the number, and it is the only one at all.
+    const rows = await db
+      .select()
+      .from(schema.deviceIdentifier)
+      .where(eq(schema.deviceIdentifier.value, contested))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.releasedAt).toBeNull()
   })
 
   it('never pays one supplier bill twice over', async () => {

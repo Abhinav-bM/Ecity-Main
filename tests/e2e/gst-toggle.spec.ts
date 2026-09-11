@@ -17,7 +17,7 @@ const unique = () => String(Date.now()).slice(-8)
  * `n` is spaced by 100, not by 10: the previous version reserved a single
  * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
  * eight milliseconds earlier — which showed up as an unrelated test failing
- * with "already belongs to another device". Two digits is more numbers than
+ * with "already in the shop on ...". Two digits is more numbers than
  * any one spec uses.
  */
 const imei = (n: number) =>

@@ -204,7 +204,172 @@ suite('M2 inventory core (database-backed)', () => {
           mainType: 'USED',
           branchId: branchA,
         }),
-      ).rejects.toThrow(/already belongs to Test Phone 5G/)
+      ).rejects.toThrow(/already in the shop on Test Phone 5G/)
+    })
+
+    /*
+     * An IMEI is claimed by the device that HOLDS it, not forever.
+     *
+     * The old index was unique across all history, so a handset the shop sold
+     * two years ago kept its number reserved for good and buying it back as a
+     * trade-in was refused, naming a device that had not been in the shop
+     * since. Two units in stock sharing a number is a real duplicate; a unit
+     * that has left has no claim.
+     */
+    describe('an identifier is claimed by the device holding it', () => {
+      it('lets a sold handset be bought back with the same IMEI', async () => {
+        const traded = imei(500)
+        const first = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [traded],
+          mainType: 'NEW',
+          branchId: branchA,
+        })
+
+        // It leaves the shop.
+        await setDeviceStatus(
+          { businessId, actorId: actor.id, refType: 'test', refId: first.id },
+          { deviceId: first.id, expectedStatus: 'IN_STOCK', nextStatus: 'SOLD', eventType: 'SOLD' },
+        )
+
+        // The same handset comes back in as a used trade-in. This used to fail.
+        const second = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [traded],
+          mainType: 'USED',
+          branchId: branchA,
+        })
+        expect(second.id).not.toBe(first.id)
+
+        // The number now points at the unit actually holding it...
+        expect(await findDeviceByIdentifier(actor, traded)).toBe(second.id)
+        // ...and the sold one kept its identifiers, so its warranty and
+        // history still resolve.
+        const old = await db
+          .select()
+          .from(schema.deviceIdentifier)
+          .where(eq(schema.deviceIdentifier.deviceId, first.id))
+        expect(old).toHaveLength(1)
+        expect(old[0]!.releasedAt).not.toBeNull()
+      })
+
+      it('still refuses it while the first unit is in stock', async () => {
+        const held = imei(501)
+        await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [held],
+          mainType: 'NEW',
+          branchId: branchA,
+        })
+        await expect(
+          createDevice(actor, ctx, {
+            productId: mobileProductId,
+            identifiers: [held],
+            mainType: 'USED',
+            branchId: branchA,
+          }),
+        ).rejects.toThrow(/already in the shop/i)
+      })
+
+      it('refuses it for a unit that is only reserved, not gone', async () => {
+        const reserved = imei(502)
+        const d = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [reserved],
+          mainType: 'NEW',
+          branchId: branchA,
+        })
+        await setDeviceStatus(
+          { businessId, actorId: actor.id, refType: 'test', refId: d.id },
+          {
+            deviceId: d.id,
+            expectedStatus: 'IN_STOCK',
+            nextStatus: 'RESERVED',
+            eventType: 'RESERVED',
+          },
+        )
+        await expect(
+          createDevice(actor, ctx, {
+            productId: mobileProductId,
+            identifiers: [reserved],
+            mainType: 'USED',
+            branchId: branchA,
+          }),
+        ).rejects.toThrow(/already in the shop/i)
+      })
+
+      it('takes the number back when a sold unit returns and nothing else holds it', async () => {
+        const back = imei(503)
+        const d = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [back],
+          mainType: 'NEW',
+          branchId: branchA,
+        })
+        const move = (expected: string, next: string, event: string) =>
+          setDeviceStatus(
+            { businessId, actorId: actor.id, refType: 'test', refId: d.id },
+            {
+              deviceId: d.id,
+              expectedStatus: expected as never,
+              nextStatus: next as never,
+              eventType: event as never,
+            },
+          )
+        await move('IN_STOCK', 'SOLD', 'SOLD')
+        await move('SOLD', 'RETURNED', 'RETURNED')
+
+        const rows = await db
+          .select()
+          .from(schema.deviceIdentifier)
+          .where(eq(schema.deviceIdentifier.deviceId, d.id))
+        expect(rows[0]!.releasedAt, 'back in hand, so the claim is back').toBeNull()
+      })
+
+      /*
+       * The awkward one. A unit is sold, the shop buys another with the same
+       * IMEI, and then the first sale is returned. Both are now in hand. The
+       * returned unit cannot take the number back - the newer one holds it -
+       * and the return must not fail because of that.
+       */
+      it('does not break a return when another unit has taken the number', async () => {
+        const contested = imei(504)
+        const first = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [contested],
+          mainType: 'NEW',
+          branchId: branchA,
+        })
+        await setDeviceStatus(
+          { businessId, actorId: actor.id, refType: 'test', refId: first.id },
+          { deviceId: first.id, expectedStatus: 'IN_STOCK', nextStatus: 'SOLD', eventType: 'SOLD' },
+        )
+        const second = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [contested],
+          mainType: 'USED',
+          branchId: branchA,
+        })
+
+        // The old sale comes back. It must not throw.
+        await setDeviceStatus(
+          { businessId, actorId: actor.id, refType: 'test', refId: first.id },
+          {
+            deviceId: first.id,
+            expectedStatus: 'SOLD',
+            nextStatus: 'RETURNED',
+            eventType: 'RETURNED',
+          },
+        )
+
+        // The newer unit keeps the claim; exactly one holder, as ever.
+        const holders = await db
+          .select()
+          .from(schema.deviceIdentifier)
+          .where(eq(schema.deviceIdentifier.value, contested))
+        expect(holders.filter((r) => r.releasedAt === null)).toHaveLength(1)
+        expect(holders.find((r) => r.releasedAt === null)!.deviceId).toBe(second.id)
+      })
     })
 
     it('rejects a duplicate against a NON-primary identifier too', async () => {
@@ -222,7 +387,7 @@ suite('M2 inventory core (database-backed)', () => {
           mainType: 'NEW',
           branchId: branchA,
         }),
-      ).rejects.toThrow(/already belongs/i)
+      ).rejects.toThrow(/already in the shop/i)
     })
 
     it('validates IMEI shape and strips separators', () => {
@@ -649,7 +814,7 @@ suite('M2 inventory core (database-backed)', () => {
           mainType: 'NEW',
           branchId: branchA,
         }),
-      ).rejects.toThrow(/already belongs/i)
+      ).rejects.toThrow(/already in the shop/i)
     })
   })
 
@@ -1008,7 +1173,7 @@ suite('M2 inventory core (database-backed)', () => {
           mainType: 'NEW',
           branchId: branchA,
         }),
-      ).rejects.toThrow(/already belongs to/i)
+      ).rejects.toThrow(/already in the shop/i)
     })
 
     it('ignores a serial offered for a category that does not ask for one', async () => {

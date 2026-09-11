@@ -10,7 +10,7 @@ import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } fr
  * `n` is spaced by 100, not by 10: the previous version reserved a single
  * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
  * eight milliseconds earlier — which showed up as an unrelated test failing
- * with "already belongs to another device". Two digits is more numbers than
+ * with "already in the shop on ...". Two digits is more numbers than
  * any one spec uses.
  */
 const imei = (suffix: number) =>
@@ -171,7 +171,7 @@ test.describe('as admin', () => {
       await page.getByRole('button', { name: 'Add device' }).click()
 
       if (attempt === 2) {
-        await expect(page.locator('[data-slot="alert"]')).toContainText(/already belongs to/i)
+        await expect(page.locator('[data-slot="alert"]')).toContainText(/already in the shop/i)
       } else {
         await expect(page).toHaveURL(/\/devices$/)
       }

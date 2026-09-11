@@ -9,7 +9,7 @@ import { choose, expectNoHorizontalOverflow, isMobileProject, signIn, USERS } fr
  * `n` is spaced by 100, not by 10: the previous version reserved a single
  * digit per test, so `imei(80)` in one run collided with `imei(0)` from a run
  * eight milliseconds earlier — which showed up as an unrelated test failing
- * with "already belongs to another device". Two digits is more numbers than
+ * with "already in the shop on ...". Two digits is more numbers than
  * any one spec uses.
  */
 const imei = (n: number) =>
@@ -126,7 +126,9 @@ test.describe('recording a purchase', () => {
 
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('5')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('200')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('200')
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // And it survives onto the saved purchase.
@@ -143,12 +145,14 @@ test.describe('recording a purchase', () => {
     await pickProduct(page, `E2E Phone ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('20000')
 
     const a = imei(1)
     const b = imei(2)
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(a)
     await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(b)
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
 
     // Lands on the detail page with both units listed.
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
@@ -184,6 +188,7 @@ test.describe('recording a purchase', () => {
     await pickProduct(page, `E2E SpecPhone ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('50000')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('50000')
 
     // One combination for the whole line.
     await page.getByRole('textbox', { name: 'RAM', exact: true }).fill('8 GB')
@@ -207,6 +212,7 @@ test.describe('recording a purchase', () => {
     await page.getByRole('textbox', { name: 'IMEI 2 battery health %' }).fill('87')
 
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
     // The bill itself says what it booked in, for checking against the
     // supplier's paperwork a month later.
@@ -289,9 +295,9 @@ test.describe('recording a purchase', () => {
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(imei(10))
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
 
-    await expect(page.locator('[data-slot="alert"]')).toContainText(
-      /3 units but 1 IMEI entered/i,
-    )
+    // Beside the grid it is about, not in a banner at the top of the form.
+    await expect(page.getByText(/3 units but 1 IMEI entered/i)).toBeVisible()
+    await expect(page).toHaveURL(/\/purchases\/new$/)
   })
 
   test('a second line starts from the main type already in use', async ({ page }) => {
@@ -347,6 +353,7 @@ test.describe('recording a purchase', () => {
     await pickProduct(page, `E2E DupPhone ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('20000')
 
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(same)
     await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(same)
@@ -435,9 +442,11 @@ test.describe('recording a purchase', () => {
     await choose(page.getByRole('combobox', { name: 'Warranty by' }), 'Shop warranty')
 
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('9000')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('9000')
     const serial = imei(7)
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(serial)
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // The date reached the handset, not a period converted into one.
@@ -580,7 +589,9 @@ test.describe('the bill date and the day it arrived', () => {
     await pickProduct(page, name)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('3')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // Both dates survive, and the detail says so rather than showing one.
@@ -621,6 +632,7 @@ test.describe('a serial number beside the IMEI', () => {
     await pickProduct(page, productName)
     await page.getByRole('button', { name: 'NEW', exact: true }).click()
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('20000')
 
     // The IMEI is required; the serial box is offered beneath it, marked
     // optional, and a handset books in whether or not it is filled.
@@ -631,6 +643,7 @@ test.describe('a serial number beside the IMEI', () => {
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(phoneImei)
     await serial.fill(`E2ESN${id}`)
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // And the handset carries both, each labelled for what it is. The
@@ -653,13 +666,138 @@ test.describe('a message that cannot be seen is not a message', () => {
     const confirm = page.getByRole('button', { name: 'Confirm purchase' })
     await confirm.scrollIntoViewIfNeeded()
 
-    // No product on any line, so this fails at the top of the form - which
-    // used to mean nothing visibly happened at all.
+    // No product and no prices on any line, so the problems are at the top of
+    // the form - which used to mean nothing visibly happened at all. The
+    // banner now counts them and still scrolls itself into view; the fields
+    // themselves say which.
     await confirm.click()
 
-    const error = page.getByRole('alert').filter({ hasText: 'Every line needs a product.' })
+    const error = page.getByRole('alert').filter({ hasText: /fields? need.? attention/i })
     await expect(error).toBeVisible()
     await expect(error).toBeInViewport()
+    await expect(page.getByText('Choose a product.').first()).toBeVisible()
+  })
+})
+
+/*
+ * Validation belongs on the box that is wrong.
+ *
+ * Every check used to write into one banner at the top of the form and stop at
+ * the first problem, so a buyer with three mistakes was told about one,
+ * described a field that might be scrolled off the screen, and on fixing it
+ * was shown the next. Now every check runs and each message sits under the
+ * field that caused it.
+ */
+/*
+ * One last "are you sure" before a purchase is written. Confirming raises
+ * stock, registers every handset and posts what the shop owes - and is undone
+ * only by a reversal, and only while every unit is still untouched.
+ */
+test.describe('the confirmation step', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('asks before saving, and writes nothing if you back out', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E Confirm ${id}`)
+    await createProduct(page, `E2E ConfCable ${id}`, 'Cables')
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E Confirm ${id}`)
+    await pickProduct(page, `E2E ConfCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('4')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('250')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('400')
+
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toContainText('Save this purchase?')
+    // Names the two things somebody clicking past this would want to have seen.
+    await expect(dialog).toContainText(`E2E Confirm ${id}`)
+    await expect(dialog).toContainText('1,000')
+
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page).toHaveURL(/\/purchases\/new$/)
+
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+  })
+
+  test('never opens while a field is wrong', async ({ page }) => {
+    const id = unique()
+    await createProduct(page, `E2E NoConf ${id}`, 'Cables')
+    await page.goto('/purchases/new')
+    await pickProduct(page, `E2E NoConf ${id}`)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+
+    // One interruption per mistake: the fields say what is wrong, and the
+    // "are you sure" only appears over a form that would go through.
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByText('Enter the unit cost.')).toBeVisible()
+  })
+})
+
+test.describe('errors land on the field that caused them', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page, USERS.admin)
+  })
+
+  test('both prices are required, and each says so in place', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E Req ${id}`)
+    await createProduct(page, `E2E ReqCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E Req ${id}`)
+    await pickProduct(page, `E2E ReqCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('3')
+    // Both price boxes deliberately left blank.
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+
+    // Nothing was written, and both boxes are marked rather than one banner
+    // naming whichever happened to be checked first.
+    await expect(page).toHaveURL(/\/purchases\/new$/)
+    await expect(page.getByText('Enter the unit cost.')).toBeVisible()
+    await expect(page.getByText('Enter the selling price.')).toBeVisible()
+
+    // Fixing one clears that one only, as you type.
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await expect(page.getByText('Enter the unit cost.')).toHaveCount(0)
+    await expect(page.getByText('Enter the selling price.')).toBeVisible()
+
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('150')
+    await expect(page.getByText('Enter the selling price.')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+  })
+
+  test('a missing supplier is marked on the supplier field', async ({ page }) => {
+    const id = unique()
+    await createProduct(page, `E2E NoSup ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickProduct(page, `E2E NoSup ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('1')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('150')
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+
+    await expect(page.getByText('Choose a supplier.')).toBeVisible()
+    await expect(page).toHaveURL(/\/purchases\/new$/)
+  })
+
+  test('the banner counts the problems rather than describing one', async ({ page }) => {
+    const id = unique()
+    await createProduct(page, `E2E Count ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickProduct(page, `E2E Count ${id}`)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+
+    // Supplier, unit cost and selling price are all missing.
+    await expect(page.getByText(/\d+ fields need attention/)).toBeVisible()
   })
 })
 
@@ -678,7 +816,9 @@ test.describe('supplier money', () => {
     await pickProduct(page, `E2E PayCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // It shows on the dues report.
@@ -694,7 +834,7 @@ test.describe('supplier money', () => {
     await expect(page.getByText('Outstanding')).toBeVisible()
     await page.getByRole('button', { name: 'Record payment' }).click()
     await page.getByLabel('Amount (₹)').fill('1000')
-    await page.getByRole('button', { name: 'Record payment' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click()
 
     await expect(page.getByText('Payment recorded.')).toBeVisible()
     await expect(page.getByText('PAID').first()).toBeVisible()
@@ -716,6 +856,7 @@ test.describe('supplier money', () => {
     await pickProduct(page, `E2E PaidCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('5')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('200')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('200')
 
     // Off by default: a delivery on credit is still the common case.
     const paidNow = page.getByRole('switch', { name: 'Mark as paid' })
@@ -726,6 +867,7 @@ test.describe('supplier money', () => {
     // own total rather than a number rounded on a phone.
     await choose(page.getByRole('combobox', { name: 'Payment method' }), 'Cash')
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
 
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
     await expect(page.getByText('PAID').first()).toBeVisible()
@@ -746,6 +888,7 @@ test.describe('supplier money', () => {
     await pickProduct(page, `E2E PendCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
 
     await page.getByRole('switch', { name: 'Mark as paid' }).click()
     // Blank means the whole bill, so there is nothing pending to report yet.
@@ -776,7 +919,9 @@ test.describe('supplier money', () => {
     await pickProduct(page, `E2E HereCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // Unpaid, and payable right here.
@@ -788,14 +933,14 @@ test.describe('supplier money', () => {
     await page.getByLabel('Amount (₹)').fill('600')
     await expect(page.getByTestId('pay-remaining')).toContainText('400')
 
-    await page.getByRole('button', { name: 'Record payment' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click()
     await expect(page.getByText('Payment recorded.')).toBeVisible()
     await expect(page.getByText('PARTIAL').first()).toBeVisible()
 
     // And the rest can be cleared the same way.
     await page.getByRole('button', { name: 'Record payment' }).click()
     await expect(page.getByLabel('Amount (₹)')).toHaveValue('400')
-    await page.getByRole('button', { name: 'Record payment' }).last().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click()
     await expect(page.getByText('PAID').first()).toBeVisible()
 
     // Once settled there is nothing left to pay, so the button goes away.
@@ -812,12 +957,14 @@ test.describe('supplier money', () => {
     await pickProduct(page, `E2E PartCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
 
     await page.getByRole('switch', { name: 'Mark as paid' }).click()
     await choose(page.getByRole('combobox', { name: 'Payment method' }), 'Cash')
     await page.getByLabel('Amount paid').fill('400')
 
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
     await expect(page.getByText('PARTIAL').first()).toBeVisible()
   })
@@ -832,6 +979,7 @@ test.describe('supplier money', () => {
     await pickProduct(page, `E2E OverCable ${id}`)
     await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('100')
 
     await page.getByRole('switch', { name: 'Mark as paid' }).click()
     await choose(page.getByRole('combobox', { name: 'Payment method' }), 'Cash')
@@ -853,8 +1001,10 @@ test.describe('supplier money', () => {
     await pickSupplier(page, `E2E Reverse ${id}`)
     await pickProduct(page, `E2E RevPhone ${id}`)
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('5000')
+    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('5000')
     await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(one)
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
 
     // An untouched purchase reverses cleanly.
