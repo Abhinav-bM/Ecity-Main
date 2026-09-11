@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { SHOP_TIME_ZONE } from "@/lib/date"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -21,15 +22,28 @@ export function formatDateTime(value: Date | string | null | undefined): string 
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
-    timeZone: "Asia/Kolkata",
+    timeZone: SHOP_TIME_ZONE,
   }).format(d)
 }
 
-/** Short form for narrow screens, where the full date does not fit. */
+/**
+ * Short form for narrow screens, where the full date does not fit.
+ *
+ * Pinned to the shop's zone, like every other formatter here. Without the
+ * `timeZone` this used the machine's own, which is the browser's on the client
+ * and the SERVER's when a page renders on the server - and a production box is
+ * conventionally UTC. A business date is stored as midnight in India, which is
+ * 18:30 UTC the day before, so on a UTC server every bill date, invoice date
+ * and statement line rendered a day early.
+ */
 export function formatDateShort(value: Date | string | null | undefined): string {
   if (!value) return "—"
   const d = typeof value === "string" ? new Date(value) : value
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(d)
+  if (Number.isNaN(d.getTime())) return "—"
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeZone: SHOP_TIME_ZONE,
+  }).format(d)
 }
 
 /**
@@ -46,6 +60,6 @@ export function formatTimeShort(value: Date | string | null | undefined): string
   if (Number.isNaN(d.getTime())) return "—"
   return new Intl.DateTimeFormat("en-IN", {
     timeStyle: "short",
-    timeZone: "Asia/Kolkata",
+    timeZone: SHOP_TIME_ZONE,
   }).format(d)
 }

@@ -30,6 +30,17 @@ export default defineConfig({
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://unused:unused@127.0.0.1:5432/unused',
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'test-secret-not-used-anywhere-real',
+      /*
+       * Run as the server does, not as the developer's laptop does.
+       *
+       * The shop is in India and so is whoever is writing this, so a formatter
+       * that quietly used the machine's own timezone looked perfect here and
+       * rendered every business date a day early in production - a Linux box
+       * in a datacentre is conventionally UTC, and IST midnight is 18:30 UTC
+       * the day before. Forcing UTC means that class of bug fails at the
+       * desk instead of on the invoice.
+       */
+      TZ: 'UTC',
     },
   },
   resolve: {
