@@ -437,6 +437,10 @@ export async function identifierLineage(actor: AuthUser, value: string): Promise
           itemId: purchaseItem.id,
           purchaseId: purchase.id,
           number: purchase.purchaseNumber,
+          /* When the bill was entered - the time this row should show, so it
+           * agrees with the purchase it links to rather than with the moment
+           * the device row happened to be written. */
+          recordedAt: purchase.createdAt,
         })
         .from(purchaseItem)
         .innerJoin(purchase, eq(purchase.id, purchaseItem.purchaseId))
@@ -471,7 +475,9 @@ export async function identifierLineage(actor: AuthUser, value: string): Promise
     events.push({
       kind: 'ACQUIRED',
       at: acquiredAt(u),
-      recordedAt: u.createdAt,
+      // The bill's own entry time where it came through a purchase; opening
+      // stock has no bill, so the unit's own is all there is.
+      recordedAt: bill?.recordedAt ?? u.createdAt,
       deviceId: u.deviceId,
       pass: passOf.get(u.deviceId)!,
       amountPaise: u.purchasePricePaise,

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table'
 import { Attachments } from '@/components/attachments'
 import { MainTypeBadge, DeviceStatusBadge } from '@/components/main-type-badge'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateShort, formatDateTime } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
 import { shopDateString } from '@/lib/date'
 import { getSessionContext } from '@/server/auth/session'
@@ -83,7 +83,13 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
           <p className="text-sm text-muted-foreground">
             {detail.supplierName}
             {detail.supplierCompany ? ` · ${detail.supplierCompany}` : ''} ·{' '}
-            Billed {formatDateTime(detail.purchase.purchaseDate)}
+            {/*
+              A bill date is a date. It comes off a supplier's piece of paper,
+              which carries no time, and is stored as midnight in the shop's
+              zone - so rendering it with a time printed a phantom "12:00 am"
+              that disagreed with every other screen showing the same purchase.
+            */}
+            Billed {formatDateShort(detail.purchase.purchaseDate)}
             {/*
               Only worth saying when the goods came on a different day; on a
               counter purchase the two are the same and repeating it is noise.
@@ -91,7 +97,7 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
             {detail.purchase.arrivedAt &&
             shopDateString(detail.purchase.arrivedAt) !==
               shopDateString(detail.purchase.purchaseDate)
-              ? ` · Arrived ${formatDateTime(detail.purchase.arrivedAt)}`
+              ? ` · Arrived ${formatDateShort(detail.purchase.arrivedAt)}`
               : ''}
           </p>
         </div>

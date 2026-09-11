@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DeviceStatusBadge, MainTypeBadge } from '@/components/main-type-badge'
 import { cn, formatDateShort, formatDateTime } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
-import { shopDateString } from '@/lib/date'
 import { warrantyProviderLabel } from '@/lib/warranty'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -186,7 +185,8 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
               <dt className="text-muted-foreground">Supplier</dt>
               <dd>{supplierName ?? '—'}</dd>
               <dt className="text-muted-foreground">Purchased</dt>
-              <dd>{device.purchaseDate ? formatDateTime(device.purchaseDate) : '—'}</dd>
+              {/* The supplier's bill date: a date, with no time to show. */}
+              <dd>{device.purchaseDate ? formatDateShort(device.purchaseDate) : '—'}</dd>
               {/*
                 PRD FR-29.1 – FR-29.2. Everything a warranty claim needs, in
                 one place: how long, until when, and *who honours it* — the
@@ -368,22 +368,20 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
                     ) : null}
                   </p>
                   {/*
-                    The time, not just the day. Two things that happened on one
-                    afternoon are indistinguishable without it, and that is
-                    precisely when the order is worth reading.
+                    Both, always, and each labelled - never one number that
+                    might be either.
 
-                    `recordedAt` is a real moment; `at` may be a supplier's bill
-                    date, which carries no time. They are shown separately when
-                    they differ, because a bill dated a week before the goods
-                    arrived is a real and useful thing to see - not an error to
-                    paper over by picking one of them.
+                    A supplier's bill carries a date and no time, so it is
+                    shown as a date, exactly as the purchase page shows it.
+                    "Recorded" is the real moment it was entered here, which is
+                    what actually orders this list and what separates two
+                    things booked on the same afternoon. Showing only one of
+                    them is what made this disagree with the purchase invoice.
                   */}
                   <p className="text-xs text-muted-foreground">
-                    {formatDateTime(e.recordedAt)}
-                    {e.kind === 'ACQUIRED' &&
-                    shopDateString(e.at) !== shopDateString(e.recordedAt)
-                      ? ` · bill dated ${formatDateShort(e.at)}`
-                      : ''}
+                    {e.kind === 'ACQUIRED'
+                      ? `Billed ${formatDateShort(e.at)} · recorded ${formatDateTime(e.recordedAt)}`
+                      : formatDateTime(e.at)}
                     {e.deviceId === device.id ? ' · this record' : ''}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-3">

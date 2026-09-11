@@ -12,6 +12,8 @@ import {
   normaliseIdentifiers,
 } from '@/server/services/device.service'
 import { createCategory, createProduct, listLowStock, setMinQuantity } from '@/server/services/product.service'
+import { createParty } from '@/server/services/party.service'
+import { createPurchase } from '@/server/services/purchase.service'
 import { updateBusiness } from '@/server/services/business.service'
 import {
   appendDeviceEvent,
@@ -32,6 +34,8 @@ const suite = available ? describe : describe.skip
 
 suite('M2 inventory core (database-backed)', () => {
   const stamp = Date.now()
+  /** Rupees as integer paise, for the purchase this suite books in. */
+  const rs = (rupees: number) => BigInt(rupees) * 100n
   let businessId: number
   let branchA: number
   let branchB: number
@@ -99,10 +103,27 @@ suite('M2 inventory core (database-backed)', () => {
       }
       await db.delete(schema.deviceUnit).where(eq(schema.deviceUnit.businessId, businessId))
       await db.execute(`delete from stock_ledger where business_id = ${businessId}`)
+      /*
+       * One test books a real purchase, to prove the lineage times an
+       * acquisition by the bill it came in on. Its rows hold the product and
+       * the supplier down, so they go before either can.
+       */
+      await db.execute(`delete from supplier_ledger_entry where business_id = ${businessId}`)
+      await db.execute(`delete from purchase_item where purchase_id in
+        (select id from purchase where business_id = ${businessId})`)
+      await db.execute(`delete from purchase where business_id = ${businessId}`)
+      await db.delete(schema.documentSequence).where(
+        eq(schema.documentSequence.businessId, businessId),
+      )
     })
-    await db.delete(schema.branchStock).where(eq(schema.branchStock.productId, accessoryProductId))
+    // Every product of this business, not one named one - a test that adds a
+    // product of its own would otherwise hold the delete below on a key.
+    await db.execute(`delete from branch_stock where product_id in
+      (select id from product where business_id = ${businessId})`)
     await db.delete(schema.product).where(eq(schema.product.businessId, businessId))
     await db.delete(schema.category).where(eq(schema.category.businessId, businessId))
+    // The supplier the purchase test creates.
+    await db.delete(schema.supplier).where(eq(schema.supplier.businessId, businessId))
     await db.delete(schema.branch).where(eq(schema.branch.businessId, businessId))
     await db.delete(schema.business).where(eq(schema.business.id, businessId))
   })
@@ -439,6 +460,67 @@ suite('M2 inventory core (database-backed)', () => {
         expect(acquisitions.map((e) => e.pass)).toEqual([4, 3, 2, 1])
         // However many passes, one holds the number: the one still in hand.
         expect(lineage.filter((e) => e.holdsIdentifier).map((e) => e.deviceId)).toEqual([ids[3]])
+      })
+
+      /*
+       * The times on this panel have to be the purchase's own, not the moment
+       * the device row happened to be written. They are milliseconds apart in
+       * one transaction, but they are different facts, and showing the wrong
+       * one is what made this disagree with the purchase invoice it links to.
+       */
+      it('times an acquisition by the bill it came in on', async () => {
+        const traced = imei(509)
+        const sup = await createParty(actor, ctx, 'supplier', { name: `Lineage Sup ${stamp}` })
+        const billed = new Date('2026-04-02T00:00:00+05:30')
+
+        const bought = await createPurchase(actor, ctx, {
+          supplierId: sup.id,
+          branchId: branchA,
+          purchaseDate: billed,
+          lines: [
+            {
+              productId: mobileProductId,
+              quantity: 1,
+              unitCostPaise: rs(20000),
+              mainType: 'NEW',
+              identifiers: [traced],
+            },
+          ],
+        })
+        const unit = (
+          await db
+            .select()
+            .from(schema.deviceUnit)
+            .where(eq(schema.deviceUnit.primaryIdentifier, traced))
+            .limit(1)
+        )[0]!
+        await setDeviceStatus(
+          { businessId, actorId: actor.id, refType: 'test', refId: unit.id },
+          { deviceId: unit.id, expectedStatus: 'IN_STOCK', nextStatus: 'SOLD', eventType: 'SOLD' },
+        )
+        await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [traced],
+          mainType: 'USED',
+          branchId: branchA,
+        })
+
+        const lineage = await identifierLineage(actor, traced)
+        const first = lineage.find((e) => e.deviceId === unit.id && e.kind === 'ACQUIRED')!
+
+        // The bill date is the supplier's, shown as a date on both screens.
+        expect(first.at.getTime()).toBe(billed.getTime())
+
+        // And the time is the purchase's, so the panel and the invoice agree.
+        const row = (
+          await db
+            .select()
+            .from(schema.purchase)
+            .where(eq(schema.purchase.id, bought.id))
+            .limit(1)
+        )[0]!
+        expect(first.recordedAt.getTime()).toBe(row.createdAt.getTime())
+        expect(first.link?.href).toBe(`/purchases/${bought.id}`)
       })
 
       it('says nothing for an identifier only one unit has ever carried', async () => {
