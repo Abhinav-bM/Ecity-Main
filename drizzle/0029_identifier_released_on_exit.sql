@@ -16,27 +16,34 @@
 -- "this row still claims the number".
 
 ALTER TABLE "device_identifier"
-  ADD COLUMN "released_at" timestamp with time zone;
+  ADD COLUMN IF NOT EXISTS "released_at" timestamp with time zone;
 
 -- Existing rows: release the identifiers of anything not currently in hand.
 -- Safe to run against the old global index - it guaranteed no duplicates, so
 -- nothing here can collide.
+--
+-- `status::text`, not the enum, and this is NOT tidiable away. 'VOIDED' is
+-- added to device_status by migration 0008, and the migrator runs every
+-- pending migration in ONE transaction - so on a fresh database that value is
+-- created and used in the same transaction, which Postgres refuses:
+-- "unsafe use of new value VOIDED of enum type device_status". Comparing the
+-- text form never consults pg_enum, so it does not care how new the label is.
 UPDATE "device_identifier" di
 SET "released_at" = now()
 FROM "device_unit" du
 WHERE du."id" = di."device_id"
-  AND du."status" IN ('SOLD', 'SOLD_PENDING_IMPORT', 'VOIDED', 'LOST');
+  AND du."status"::text IN ('SOLD', 'SOLD_PENDING_IMPORT', 'VOIDED', 'LOST');
 
-DROP INDEX "device_identifier_value_uq";
+DROP INDEX IF EXISTS "device_identifier_value_uq";
 
 -- The claim, enforced by the database rather than by application code alone.
 -- Two concurrent purchases of the same IMEI cannot both win this.
-CREATE UNIQUE INDEX "device_identifier_value_held_uq"
+CREATE UNIQUE INDEX IF NOT EXISTS "device_identifier_value_held_uq"
   ON "device_identifier" ("value") WHERE "released_at" IS NULL;
 
 -- Still needed for lookups against every identifier ever issued: a warranty
 -- claim or a return searches by IMEI long after the unit was sold.
-CREATE INDEX "device_identifier_value_idx" ON "device_identifier" ("value");
+CREATE INDEX IF NOT EXISTS "device_identifier_value_idx" ON "device_identifier" ("value");
 
 /*
  * The claim follows the device's status, maintained here rather than in the
@@ -50,7 +57,7 @@ CREATE INDEX "device_identifier_value_idx" ON "device_identifier" ("value");
 CREATE OR REPLACE FUNCTION device_identifier_follow_status()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW."status" IN ('SOLD', 'SOLD_PENDING_IMPORT', 'VOIDED', 'LOST') THEN
+  IF NEW."status"::text IN ('SOLD', 'SOLD_PENDING_IMPORT', 'VOIDED', 'LOST') THEN
     -- Gone from the shop: give up the number.
     UPDATE "device_identifier"
     SET "released_at" = now()
@@ -77,6 +84,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS device_identifier_follow_status_trg ON "device_unit";
 CREATE TRIGGER device_identifier_follow_status_trg
 AFTER UPDATE OF "status" ON "device_unit"
 FOR EACH ROW

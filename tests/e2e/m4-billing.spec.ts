@@ -16,12 +16,27 @@ const unique = () => String(Date.now()).slice(-8)
 const imei = (n: number) =>
   String(35_400_000_000_000 + (Date.now() % 1_000_000) * 100 + n)
 
-async function createProduct(page: Page, name: string, category: string, price: string) {
+async function createProduct(
+  page: Page,
+  name: string,
+  category: string,
+  price: string,
+  /*
+   * A product with no rate is untaxed, and bills untaxed. Any test that wants
+   * GST on the invoice has to give the product a rate, the way a shop does -
+   * it used to come for free from a fallback that applied the shop default to
+   * anything unset, which is the bug that made "no tax rate" meaningless.
+   */
+  taxRate?: string,
+) {
   await page.goto('/products/new')
   await page.getByRole('textbox', { name: 'Product name', exact: true }).fill(name)
   await choose(page.getByRole('combobox', { name: 'Category', exact: true }), category)
   await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill(price)
   await page.getByRole('textbox', { name: 'HSN code', exact: true }).fill('8517')
+  if (taxRate) {
+    await choose(page.getByRole('combobox', { name: 'Tax rate', exact: true }), taxRate)
+  }
   await page.getByRole('button', { name: 'Create product' }).click()
   await expect(page).toHaveURL(/\/products$/)
 }
@@ -575,7 +590,7 @@ test.describe('the tax invoice is statutory (OQ-4)', () => {
   test('an intra-state sale shows CGST and SGST separately, not one GST line', async ({ page }) => {
     const id = unique()
     const name = `E2E Gst Cable ${id}`
-    await createProduct(page, name, 'Cables', '1000')
+    await createProduct(page, name, 'Cables', '1000', 'GST 18%')
     await purchase(page, {
       supplier: `E2E GstSup ${id}`,
       product: name,
@@ -603,10 +618,53 @@ test.describe('the tax invoice is statutory (OQ-4)', () => {
     await expectNoHorizontalOverflow(page)
   })
 
+  /*
+   * The other half of the same rule: no rate means no tax.
+   *
+   * The till used to substitute the shop's default rate for anything with no
+   * rate of its own, so a product deliberately saved as untaxed was billed at
+   * 18% anyway and nothing on screen said so.
+   */
+  test('a product with no tax rate is billed with no tax', async ({ page }) => {
+    const id = unique()
+    const name = `E2E Untaxed Cable ${id}`
+    // No tax rate given, which is what an untaxed product looks like.
+    await createProduct(page, name, 'Cables', '1000')
+    await purchase(page, {
+      supplier: `E2E UntaxedSup ${id}`,
+      product: name,
+      quantity: '2',
+      cost: '400',
+    })
+
+    await page.goto('/billing')
+    await page.getByRole('textbox', { name: 'Scan or search' }).fill(name)
+    await page.getByTestId('bill-search-results').getByRole('button').first().click()
+
+    // The till shows no tax on it before the bill is even saved.
+    await expect(page.getByTestId('cart-tax')).toHaveText('₹0.00')
+
+    await page.getByRole('button', { name: /^\+ Cash$/ }).click()
+    await page.getByRole('button', { name: /^Save bill/ }).click()
+    await expect(page).toHaveURL(/\/sales\/\d+$/)
+
+    /*
+     * The invoice still lists a CGST/SGST row, at 0% and ₹0.00 - which is the
+     * honest thing for a zero-rated line. What proves no tax was charged is
+     * the taxable value: prices are tax-inclusive, so a taxed ₹1,000 line
+     * would show ₹847.46 taxable and ₹152.54 tax. Untaxed, the whole ₹1,000
+     * is taxable and the tax is nil.
+     */
+    const invoice = page.locator('#invoice')
+    await expect(invoice).toContainText('CGST 0%')
+    await expect(invoice).toContainText('₹1,000.00')
+    await expect(invoice).not.toContainText('847.46')
+  })
+
   test('the PDF of a statutory invoice still renders', async ({ page }) => {
     const id = unique()
     const name = `E2E GstPdf Cable ${id}`
-    await createProduct(page, name, 'Cables', '600')
+    await createProduct(page, name, 'Cables', '600', 'GST 18%')
     await purchase(page, {
       supplier: `E2E GstPdfSup ${id}`,
       product: name,

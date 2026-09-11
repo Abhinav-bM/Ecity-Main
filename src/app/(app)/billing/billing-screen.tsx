@@ -28,7 +28,6 @@ export function BillingScreen({
   canCreateCustomer,
   defaultCreditDays,
   paymentMethods,
-  defaultTaxRateId,
   taxRates,
   canDiscount,
   gstEnabled,
@@ -40,7 +39,6 @@ export function BillingScreen({
   /** PRD FR-7.2. Prefills the due date on a credit bill. */
   defaultCreditDays: number
   paymentMethods: { id: number; name: string }[]
-  defaultTaxRateId: number | null
   taxRates: { id: number; rateBasisPoints: number }[]
   canDiscount: boolean
   /** Off for an unregistered shop: no tax on the bill, no tax on screen. */
@@ -158,10 +156,16 @@ export function BillingScreen({
       quantity: 1,
       unitPrice: hit.sellingPricePaise ? String(Number(hit.sellingPricePaise) / 100) : '',
       discount: '0',
-      taxRateId: gstEnabled ? (hit.taxRateId ?? defaultTaxRateId) : null,
-      taxRateBasisPoints: gstEnabled
-        ? (rateBp.get(hit.taxRateId ?? defaultTaxRateId ?? -1) ?? 0)
-        : 0,
+      /*
+       * No rate on the item means no tax. It does NOT mean "fall back to the
+       * shop's default rate", which is what this used to do - so a product
+       * deliberately saved as untaxed was still billed at the shop default,
+       * and nothing on screen said so. `product.tax_rate_id` is nullable
+       * precisely so that untaxed can be said, and the server already reads a
+       * null rate as 0%; it was only the till filling the gap.
+       */
+      taxRateId: gstEnabled ? hit.taxRateId : null,
+      taxRateBasisPoints: gstEnabled ? (rateBp.get(hit.taxRateId ?? -1) ?? 0) : 0,
       availableQuantity: null,
     })
     if (!result.added) toast.error(result.reason ?? 'Could not add that item.')
@@ -178,10 +182,16 @@ export function BillingScreen({
       quantity: 1,
       unitPrice: hit.sellingPricePaise ? String(Number(hit.sellingPricePaise) / 100) : '',
       discount: '0',
-      taxRateId: gstEnabled ? (hit.taxRateId ?? defaultTaxRateId) : null,
-      taxRateBasisPoints: gstEnabled
-        ? (rateBp.get(hit.taxRateId ?? defaultTaxRateId ?? -1) ?? 0)
-        : 0,
+      /*
+       * No rate on the item means no tax. It does NOT mean "fall back to the
+       * shop's default rate", which is what this used to do - so a product
+       * deliberately saved as untaxed was still billed at the shop default,
+       * and nothing on screen said so. `product.tax_rate_id` is nullable
+       * precisely so that untaxed can be said, and the server already reads a
+       * null rate as 0%; it was only the till filling the gap.
+       */
+      taxRateId: gstEnabled ? hit.taxRateId : null,
+      taxRateBasisPoints: gstEnabled ? (rateBp.get(hit.taxRateId ?? -1) ?? 0) : 0,
       availableQuantity: hit.quantity,
     })
     if (!result.added) toast.error(result.reason ?? 'Could not add that item.')
@@ -390,7 +400,9 @@ export function BillingScreen({
                     <dt className="text-muted-foreground">Taxable</dt>
                     <dd className="tabular text-right">{formatMoney(totals.taxablePaise)}</dd>
                     <dt className="text-muted-foreground">Tax</dt>
-                    <dd className="tabular text-right">{formatMoney(totals.taxPaise)}</dd>
+                    <dd className="tabular text-right" data-testid="cart-tax">
+                      {formatMoney(totals.taxPaise)}
+                    </dd>
                   </>
                 ) : null}
                 <dt className="font-medium">Bill total</dt>

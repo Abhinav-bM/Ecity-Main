@@ -23,3 +23,5 @@ render 06-Manual-Test-Checklist  "Manual Test Checklist" \
   "Version 1.1  ·  2026||What a person still has to judge, module by module||$COMPANION"
 render 07-Cash-and-Closing       "Cash, Closing and Opening Balances" \
   "Version 1.0  ·  2026||What the three money screens are for, in plain English||$COMPANION"
+render 08-GST-Guide              "GST Guide" \
+  "Version 1.0  ·  2026||How tax is decided, calculated and reported, end to end||$COMPANION"

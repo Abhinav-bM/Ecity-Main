@@ -61,7 +61,6 @@ export default async function BillingPage() {
       branchId={branchId}
       branchName={branches.find((b) => b.id === branchId)?.name ?? 'Branch'}
       paymentMethods={methods.filter((m) => m.isActive).map((m) => ({ id: m.id, name: m.name }))}
-      defaultTaxRateId={rates.find((r) => r.isDefault)?.id ?? null}
       taxRates={rates.map((r) => ({ id: r.id, rateBasisPoints: r.rateBasisPoints }))}
       canDiscount={hasPermission(session.user, 'sale.discount')}
       canCreateCustomer={hasPermission(session.user, 'customer.manage')}
