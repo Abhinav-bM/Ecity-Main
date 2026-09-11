@@ -23,6 +23,7 @@ import {
   postLedgerEntry,
   purchasePaidPaise,
 } from './supplier-ledger.service'
+import { recordSupplierPaymentIn } from './supplier-payment.service'
 
 /**
  * Purchases (PRD FR-5.8 - FR-5.15).
@@ -132,6 +133,25 @@ export type PurchaseInput = {
   supplierInvoiceNumber?: string
   notes?: string
   lines: PurchaseLineInput[]
+  /**
+   * Settle the bill as it is entered (PRD FR-5.12).
+   *
+   * Most deliveries from a regular supplier are paid on the spot, and without
+   * this the only way to say so was to confirm the purchase, find it again in
+   * the history and record a payment against it - the same bill entered twice,
+   * with a window in between where the shop's books say it owes money it does
+   * not. Part payment is the same field with a smaller number in it.
+   */
+  payment?: {
+    paymentMethodId: number
+    /**
+     * Omit for the whole bill. Left to the server on purpose: the form's total
+     * and the server's are computed separately, and "paid in full" must mean
+     * the amount actually recorded, not a number rounded on a phone.
+     */
+    amountPaise?: bigint
+    reference?: string
+  }
 }
 
 function lineTotal(line: PurchaseLineInput): bigint {
@@ -203,7 +223,7 @@ export async function createPurchase(
   actor: AuthUser,
   ctx: AuditContext,
   input: PurchaseInput,
-): Promise<{ id: number; purchaseNumber: string; deviceIds: number[] }> {
+): Promise<{ id: number; purchaseNumber: string; deviceIds: number[]; paymentId: number | null }> {
   await assertBranchAcceptsTransactions(actor, input.branchId)
   await assertPartySelectable(actor, 'supplier', input.supplierId)
 
@@ -384,7 +404,42 @@ export async function createPurchase(
       tx,
     )
 
-    return { id: created.id, purchaseNumber, deviceIds }
+    /*
+     * Paid as it was entered. Inside this transaction, so a purchase is never
+     * left recorded-but-unpaid by a failure here - and after the PURCHASE
+     * ledger entry above, because the allocation checks what the bill owes.
+     */
+    let paymentId: number | null = null
+    if (input.payment) {
+      const amount = input.payment.amountPaise ?? total
+      if (amount > total) {
+        throw new AppError(
+          'That payment is more than the purchase total.',
+          422,
+          'OVER_ALLOCATED',
+        )
+      }
+      const paid = await recordSupplierPaymentIn(
+        actor,
+        ctx,
+        {
+          supplierId: input.supplierId,
+          branchId: input.branchId,
+          paymentMethodId: input.payment.paymentMethodId,
+          amountPaise: amount,
+          // Dated with the bill, not with today: booking in is routinely
+          // backdated, and the payment went out when the goods came in.
+          paidOn: input.purchaseDate ?? undefined,
+          reference: input.payment.reference,
+          // Explicit, so it settles THIS bill - never the oldest open one.
+          allocations: [{ purchaseId: created.id, amountPaise: amount }],
+        },
+        tx,
+      )
+      paymentId = paid.id
+    }
+
+    return { id: created.id, purchaseNumber, deviceIds, paymentId }
   })
 }
 

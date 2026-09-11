@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/form-field'
 import { ProductPicker, type PickedProduct } from '@/components/product-picker'
@@ -126,6 +127,8 @@ export function PurchaseForm({
   canCreateSupplier,
   taxRates,
   gstEnabled,
+  paymentMethods,
+  canPay,
 }: {
   branches: { id: number; code: string; name: string }[]
   defaultBranchId: number | null
@@ -136,6 +139,10 @@ export function PurchaseForm({
   /** Active rates only, for the quick-create product dialog. */
   taxRates: { id: number; name: string }[]
   gstEnabled: boolean
+  /** Active methods only, for settling the bill here. */
+  paymentMethods: { id: number; name: string }[]
+  /** supplier_payment.manage. Without it the payment block is not offered. */
+  canPay: boolean
 }) {
   const router = useRouter()
   const [supplier, setSupplier] = useState<PickedParty | null>(null)
@@ -147,6 +154,16 @@ export function PurchaseForm({
   const [lines, setLines] = useState<Line[]>([newLine()])
   /** Which unit rows have their own specs showing, as `lineKey:index`. */
   const [openUnits, setOpenUnits] = useState<Set<string>>(new Set())
+  /*
+   * Settling the bill here rather than finding it again in the history.
+   * Off by default - a delivery on credit is still the common case, and a
+   * payment nobody meant to record is worse than one recorded a minute later.
+   */
+  const [payNow, setPayNow] = useState(false)
+  const [paymentMethodId, setPaymentMethodId] = useState(String(paymentMethods[0]?.id ?? ''))
+  /** Blank is the whole bill. The server decides what that is, not this. */
+  const [payAmount, setPayAmount] = useState('')
+  const [payReference, setPayReference] = useState('')
 
   /*
    * Identifiers typed more than once on this delivery.
@@ -242,6 +259,21 @@ export function PurchaseForm({
   )
   const total = totals.subtotal - totals.discount
 
+  /*
+   * What would still be owed after the amount typed into the payment box.
+   *
+   * `null` while there is nothing useful to say - the box is empty (which means
+   * the whole bill, so nothing is left), or what is in it is not a number yet.
+   * Clamped at zero: an over-payment is refused on submit, and a negative
+   * "still to pay" would be a stranger thing to show than the error.
+   */
+  const payPending = useMemo(() => {
+    if (!payNow || !payAmount.trim()) return null
+    const paid = rupeesToPaise(parseRupees(payAmount))
+    if (paid <= 0n) return null
+    return paid >= total ? 0n : total - paid
+  }, [payNow, payAmount, total])
+
   async function submit() {
     setFormError(null)
 
@@ -291,6 +323,30 @@ export function PurchaseForm({
       }
     }
 
+    /*
+     * Caught here rather than after a round trip that would have written the
+     * purchase and then refused the payment - which the transaction rolls back
+     * wholesale, so the buyer loses the whole delivery over a typo.
+     */
+    if (payNow && payAmount.trim()) {
+      // parseRupees answers 0 for anything unparseable, so one check covers both.
+      const amount = parseRupees(payAmount)
+      if (amount <= 0) {
+        setFormError('The amount paid has to be a number above zero. Leave it blank for the whole bill.')
+        return
+      }
+      if (rupeesToPaise(amount) > total) {
+        setFormError(
+          `The amount paid (${formatMoney(rupeesToPaise(amount))}) is more than the bill total (${formatMoney(total)}).`,
+        )
+        return
+      }
+    }
+    if (payNow && !paymentMethodId) {
+      setFormError('Choose how the bill was paid.')
+      return
+    }
+
     setSaving(true)
     const res = await apiFetch('/api/purchases', {
       method: 'POST',
@@ -302,6 +358,15 @@ export function PurchaseForm({
         arrivedAt,
         supplierInvoiceNumber,
         notes,
+        payment: payNow
+          ? {
+              paymentMethodId,
+              // Blank travels as blank: the server settles the whole bill from
+              // its own total, so the two can never disagree by a paisa.
+              amount: payAmount.trim(),
+              reference: payReference,
+            }
+          : undefined,
         lines: lines.map((l) => {
           const product = l.product!
           return {
@@ -347,8 +412,16 @@ export function PurchaseForm({
       setFormError(res.error)
       return
     }
-    const created = (res.data) as { purchaseNumber: string; id: number }
-    toast.success(`Purchase ${created.purchaseNumber} recorded.`)
+    const created = (res.data) as {
+      purchaseNumber: string
+      id: number
+      paymentId: number | null
+    }
+    toast.success(
+      created.paymentId
+        ? `Purchase ${created.purchaseNumber} recorded and paid.`
+        : `Purchase ${created.purchaseNumber} recorded.`,
+    )
     router.push(`/purchases/${created.id}`)
     router.refresh()
   }
@@ -897,6 +970,82 @@ export function PurchaseForm({
             <dt className="font-medium">Total</dt>
             <dd className="tabular text-right font-medium">{formatMoney(total)}</dd>
           </dl>
+
+          {canPay ? (
+            <div className="space-y-3 rounded-md border p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                <Switch
+                  checked={payNow}
+                  onCheckedChange={setPayNow}
+                  disabled={paymentMethods.length === 0}
+                  aria-label="Mark as paid"
+                />
+                Mark as paid
+              </label>
+
+              {paymentMethods.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  This shop has no active payment methods, so a bill cannot be settled here.
+                  Add one under Settings → Business → Payments.
+                </p>
+              ) : !payNow ? (
+                <p className="text-xs text-muted-foreground">
+                  Leave this off if the delivery is on credit. The bill goes onto the
+                  supplier&rsquo;s account and can be paid later.
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <AppSelect
+                      id="payment-method"
+                      label="Payment method"
+                      value={paymentMethodId}
+                      onValueChange={setPaymentMethodId}
+                      placeholder="Choose a method"
+                      options={paymentMethods.map((m) => ({ value: String(m.id), label: m.name }))}
+                    />
+                    <Input
+                      inputMode="decimal"
+                      aria-label="Amount paid"
+                      placeholder={`Leave blank for ${formatMoney(total)}`}
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
+                    />
+                    <Input
+                      aria-label="Payment reference"
+                      placeholder="Reference (optional)"
+                      value={payReference}
+                      onChange={(e) => setPayReference(e.target.value)}
+                    />
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="font-medium text-foreground">
+                      Leave the amount blank if you paid the full bill
+                    </strong>{' '}
+                    — {formatMoney(total)}. Enter a smaller amount for a part payment.
+                  </p>
+
+                  {/*
+                    What is still owed, worked out as they type. A part payment
+                    whose balance you have to compute yourself is how a supplier
+                    ends up chased for the wrong figure.
+                  */}
+                  {payPending !== null ? (
+                    <dl
+                      className="flex items-baseline justify-between gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm"
+                      data-testid="payment-pending"
+                    >
+                      <dt className="text-muted-foreground">
+                        {payPending > 0n ? 'Still to pay the supplier' : 'Nothing left to pay'}
+                      </dt>
+                      <dd className="tabular font-medium">{formatMoney(payPending)}</dd>
+                    </dl>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

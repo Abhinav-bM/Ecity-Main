@@ -288,27 +288,50 @@ export function AppShell({
   )
 
   return (
-    <div className="flex min-h-screen">
-      {/*
-        Desktop sidebar. Hidden below md, where the Sheet takes over.
-
-        `sticky top-0 h-screen self-start` is what pins it. Without them the
-        aside is a stretched flex child as tall as the whole document, so it
-        scrolls away with the page and its own overflow-y never engages.
-        `self-start` stops flex stretching from overriding the height.
-      */}
-      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col self-start border-r bg-sidebar md:flex">
+    /*
+      The shell is exactly one viewport tall and does not scroll; `main` below
+      is the only thing that does.
+ 
+      This used to be `min-h-screen` with a sticky sidebar and sticky header,
+      scrolling the document itself - and that is what made every dropdown jump
+      the page to the top. Radix locks scrolling by setting `overflow: hidden`
+      on <body> whenever a select, dialog or sheet opens. With the document as
+      the scroller that collapses its scrollable height, the position is clamped
+      to zero, and it is not restored on close: open a branch picker halfway
+      down a long purchase form and you were sent back to the top.
+ 
+      With the scroll owned by `main`, the body never scrolls, so the lock has
+      nothing to clamp. It fixes selects, dialogs and the mobile nav sheet in
+      one go, and the sidebar and header no longer need to be sticky at all -
+      they sit outside the scrolling region.
+ 
+      `fixed inset-0`, not a `h-dvh` block. A sized block is still in the
+      document's flow, so the document kept a scrollbar of its own - and
+      scrolling it dragged the entire shell upward, sidebar included, leaving
+      blank page below. Taking the shell out of flow means the document has
+      nothing to scroll and cannot do this at all.
+    */
+    <div className="fixed inset-0 flex overflow-hidden">
+      {/* Desktop sidebar. Hidden below md, where the Sheet takes over. */}
+      <aside className="hidden h-full w-56 shrink-0 flex-col border-r bg-sidebar md:flex">
         <div className="flex h-14 items-center border-b px-4">
           <span className="font-semibold tracking-tight text-primary">ECITY</span>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
+        {/*
+          `min-h-0` is what makes the overflow engage. A flex item defaults to
+          `min-height: auto` and refuses to shrink below its content, so without
+          it the nav grew to its full height, pushed the sidebar past the shell
+          and gave the document a scrollbar it should never have had. The mobile
+          Sheet below always had it; this one did not.
+        */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           <NavLinks groups={groups} pathname={pathname} />
         </div>
         <div className="p-3">{footnote}</div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4">
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetTrigger asChild>
               <Button
@@ -357,7 +380,12 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 p-3 sm:p-4 lg:p-6">{children}</main>
+        {/*
+          The one scrolling element in the app. `scroll-pt-0` is deliberate:
+          nothing overlays the content any more, so the old allowance for a
+          sticky header would only push anchors and focused controls down.
+        */}
+        <main className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
   )

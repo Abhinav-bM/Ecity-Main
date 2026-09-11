@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import { db } from '@/server/db'
+import { db, type DbOrTx } from '@/server/db'
 import {
   paymentMethod,
   purchase,
@@ -39,13 +39,31 @@ export async function recordSupplierPayment(
   ctx: AuditContext,
   input: PaymentInput,
 ): Promise<{ id: number }> {
+  await assertBranchAcceptsTransactions(actor, input.branchId)
+  await assertPartySelectable(actor, 'supplier', input.supplierId)
+  return db.transaction((tx) => recordSupplierPaymentIn(actor, ctx, input, tx))
+}
+
+/**
+ * The same payment, inside a transaction somebody else owns.
+ *
+ * A purchase can be settled as it is entered (FR-5.12), and that payment has
+ * to be part of the same transaction that confirmed the purchase - otherwise a
+ * failure between the two leaves a bill the shop believes it has paid. The
+ * branch and supplier checks are the caller's to make: `createPurchase` has
+ * already made them for the same branch and supplier by the time it gets here.
+ */
+export async function recordSupplierPaymentIn(
+  actor: AuthUser,
+  ctx: AuditContext,
+  input: PaymentInput,
+  tx: DbOrTx,
+): Promise<{ id: number }> {
   if (input.amountPaise <= 0n) {
     throw new AppError('A payment must be more than zero.', 422, 'BAD_AMOUNT')
   }
-  await assertBranchAcceptsTransactions(actor, input.branchId)
-  await assertPartySelectable(actor, 'supplier', input.supplierId)
 
-  const method = await db
+  const method = await tx
     .select({ id: paymentMethod.id, isActive: paymentMethod.isActive })
     .from(paymentMethod)
     .where(
@@ -59,118 +77,121 @@ export async function recordSupplierPayment(
     throw new AppError('That payment method is not available.', 422, 'BAD_METHOD')
   }
 
-  return db.transaction(async (tx) => {
-    const created = (
-      await tx
-        .insert(supplierPayment)
-        .values({
-          businessId: actor.businessId,
-          supplierId: input.supplierId,
-          branchId: input.branchId,
-          paymentMethodId: input.paymentMethodId,
-          amountPaise: input.amountPaise,
-          paidOn: input.paidOn ?? new Date(),
-          reference: input.reference?.trim() || null,
-          notes: input.notes?.trim() || null,
-          createdBy: actor.id,
-        })
-        .returning()
-    )[0]!
-
-    // M7 FR-11.2. Paying a supplier in cash takes money out of the till.
-    await postByPaymentMethod(tx, {
-      businessId: actor.businessId,
-      branchId: input.branchId,
-      paymentMethodId: input.paymentMethodId,
-      movement: 'SUPPLIER_PAYMENT',
-      amountPaise: -input.amountPaise,
-      refType: 'supplier_payment',
-      refId: created.id,
-      occurredAt: created.paidOn,
-      actorId: actor.id,
-    })
-
-    const allocations = input.allocations?.length
-      ? input.allocations
-      : await autoAllocate(actor, input.supplierId, input.amountPaise)
-
-    let allocated = 0n
-    for (const a of allocations) {
-      if (a.amountPaise <= 0n) continue
-
-      /*
-       * Lock the purchase before reading what is still owed on it. Without
-       * this, two payments against the same supplier bill entered at once both
-       * see the full amount outstanding and both allocate it, and the purchase
-       * shows as paid twice - the same race as on the customer side.
-       */
-      await tx.execute(sql`select id from purchase where id = ${a.purchaseId} for update`)
-
-      const target = await tx
-        .select({ id: purchase.id, totalPaise: purchase.totalPaise, status: purchase.status })
-        .from(purchase)
-        .where(and(eq(purchase.id, a.purchaseId), eq(purchase.businessId, actor.businessId)))
-        .limit(1)
-      const row = target[0]
-      if (!row) throw notFound('Purchase')
-      if (row.status !== 'CONFIRMED') {
-        throw new AppError('Only a confirmed purchase can be paid.', 422, 'NOT_CONFIRMED')
-      }
-
-      const alreadyPaid = await purchasePaidPaise(a.purchaseId, tx)
-      const owing = row.totalPaise - alreadyPaid
-      if (a.amountPaise > owing) {
-        throw new AppError(
-          'That allocation is more than the purchase still owes.',
-          422,
-          'OVER_ALLOCATED',
-          { purchaseId: a.purchaseId, owingPaise: String(owing) },
-        )
-      }
-
-      await tx.insert(supplierPaymentAllocation).values({
-        paymentId: created.id,
-        purchaseId: a.purchaseId,
-        amountPaise: a.amountPaise,
+  const created = (
+    await tx
+      .insert(supplierPayment)
+      .values({
+        businessId: actor.businessId,
+        supplierId: input.supplierId,
+        branchId: input.branchId,
+        paymentMethodId: input.paymentMethodId,
+        amountPaise: input.amountPaise,
+        paidOn: input.paidOn ?? new Date(),
+        reference: input.reference?.trim() || null,
+        notes: input.notes?.trim() || null,
+        createdBy: actor.id,
       })
-      allocated += a.amountPaise
-    }
+      .returning()
+  )[0]!
 
-    if (allocated > input.amountPaise) {
-      throw new AppError('Allocations exceed the payment amount.', 422, 'OVER_ALLOCATED')
-    }
-
-    // Negative: the debt goes down.
-    await postLedgerEntry(tx, {
-      businessId: actor.businessId,
-      supplierId: input.supplierId,
-      branchId: input.branchId,
-      entryType: 'PAYMENT',
-      amountPaise: -input.amountPaise,
-      refType: 'supplier_payment',
-      refId: created.id,
-      note: input.reference?.trim() || null || undefined,
-      actorId: actor.id,
-    })
-
-    await writeAudit(
-      ctx,
-      {
-        action: 'CREATE',
-        entityType: 'supplier_payment',
-        entityId: created.id,
-        summary: `Paid supplier ${Number(input.amountPaise) / 100} across ${allocations.length} purchase(s)`,
-      },
-      tx,
-    )
-
-    return { id: created.id }
+  // M7 FR-11.2. Paying a supplier in cash takes money out of the till.
+  await postByPaymentMethod(tx, {
+    businessId: actor.businessId,
+    branchId: input.branchId,
+    paymentMethodId: input.paymentMethodId,
+    movement: 'SUPPLIER_PAYMENT',
+    amountPaise: -input.amountPaise,
+    refType: 'supplier_payment',
+    refId: created.id,
+    occurredAt: created.paidOn,
+    actorId: actor.id,
   })
+
+  const allocations = input.allocations?.length
+    ? input.allocations
+    : await autoAllocate(actor, input.supplierId, input.amountPaise, tx)
+
+  let allocated = 0n
+  for (const a of allocations) {
+    if (a.amountPaise <= 0n) continue
+
+    /*
+     * Lock the purchase before reading what is still owed on it. Without
+     * this, two payments against the same supplier bill entered at once both
+     * see the full amount outstanding and both allocate it, and the purchase
+     * shows as paid twice - the same race as on the customer side.
+     */
+    await tx.execute(sql`select id from purchase where id = ${a.purchaseId} for update`)
+
+    const target = await tx
+      .select({ id: purchase.id, totalPaise: purchase.totalPaise, status: purchase.status })
+      .from(purchase)
+      .where(and(eq(purchase.id, a.purchaseId), eq(purchase.businessId, actor.businessId)))
+      .limit(1)
+    const row = target[0]
+    if (!row) throw notFound('Purchase')
+    if (row.status !== 'CONFIRMED') {
+      throw new AppError('Only a confirmed purchase can be paid.', 422, 'NOT_CONFIRMED')
+    }
+
+    const alreadyPaid = await purchasePaidPaise(a.purchaseId, tx)
+    const owing = row.totalPaise - alreadyPaid
+    if (a.amountPaise > owing) {
+      throw new AppError(
+        'That allocation is more than the purchase still owes.',
+        422,
+        'OVER_ALLOCATED',
+        { purchaseId: a.purchaseId, owingPaise: String(owing) },
+      )
+    }
+
+    await tx.insert(supplierPaymentAllocation).values({
+      paymentId: created.id,
+      purchaseId: a.purchaseId,
+      amountPaise: a.amountPaise,
+    })
+    allocated += a.amountPaise
+  }
+
+  if (allocated > input.amountPaise) {
+    throw new AppError('Allocations exceed the payment amount.', 422, 'OVER_ALLOCATED')
+  }
+
+  // Negative: the debt goes down.
+  await postLedgerEntry(tx, {
+    businessId: actor.businessId,
+    supplierId: input.supplierId,
+    branchId: input.branchId,
+    entryType: 'PAYMENT',
+    amountPaise: -input.amountPaise,
+    refType: 'supplier_payment',
+    refId: created.id,
+    note: input.reference?.trim() || null || undefined,
+    actorId: actor.id,
+  })
+
+  await writeAudit(
+    ctx,
+    {
+      action: 'CREATE',
+      entityType: 'supplier_payment',
+      entityId: created.id,
+      summary: `Paid supplier ${Number(input.amountPaise) / 100} across ${allocations.length} purchase(s)`,
+    },
+    tx,
+  )
+
+  return { id: created.id }
 }
 
 /** Oldest unpaid purchase first — the usual way a shop settles a supplier. */
-async function autoAllocate(actor: AuthUser, supplierId: number, amountPaise: bigint) {
-  const open = await db
+async function autoAllocate(
+  actor: AuthUser,
+  supplierId: number,
+  amountPaise: bigint,
+  tx: DbOrTx = db,
+) {
+  const open = await tx
     .select({ id: purchase.id, totalPaise: purchase.totalPaise })
     .from(purchase)
     .where(
@@ -186,7 +207,7 @@ async function autoAllocate(actor: AuthUser, supplierId: number, amountPaise: bi
   let left = amountPaise
   for (const p of open) {
     if (left <= 0n) break
-    const owing = p.totalPaise - (await purchasePaidPaise(p.id))
+    const owing = p.totalPaise - (await purchasePaidPaise(p.id, tx))
     if (owing <= 0n) continue
     const take = owing < left ? owing : left
     allocations.push({ purchaseId: p.id, amountPaise: take })

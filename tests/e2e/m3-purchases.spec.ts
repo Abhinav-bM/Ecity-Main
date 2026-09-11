@@ -700,6 +700,149 @@ test.describe('supplier money', () => {
     await expect(page.getByText('PAID').first()).toBeVisible()
   })
 
+  /*
+   * The bill settled where it was entered. Saying a delivery was paid for used
+   * to mean confirming it, finding it again in the history and recording a
+   * payment against it - the same bill handled twice, with a window in between
+   * where the books said the shop owed money it did not.
+   */
+  test('a delivery can be paid for on the form that records it', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E PaidNow ${id}`)
+    await createProduct(page, `E2E PaidCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E PaidNow ${id}`)
+    await pickProduct(page, `E2E PaidCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('5')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('200')
+
+    // Off by default: a delivery on credit is still the common case.
+    const paidNow = page.getByRole('switch', { name: 'Mark as paid' })
+    await expect(paidNow).not.toBeChecked()
+    await paidNow.click()
+
+    // The amount is left blank, which settles the whole bill from the server's
+    // own total rather than a number rounded on a phone.
+    await choose(page.getByRole('combobox', { name: 'Payment method' }), 'Cash')
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+    await expect(page.getByText('PAID').first()).toBeVisible()
+  })
+
+  /*
+   * What is still owed, shown as the amount is typed. A part payment whose
+   * balance the buyer has to work out themselves is how a supplier gets chased
+   * for the wrong figure.
+   */
+  test('the form says what is still owed as a part amount is typed', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E Pending ${id}`)
+    await createProduct(page, `E2E PendCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E Pending ${id}`)
+    await pickProduct(page, `E2E PendCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+
+    await page.getByRole('switch', { name: 'Mark as paid' }).click()
+    // Blank means the whole bill, so there is nothing pending to report yet.
+    await expect(page.getByTestId('payment-pending')).toHaveCount(0)
+
+    await page.getByLabel('Amount paid').fill('400')
+    const pending = page.getByTestId('payment-pending')
+    await expect(pending).toContainText('Still to pay the supplier')
+    await expect(pending).toContainText('600')
+
+    // Paying the whole thing explicitly leaves nothing.
+    await page.getByLabel('Amount paid').fill('1000')
+    await expect(pending).toContainText('Nothing left to pay')
+  })
+
+  /*
+   * Paying a bill from the bill. The only payment UI used to be the supplier
+   * dues screen, which pays a supplier and allocates oldest-first - so settling
+   * the one bill in front of you meant leaving it and hoping.
+   */
+  test('a purchase can be paid from the purchase itself', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E PayHere ${id}`)
+    await createProduct(page, `E2E HereCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E PayHere ${id}`)
+    await pickProduct(page, `E2E HereCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+
+    // Unpaid, and payable right here.
+    await expect(page.getByText('UNPAID').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    // Prefilled with the whole outstanding amount, and it says what is left.
+    await expect(page.getByLabel('Amount (₹)')).toHaveValue('1000')
+    await page.getByLabel('Amount (₹)').fill('600')
+    await expect(page.getByTestId('pay-remaining')).toContainText('400')
+
+    await page.getByRole('button', { name: 'Record payment' }).last().click()
+    await expect(page.getByText('Payment recorded.')).toBeVisible()
+    await expect(page.getByText('PARTIAL').first()).toBeVisible()
+
+    // And the rest can be cleared the same way.
+    await page.getByRole('button', { name: 'Record payment' }).click()
+    await expect(page.getByLabel('Amount (₹)')).toHaveValue('400')
+    await page.getByRole('button', { name: 'Record payment' }).last().click()
+    await expect(page.getByText('PAID').first()).toBeVisible()
+
+    // Once settled there is nothing left to pay, so the button goes away.
+    await expect(page.getByRole('button', { name: 'Record payment' })).toHaveCount(0)
+  })
+
+  test('a part payment on the form leaves the rest owing', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E PartPaid ${id}`)
+    await createProduct(page, `E2E PartCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E PartPaid ${id}`)
+    await pickProduct(page, `E2E PartCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('10')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+
+    await page.getByRole('switch', { name: 'Mark as paid' }).click()
+    await choose(page.getByRole('combobox', { name: 'Payment method' }), 'Cash')
+    await page.getByLabel('Amount paid').fill('400')
+
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+    await expect(page.getByText('PARTIAL').first()).toBeVisible()
+  })
+
+  test('paying more than the bill is refused before anything is written', async ({ page }) => {
+    const id = unique()
+    await createSupplier(page, `E2E OverPaid ${id}`)
+    await createProduct(page, `E2E OverCable ${id}`, 'Cables')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E OverPaid ${id}`)
+    await pickProduct(page, `E2E OverCable ${id}`)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
+
+    await page.getByRole('switch', { name: 'Mark as paid' }).click()
+    await choose(page.getByRole('combobox', { name: 'Payment method' }), 'Cash')
+    await page.getByLabel('Amount paid').fill('9999')
+
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    // Still on the form, with the delivery intact rather than lost to a typo.
+    await expect(page.getByText(/more than the bill total/i)).toBeVisible()
+    await expect(page).toHaveURL(/\/purchases\/new$/)
+  })
+
   test('reversal is refused once a unit has been sold, and names it', async ({ page }) => {
     const id = unique()
     await createSupplier(page, `E2E Reverse ${id}`)

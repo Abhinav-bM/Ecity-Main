@@ -2,6 +2,7 @@ import { purchaseQuerySchema, purchaseSchema, rupeesToPaise } from '@/lib/valida
 import { auditContextFromRequest } from '@/server/db/audit'
 import { createPurchase, listPurchases } from '@/server/services/purchase.service'
 import { AppError, route } from '@/server/http'
+import { requirePermission } from '@/server/auth/permissions'
 import { parseShopDate } from '@/lib/date'
 
 /** A yyyy-mm-dd from the form, or nothing. Anything else is said, not ignored. */
@@ -20,10 +21,29 @@ export const GET = route(
 export const POST = route(
   { permission: 'purchase.manage', branchFrom: 'body', schema: purchaseSchema },
   async ({ user, body }) => {
+    /*
+     * Settling the bill here is the same act as paying a supplier from the
+     * purchase history, and is gated the same way. The route needs only
+     * `purchase.manage`, so without this a buyer who may record deliveries but
+     * not pay for them could pay by attaching it to one.
+     */
+    if (body.payment) requirePermission(user, 'supplier_payment.manage')
     const audit = await auditContextFromRequest(user, user.businessId, body.branchId)
     return createPurchase(user, audit, {
       supplierId: body.supplierId,
       branchId: body.branchId,
+      payment: body.payment
+        ? {
+            paymentMethodId: body.payment.paymentMethodId,
+            // '' from an untouched box means the whole bill, and the server
+            // decides what that is.
+            amountPaise:
+              body.payment.amount === '' || body.payment.amount === undefined
+                ? undefined
+                : rupeesToPaise(body.payment.amount),
+            reference: body.payment.reference || undefined,
+          }
+        : undefined,
       /*
        * `parseShopDate`, not `new Date`: these arrive as free text, and an
        * Invalid Date survives every check until the driver refuses it, which

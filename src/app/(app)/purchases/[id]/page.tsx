@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { orNotFound } from '@/server/page-data'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -19,9 +20,11 @@ import { shopDateString } from '@/lib/date'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
 import { getPurchase } from '@/server/services/purchase.service'
+import { listPaymentMethods } from '@/server/services/business.service'
 import { listAttachments } from '@/server/services/attachment.service'
 import { ReverseButton } from './reverse-button'
 import { EditPurchaseMeta } from './edit-meta'
+import { PayPurchaseButton } from './pay-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +48,24 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
     hasPermission(session.user, 'purchase.edit') && detail.purchase.status !== 'REVERSED'
 
   const owing = detail.purchase.totalPaise - detail.paidPaise
+
+  /*
+   * Paying from the bill you are looking at.
+   *
+   * There was no way to do it here: the only payment UI lived on the supplier
+   * dues screen, which pays the supplier and allocates oldest-first. So
+   * settling one bill meant leaving it, finding the supplier, and hoping the
+   * oldest open purchase was the one you meant.
+   */
+  const canPay =
+    hasPermission(session.user, 'supplier_payment.manage') &&
+    detail.purchase.status === 'CONFIRMED' &&
+    owing > 0n
+  const paymentMethods = canPay
+    ? (await listPaymentMethods(session.user))
+        .filter((m) => m.isActive)
+        .map((m) => ({ id: m.id, name: m.name }))
+    : []
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -182,6 +203,28 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
             <dt className="font-medium">Outstanding</dt>
             <dd className="tabular text-right font-medium">{formatMoney(owing)}</dd>
           </dl>
+
+          {canPay ? (
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              {/*
+                The supplier's whole account, for when this bill is not the
+                question - an advance, or clearing several at once.
+              */}
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/suppliers/${detail.purchase.supplierId}`}>
+                  {detail.supplierName}&rsquo;s account
+                </Link>
+              </Button>
+              <PayPurchaseButton
+                purchaseId={id}
+                supplierId={detail.purchase.supplierId}
+                supplierName={detail.supplierName}
+                branchId={detail.purchase.branchId}
+                owingPaise={owing}
+                paymentMethods={paymentMethods}
+              />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

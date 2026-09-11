@@ -16,6 +16,7 @@ import {
   voidSupplierPayment,
 } from '@/server/services/supplier-payment.service'
 import {
+  purchasePaidPaise,
   supplierBalance,
   supplierHistory,
   supplierOutstanding,
@@ -113,7 +114,11 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
         (select id from purchase where business_id = ${businessId})`)
       await db.delete(schema.purchase).where(eq(schema.purchase.businessId, businessId))
       await db.execute(`delete from stock_ledger where business_id = ${businessId}`)
-      await db.delete(schema.branchStock).where(eq(schema.branchStock.productId, cableProductId))
+      // Every product of this business, not one named one: a test that adds a
+      // product of its own would otherwise leave stock behind and the product
+      // delete below would fail on the foreign key.
+      await db.execute(`delete from branch_stock where product_id in
+        (select id from product where business_id = ${businessId})`)
       await db.delete(schema.documentSequence).where(eq(schema.documentSequence.businessId, businessId))
       await db.delete(schema.product).where(eq(schema.product.businessId, businessId))
       await db.delete(schema.category).where(eq(schema.category.businessId, businessId))
@@ -122,6 +127,98 @@ suite('M3 purchases and supplier ledger (database-backed)', () => {
       await db.execute(`delete from audit_log where business_id = ${businessId}`)
       await db.delete(schema.branch).where(eq(schema.branch.businessId, businessId))
       await db.delete(schema.business).where(eq(schema.business.id, businessId))
+    })
+  })
+
+  /*
+   * Settling the bill as it is entered (FR-5.12). The only way to say a
+   * delivery was paid for used to be to confirm it, find it again in the
+   * history and record a payment against it - the same bill handled twice,
+   * with a window in between where the books said the shop owed money it did
+   * not. It goes in the same transaction as the confirm, so there is no state
+   * where the purchase exists and its payment does not.
+   */
+  describe('paying for a delivery as it is entered', () => {
+    /*
+     * Its own supplier. The acceptance case below asserts an absolute supplier
+     * balance, so a paid-for delivery booked against the shared one would move
+     * a number another test owns.
+     */
+    let paidSupplierId: number
+    /** And its own product: the acceptance case asserts absolute cable stock. */
+    let paidProductId: number
+    beforeAll(async () => {
+      paidSupplierId = (
+        await createParty(actor, ctx, 'supplier', { name: `Settled ${stamp}` })
+      ).id
+      const category = await createCategory(actor, ctx, {
+        name: `M3 Settled ${stamp}`,
+        isSerialised: false,
+      })
+      paidProductId = (
+        await createProduct(actor, ctx, { name: `Settled Cable ${stamp}`, categoryId: category.id })
+      ).id
+    })
+
+    it('records the purchase and settles it in full', async () => {
+      const before = await supplierBalance(paidSupplierId)
+      const result = await createPurchase(actor, ctx, {
+        supplierId: paidSupplierId,
+        branchId: branchA,
+        lines: [{ productId: paidProductId, quantity: 4, unitCostPaise: rs(250) }],
+        payment: { paymentMethodId: cashMethodId },
+      })
+
+      expect(result.paymentId).not.toBeNull()
+      const paid = await purchasePaidPaise(result.id)
+      expect(paid).toBe(rs(1000))
+
+      // Paid in full, so the supplier is no worse off than before the delivery.
+      expect(await supplierBalance(paidSupplierId)).toBe(before)
+    })
+
+    it('a smaller amount is a part payment, and the rest stays owing', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId: paidSupplierId,
+        branchId: branchA,
+        lines: [{ productId: paidProductId, quantity: 10, unitCostPaise: rs(100) }],
+        payment: { paymentMethodId: cashMethodId, amountPaise: rs(400) },
+      })
+      expect(await purchasePaidPaise(result.id)).toBe(rs(400))
+
+      const open = await openPurchasesForSupplier(actor, paidSupplierId)
+      expect(open.find((p) => p.id === result.id)?.owingPaise).toBe(rs(600))
+    })
+
+    it('refuses to pay more than the bill, and records nothing at all', async () => {
+      const countBefore = (
+        await db.select().from(schema.purchase).where(eq(schema.purchase.businessId, businessId))
+      ).length
+
+      await expect(
+        createPurchase(actor, ctx, {
+          supplierId: paidSupplierId,
+          branchId: branchA,
+          lines: [{ productId: paidProductId, quantity: 1, unitCostPaise: rs(100) }],
+          payment: { paymentMethodId: cashMethodId, amountPaise: rs(5000) },
+        }),
+      ).rejects.toThrow(/more than the purchase total/i)
+
+      // The whole thing rolls back: no orphan purchase left behind.
+      const countAfter = (
+        await db.select().from(schema.purchase).where(eq(schema.purchase.businessId, businessId))
+      ).length
+      expect(countAfter).toBe(countBefore)
+    })
+
+    it('leaves the bill on the account when no payment is given', async () => {
+      const result = await createPurchase(actor, ctx, {
+        supplierId: paidSupplierId,
+        branchId: branchA,
+        lines: [{ productId: paidProductId, quantity: 2, unitCostPaise: rs(150) }],
+      })
+      expect(result.paymentId).toBeNull()
+      expect(await purchasePaidPaise(result.id)).toBe(0n)
     })
   })
 

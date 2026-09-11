@@ -256,8 +256,17 @@
   }
 
   html {
-    /* Never let a wide table push the whole page sideways on a phone. */
-    overflow-x: hidden;
+    /*
+     * Never let a wide table push the whole page sideways on a phone.
+     *
+     * `clip`, not `hidden`. `overflow-x: hidden` makes <html> a scroll
+     * container, because it forces the other axis from `visible` to `auto`.
+     * That matters wherever the document is still the scroller - the login and
+     * print pages, which are outside the app shell - since Radix's scroll lock
+     * clamps a document-level scroll position it does not own. `clip` clips
+     * just as well and creates no scroll container.
+     */
+    overflow-x: clip;
   }
 
   body {
@@ -288,17 +297,14 @@
 }
 
 /*
- * The app header is sticky and 3.5rem tall, so anything the browser scrolls to
- * the top of the viewport - an anchor, a focused control, find-in-page - would
- * land underneath it.
+ * No scroll-padding any more.
  *
- * scroll-padding on the scrolling container, not scroll-margin on every
- * element: `* { scroll-margin-top }` applies inside every nested scroll
- * container too, which shifts elements that were never underneath the header.
+ * This reserved 4.5rem at the top of the document because the app header was
+ * sticky and overlaid whatever the browser scrolled into view. The header now
+ * sits outside the scrolling region (see `app-shell.tsx`), so nothing can land
+ * underneath it and the allowance would only push anchors and focused controls
+ * needlessly down the page.
  */
-html {
-  scroll-padding-top: 4.5rem;
-}
 
 /* ==========================================================================
    PRINT — invoices (PRD FR-26.4)

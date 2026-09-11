@@ -574,6 +574,31 @@ export const purchaseSchema = z.object({
   supplierInvoiceNumber: optionalText(60),
   notes: optionalText(1000),
   lines: z.array(purchaseLineSchema).min(1, 'Add at least one line.'),
+  /**
+   * Settling the bill as it is entered. Absent means unpaid, which is what
+   * every purchase was until now.
+   */
+  payment: z
+    .object({
+      paymentMethodId: z.coerce.number().int().positive('Choose a payment method.'),
+      /*
+       * Blank is the whole bill, as the server totals it - not as the form did.
+       *
+       * The empty literal comes FIRST on purpose, and this cannot use
+       * `optionalMoney`. That puts `z.coerce.number()` first, which happily
+       * turns '' into 0 and passes `min(0)` - so a blank box arrived as a
+       * zero-rupee payment and the whole purchase was refused with "A payment
+       * must be more than zero." A union returns its first matching branch.
+       */
+      amount: z
+        .union([
+          z.literal(''),
+          rupeeAmount({ min: 0.01, minMessage: 'A payment must be more than zero.' }),
+        ])
+        .optional(),
+      reference: optionalText(80),
+    })
+    .optional(),
 })
 
 export const reversePurchaseSchema = z.object({
