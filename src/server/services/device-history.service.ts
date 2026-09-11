@@ -4,13 +4,17 @@ import {
   branch,
   customer,
   deviceEvent,
+  deviceIdentifier,
+  deviceUnit,
   purchase,
+  purchaseItem,
   sale,
   saleItem,
   salesReturn,
   stockTransfer,
   supplier,
 } from '@/server/db/schema'
+import type { MainType } from '@/server/db/schema'
 import type { AuthUser } from '@/server/auth/permissions'
 import { saleReceivedSql } from './customer-ledger.service'
 import { salePaymentStatus } from './sale.service'
@@ -21,6 +25,9 @@ import { salePaymentStatus } from './sale.service'
  * `device_event` is append-only and ordered, so the timeline is a read of that
  * one table joined out to the documents it points at. Nothing is reconstructed
  * and nothing is inferred - if it is not an event, it did not happen.
+ *
+ * Read back newest first: the last thing that happened is the thing being
+ * asked about.
  *
  * FR-30.6 wants the chain traceable end to end: Purchase → Seller → Branch →
  * Transfers → Sale → Customer → Return/Repair/Other. That means every entry
@@ -138,7 +145,14 @@ export async function deviceTimeline(
     .select()
     .from(deviceEvent)
     .where(eq(deviceEvent.deviceId, deviceId))
-    .orderBy(asc(deviceEvent.seq))
+    /*
+     * Newest first. What happened last is what somebody holding the handset
+     * wants first - whether it is sold, where it went, what it was graded -
+     * and on a unit with a long life the latest entry was at the bottom of the
+     * card, past everything already known. `seq` rather than `occurred_at`,
+     * because two events can share a timestamp and only `seq` is total.
+     */
+    .orderBy(desc(deviceEvent.seq))
 
   if (events.length === 0) return []
 
@@ -322,4 +336,180 @@ export async function devicePosition(deviceId: number) {
   )[0]
 
   return { previousBranchName: row?.name ?? null, movedAt: moves[0]?.occurredAt ?? null }
+}
+
+/**
+ * Which statuses mean the shop still physically has it.
+ *
+ * The same split the identifier claim uses (drizzle/0029): gone is sold,
+ * written off or voided; everything else is on a shelf, on a van or on a
+ * bench, and is still the shop's.
+ */
+const IN_HAND_STATUSES = new Set([
+  'IN_STOCK',
+  'RESERVED',
+  'IN_TRANSIT',
+  'REPAIR',
+  'RETURNED',
+  'DAMAGED',
+])
+
+export type LineageEvent = {
+  kind: 'ACQUIRED' | 'SOLD'
+  /**
+   * The business date: the supplier's bill date, or when the sale happened.
+   * Often midnight for a purchase, because a bill carries a date and not a
+   * time - so it is shown, but never used to order anything.
+   */
+  at: Date
+  /**
+   * The moment it was actually recorded, and what the list is ordered by.
+   *
+   * Bill dates cannot separate two things that happened on one day, which is
+   * exactly when the order matters - and a backdated buyback would otherwise
+   * sort below the unit it replaced. This is a real timestamp either way: when
+   * the unit was registered, or when the bill was raised.
+   */
+  recordedAt: Date
+  deviceId: number
+  /** Which time the shop had this handset: 1 is the first, ever. */
+  pass: number
+  amountPaise: bigint | null
+  /** Supplier it came from, or customer it went to. */
+  partyName: string | null
+  link: { href: string; label: string } | null
+  /** ACQUIRED rows only - what it was booked in as, and where it stands now. */
+  mainType: MainType | null
+  status: string | null
+  holdsIdentifier: boolean
+  inHand: boolean
+}
+
+/**
+ * One identifier's whole story, across every unit that has carried it.
+ *
+ * An IMEI outlives the device row holding it. A handset sold and later bought
+ * back is a new `device_unit` - a different acquisition, at a different price,
+ * with its own warranty - and merging the two would overwrite the first one's
+ * history and make the original sale's margin wrong. So the rows stay separate.
+ *
+ * But nobody thinks about a phone as "two device records". They think: we
+ * bought it new, we sold it, we bought it back. So this flattens the units
+ * into the events that actually happened to the number - acquired, sold,
+ * acquired - newest first, which puts the current state at the top and lets
+ * the rest read back as the story it was.
+ *
+ * Only acquisitions and sales: transfers, gradings and repairs belong to one
+ * unit and are already on that unit's own timeline below.
+ */
+export async function identifierLineage(actor: AuthUser, value: string): Promise<LineageEvent[]> {
+  const units = await db
+    .selectDistinctOn([deviceUnit.id], {
+      deviceId: deviceUnit.id,
+      mainType: deviceUnit.mainType,
+      status: deviceUnit.status,
+      purchasePricePaise: deviceUnit.purchasePricePaise,
+      purchaseDate: deviceUnit.purchaseDate,
+      createdAt: deviceUnit.createdAt,
+      purchaseItemId: deviceUnit.purchaseItemId,
+      supplierName: supplier.name,
+      /** Null while this unit still holds the number. */
+      releasedAt: deviceIdentifier.releasedAt,
+    })
+    .from(deviceIdentifier)
+    .innerJoin(deviceUnit, eq(deviceUnit.id, deviceIdentifier.deviceId))
+    .leftJoin(supplier, eq(supplier.id, deviceUnit.supplierId))
+    .where(and(eq(deviceIdentifier.value, value), eq(deviceUnit.businessId, actor.businessId)))
+
+  // One unit means nothing to tie together, and the unit's own timeline says
+  // it all already.
+  if (units.length < 2) return []
+
+  /*
+   * The bill each unit came in on, so an acquisition links to its purchase the
+   * way a sale links to its invoice. Opening stock has no purchase item and
+   * simply carries no link.
+   */
+  const itemIds = units.map((u) => u.purchaseItemId).filter((v): v is number => v !== null)
+  const bills = itemIds.length
+    ? await db
+        .select({
+          itemId: purchaseItem.id,
+          purchaseId: purchase.id,
+          number: purchase.purchaseNumber,
+        })
+        .from(purchaseItem)
+        .innerJoin(purchase, eq(purchase.id, purchaseItem.purchaseId))
+        .where(inArray(purchaseItem.id, itemIds))
+    : []
+  const billByItem = new Map(bills.map((b) => [b.itemId, b]))
+
+  /*
+   * What each one fetched when it left. `deviceCommercials` is the single
+   * definition of "what this sold for" - a second copy of that query here
+   * would drift from the one the rest of the page uses.
+   */
+  const sales = await Promise.all(units.map((u) => deviceCommercials(u.deviceId)))
+
+  const acquiredAt = (u: (typeof units)[number]) => u.purchaseDate ?? u.createdAt
+
+  /*
+   * "The Nth time this shop had this handset", fixed whatever order the rows
+   * display in - and counted on when each unit was registered, not on the
+   * supplier's bill date. Bills get backdated; that must not renumber history
+   * so the phone appears to have been bought back before it was first bought.
+   */
+  const passOf = new Map(
+    [...units]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.deviceId - b.deviceId)
+      .map((u, i) => [u.deviceId, i + 1]),
+  )
+
+  const events: LineageEvent[] = []
+  for (const [i, u] of units.entries()) {
+    const bill = u.purchaseItemId ? billByItem.get(u.purchaseItemId) : undefined
+    events.push({
+      kind: 'ACQUIRED',
+      at: acquiredAt(u),
+      recordedAt: u.createdAt,
+      deviceId: u.deviceId,
+      pass: passOf.get(u.deviceId)!,
+      amountPaise: u.purchasePricePaise,
+      partyName: u.supplierName,
+      link: bill ? { href: `/purchases/${bill.purchaseId}`, label: bill.number } : null,
+      mainType: u.mainType,
+      status: u.status,
+      holdsIdentifier: u.releasedAt === null,
+      inHand: IN_HAND_STATUSES.has(u.status),
+    })
+    for (const sale of sales[i]!) {
+      events.push({
+        kind: 'SOLD',
+        at: sale.soldAt,
+        recordedAt: sale.soldAt,
+        deviceId: u.deviceId,
+        pass: passOf.get(u.deviceId)!,
+        amountPaise: sale.lineTotalPaise,
+        partyName: sale.customerName,
+        link: { href: `/sales/${sale.saleId}`, label: sale.invoiceNumber },
+        mainType: null,
+        status: null,
+        holdsIdentifier: false,
+        inHand: false,
+      })
+    }
+  }
+
+  /*
+   * Newest first, on when things were actually recorded rather than on bill
+   * dates - see `recordedAt`. A sale beats an acquisition at the same instant:
+   * stock is booked in before it can go out, so at equal timestamps the sale
+   * is the later fact.
+   */
+  return events.sort(
+    (a, b) =>
+      b.recordedAt.getTime() - a.recordedAt.getTime() ||
+      b.pass - a.pass ||
+      (a.kind === b.kind ? 0 : a.kind === 'SOLD' ? -1 : 1),
+  )
 }

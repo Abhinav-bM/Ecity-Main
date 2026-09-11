@@ -22,6 +22,7 @@ import {
   increaseStock,
   setDeviceStatus,
 } from '@/server/services/stock.service'
+import { deviceTimeline, identifierLineage } from '@/server/services/device-history.service'
 import type { AuthUser } from '@/server/auth/permissions'
 import type { AuditContext } from '@/server/db/audit'
 import { databaseAvailable, expectDatabaseRefusal, withAppendOnlySuspended } from './setup'
@@ -332,6 +333,126 @@ suite('M2 inventory core (database-backed)', () => {
        * returned unit cannot take the number back - the newer one holds it -
        * and the return must not fail because of that.
        */
+      /*
+       * Nobody thinks about a phone as "two device records". They think: we
+       * bought it new, we sold it, we bought it back. So the lineage is the
+       * events that happened to the NUMBER, flattened across every unit that
+       * carried it - newest first, so where it stands today is the top line.
+       */
+      it('reads back as bought, sold, bought again', async () => {
+        const reused = imei(505)
+        const first = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [reused],
+          mainType: 'NEW',
+          branchId: branchA,
+          purchaseDate: new Date('2026-01-05'),
+        })
+        await setDeviceStatus(
+          { businessId, actorId: actor.id, refType: 'test', refId: first.id },
+          { deviceId: first.id, expectedStatus: 'IN_STOCK', nextStatus: 'SOLD', eventType: 'SOLD' },
+        )
+        const second = await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [reused],
+          mainType: 'USED',
+          branchId: branchA,
+          // Billed BEFORE the first unit, on purpose: ordering must follow
+          // what was recorded, not what the supplier dated their bill.
+          purchaseDate: new Date('2024-01-02'),
+        })
+
+        const lineage = await identifierLineage(actor, reused)
+
+        // Two acquisitions. The sale is only an event here once a bill exists;
+        // moving the status by hand leaves no sale to report, which is right -
+        // this reads documents, it does not infer them.
+        const acquisitions = lineage.filter((e) => e.kind === 'ACQUIRED')
+        expect(acquisitions.map((e) => e.deviceId)).toEqual([second.id, first.id])
+        expect(acquisitions.map((e) => e.pass)).toEqual([2, 1])
+
+        // Newest first, so today's position is the top line.
+        expect(lineage[0]!.kind).toBe('ACQUIRED')
+        expect(lineage[0]!.deviceId).toBe(second.id)
+        expect(lineage[0]!.holdsIdentifier).toBe(true)
+        expect(lineage[0]!.inHand).toBe(true)
+
+        // The oldest event is where it all started.
+        expect(lineage.at(-1)!.deviceId).toBe(first.id)
+        expect(lineage.at(-1)!.kind).toBe('ACQUIRED')
+        expect(lineage.at(-1)!.pass).toBe(1)
+
+        /*
+         * Ordered on when things were actually recorded, not on bill dates.
+         * A bill carries a date and no time, so two purchases on one day are
+         * indistinguishable by `at` - and the buyback here is deliberately
+         * billed months BEFORE the first unit, which date ordering would put
+         * in the wrong place entirely.
+         */
+        const recorded = lineage.map((e) => e.recordedAt.getTime())
+        expect(recorded).toEqual([...recorded].sort((a, b) => b - a))
+        // Both are carried, so the page can show the bill date beside the time.
+        expect(lineage.every((e) => e.at instanceof Date && e.recordedAt instanceof Date)).toBe(
+          true,
+        )
+
+        // Each unit still keeps its own separate timeline.
+        const firstTimeline = await deviceTimeline(actor, first.id)
+        const secondTimeline = await deviceTimeline(actor, second.id)
+        expect(firstTimeline.some((e) => e.eventType === 'SOLD')).toBe(true)
+        expect(secondTimeline.some((e) => e.eventType === 'SOLD')).toBe(false)
+        expect(firstTimeline[0]!.eventType).toBe('SOLD')
+        expect(firstTimeline.at(-1)!.eventType).toBe('PURCHASED')
+      })
+
+      it('keeps every pass when the same handset cycles through repeatedly', async () => {
+        const recurring = imei(507)
+        const ids: number[] = []
+
+        for (let pass = 0; pass < 4; pass++) {
+          const unit = await createDevice(actor, ctx, {
+            productId: mobileProductId,
+            identifiers: [recurring],
+            mainType: pass === 0 ? 'NEW' : 'USED',
+            branchId: branchA,
+            purchaseDate: new Date(Date.UTC(2024 + pass, 0, 1)),
+          })
+          ids.push(unit.id)
+          if (pass < 3) {
+            await setDeviceStatus(
+              { businessId, actorId: actor.id, refType: 'test', refId: unit.id },
+              {
+                deviceId: unit.id,
+                expectedStatus: 'IN_STOCK',
+                nextStatus: 'SOLD',
+                eventType: 'SOLD',
+              },
+            )
+          }
+        }
+
+        const lineage = await identifierLineage(actor, recurring)
+        const acquisitions = lineage.filter((e) => e.kind === 'ACQUIRED')
+        // Every pass kept, newest first, numbered in the order they happened.
+        expect(acquisitions).toHaveLength(4)
+        expect(acquisitions.map((e) => e.deviceId)).toEqual([...ids].reverse())
+        expect(acquisitions.map((e) => e.pass)).toEqual([4, 3, 2, 1])
+        // However many passes, one holds the number: the one still in hand.
+        expect(lineage.filter((e) => e.holdsIdentifier).map((e) => e.deviceId)).toEqual([ids[3]])
+      })
+
+      it('says nothing for an identifier only one unit has ever carried', async () => {
+        const only = imei(506)
+        await createDevice(actor, ctx, {
+          productId: mobileProductId,
+          identifiers: [only],
+          mainType: 'NEW',
+          branchId: branchA,
+        })
+        // Nothing to tie together, and the unit's own timeline says it all.
+        expect(await identifierLineage(actor, only)).toEqual([])
+      })
+
       it('does not break a return when another unit has taken the number', async () => {
         const contested = imei(504)
         const first = await createDevice(actor, ctx, {

@@ -209,8 +209,16 @@ test.describe('device history', () => {
     await expect(timeline).toContainText('Returned')
     await expect(timeline).toContainText('Inspected')
 
-    // FR-30.6 — the links have to work, not just be there.
-    const invoiceLink = timeline.getByRole('link').filter({ hasText: /INV/ }).first()
+    /*
+     * FR-30.6 — the links have to work, not just be there.
+     *
+     * Scoped to the Sold entry rather than "the first link matching /INV/".
+     * A return is numbered INV-RET-00118, so that pattern matches the return
+     * too, and which one came first depended on the timeline's order - it
+     * picked the sale only because the list used to run oldest first.
+     */
+    const soldRow = timeline.getByTestId('timeline-entry').filter({ hasText: 'Sold on' }).first()
+    const invoiceLink = soldRow.getByRole('link').first()
     await expect(invoiceLink).toBeVisible()
     await invoiceLink.click()
     await expect(page).toHaveURL(/\/sales\/\d+$/)

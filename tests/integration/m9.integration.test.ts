@@ -290,7 +290,10 @@ suite('M9 global search and IMEI device history (database-backed)', () => {
       expect(types).toContain('RETURNED')
       expect(types).toContain('INSPECTED')
       expect(types).toContain('RECLASSIFIED')
-      expect(timeline).toEqual([...timeline].sort((a, b) => a.seq - b.seq))
+      // Newest first: the last thing that happened is the thing being asked
+      // about, so it sits at the top rather than under everything already known.
+      expect(timeline).toEqual([...timeline].sort((a, b) => b.seq - a.seq))
+      expect(timeline.at(-1)!.eventType).toBe('PURCHASED')
 
       // The chain has to be walkable: Purchase → Seller, Sale → Customer.
       const purchased = timeline.find((e) => e.eventType === 'PURCHASED')!
@@ -301,8 +304,13 @@ suite('M9 global search and IMEI device history (database-backed)', () => {
       expect(soldEntry.summary).toContain(detail.sale.invoiceNumber)
       expect(soldEntry.summary).toContain(`M9 Buyer ${stamp}`)
 
-      // A transfer entry names both branches and links to the transfer.
-      const movedOut = timeline.find((e) => e.eventType === 'TRANSFERRED_OUT')!
+      /*
+       * A transfer entry names both branches and links to the transfer. This
+       * device moved out twice - A→B, then back - and the timeline runs newest
+       * first, so `findLast` is the FIRST move out. `find` would be the return
+       * leg, and assert the branches the wrong way round.
+       */
+      const movedOut = timeline.filter((e) => e.eventType === 'TRANSFERRED_OUT').at(-1)!
       expect(movedOut.fromBranchName).toBe('M9 Branch A')
       expect(movedOut.toBranchName).toBe('M9 Branch B')
       expect(movedOut.link?.href).toMatch(/^\/transfers\/\d+$/)

@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DeviceStatusBadge, MainTypeBadge } from '@/components/main-type-badge'
-import { formatDateShort, formatDateTime } from '@/lib/utils'
+import { cn, formatDateShort, formatDateTime } from '@/lib/utils'
 import { formatMoney } from '@/lib/money'
+import { shopDateString } from '@/lib/date'
 import { warrantyProviderLabel } from '@/lib/warranty'
 import { getSessionContext } from '@/server/auth/session'
 import { hasPermission } from '@/server/auth/permissions'
@@ -15,6 +16,7 @@ import {
   deviceCommercials,
   devicePosition,
   deviceTimeline,
+  identifierLineage,
 } from '@/server/services/device-history.service'
 import { SoldExternallyButton } from './sold-externally-button'
 
@@ -42,6 +44,19 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
     devicePosition(id),
   ]))
   const soldFor = commercials.at(-1) ?? null
+
+  /*
+   * The number's whole story, not just this row's.
+   *
+   * A handset bought back is a new device_unit, so its page would otherwise
+   * open on an empty history and give no hint the shop has handled this exact
+   * phone before - which is the first thing worth knowing when one comes over
+   * the counter. Empty unless the identifier really has carried more than one
+   * unit, so an ordinary device shows nothing extra.
+   */
+  const lineage = device.primaryIdentifier
+    ? await identifierLineage(session.user, device.primaryIdentifier)
+    : []
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -286,11 +301,122 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
         Sale → Customer → Return/Repair/Other, each entry linking to the
         document it came from.
       */}
+      {/*
+        The IMEI's story, above this unit's own.
+        
+        It only appears when the number really has carried more than one unit,
+        which means it appears exactly when it matters: a handset the shop has
+        handled before. Each row links to that unit's own full timeline, so the
+        chain is walkable end to end rather than summarised here.
+      */}
+      {lineage.length > 0 ? (
+        <Card data-testid="identifier-lineage">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">This IMEI has been here before</CardTitle>
+            <CardDescription>
+              Everything that has happened to {device.primaryIdentifier}, across every unit that
+              has carried it — bought, sold, bought again. Newest first, so where it stands today
+              is the top line.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="relative space-y-4 border-l pl-5" data-testid="lineage-events">
+              {lineage.map((e) => (
+                <li
+                  key={`${e.kind}-${e.deviceId}-${e.at.toISOString()}`}
+                  className="relative"
+                  data-testid="lineage-event"
+                >
+                  {/*
+                    Filled for what the shop did, hollow for what left - the
+                    shape alone tells you which way the handset moved.
+                  */}
+                  <span
+                    className={cn(
+                      'absolute top-1.5 -left-[1.4rem] size-2 rounded-full border',
+                      e.kind === 'ACQUIRED'
+                        ? 'border-primary bg-primary'
+                        : 'border-muted-foreground bg-background',
+                    )}
+                  />
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+                    {/*
+                      Says which time round this was, so two purchases of the
+                      same handset are never mistaken for one another.
+                    */}
+                    <span className="text-xs font-normal text-muted-foreground">#{e.pass}</span>
+                    {e.kind === 'ACQUIRED'
+                      ? e.pass === 1
+                        ? 'Purchased'
+                        : 'Purchased again'
+                      : 'Sold'}
+                    {showCost && e.amountPaise ? ` — ${formatMoney(e.amountPaise)}` : ''}
+                    {e.partyName
+                      ? ` ${e.kind === 'ACQUIRED' ? 'from' : 'to'} ${e.partyName}`
+                      : ''}
+                    {e.mainType ? <MainTypeBadge mainType={e.mainType} isNewCut={false} /> : null}
+                    {/*
+                      Only on the acquisition that is still standing: this is
+                      the handset the shop can sell today, which is the single
+                      most useful fact on the card.
+                    */}
+                    {e.holdsIdentifier && e.inHand ? (
+                      <Badge variant="secondary">Have it now</Badge>
+                    ) : null}
+                    {e.status && !e.inHand && e.kind === 'ACQUIRED' ? (
+                      <DeviceStatusBadge status={e.status} />
+                    ) : null}
+                  </p>
+                  {/*
+                    The time, not just the day. Two things that happened on one
+                    afternoon are indistinguishable without it, and that is
+                    precisely when the order is worth reading.
+
+                    `recordedAt` is a real moment; `at` may be a supplier's bill
+                    date, which carries no time. They are shown separately when
+                    they differ, because a bill dated a week before the goods
+                    arrived is a real and useful thing to see - not an error to
+                    paper over by picking one of them.
+                  */}
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(e.recordedAt)}
+                    {e.kind === 'ACQUIRED' &&
+                    shopDateString(e.at) !== shopDateString(e.recordedAt)
+                      ? ` · bill dated ${formatDateShort(e.at)}`
+                      : ''}
+                    {e.deviceId === device.id ? ' · this record' : ''}
+                  </p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-3">
+                    {e.link ? (
+                      <Link
+                        href={e.link.href}
+                        className="font-mono text-xs underline underline-offset-4"
+                      >
+                        {e.link.label}
+                      </Link>
+                    ) : null}
+                    {/* The other unit's own full timeline is one click away. */}
+                    {e.deviceId !== device.id && e.kind === 'ACQUIRED' ? (
+                      <Link
+                        href={`/devices/${e.deviceId}`}
+                        className="text-xs underline underline-offset-4"
+                      >
+                        Open that record
+                      </Link>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Its whole life</CardTitle>
           <CardDescription>
-            Append-only, in the order it happened. Every entry links to the document behind it.
+            Newest first. Append-only — every entry links to the document behind it.
           </CardDescription>
         </CardHeader>
         <CardContent>
