@@ -525,6 +525,20 @@ export const minQuantitySchema = z.object({
   minQuantity: z.coerce.number().int().min(0).max(100000),
 })
 
+/**
+ * Must a purchase line carry a selling price?
+ *
+ * Turned off for now. The cost stays required either way - a delivery booked
+ * at no cost is a stock valuation nobody typed. The selling price is the
+ * softer half: useful to capture while both numbers are in front of the buyer,
+ * but a line left blank simply falls back to the product's list price at the
+ * till, which is what it did before.
+ *
+ * One flag, read by the schema and the form, so turning it back on is this
+ * line and nothing else.
+ */
+export const PURCHASE_SELLING_PRICE_REQUIRED = false
+
 /* ============================================================ M3 schemas === */
 
 /**
@@ -545,7 +559,14 @@ export const purchaseLineSchema = z.object({
    * without one leaves the counter typing a price on every sale.
    */
   unitCost: requiredMoney('Enter the unit cost.'),
-  sellingPrice: requiredMoney('Enter the selling price.'),
+  /*
+   * Off for now, behind PURCHASE_SELLING_PRICE_REQUIRED. Blank means the till
+   * falls back to the product's list price, which is the behaviour this had
+   * before - and the flag is the only thing to change to bring it back.
+   */
+  sellingPrice: PURCHASE_SELLING_PRICE_REQUIRED
+    ? requiredMoney('Enter the selling price.')
+    : optionalMoney,
   discount: z.coerce.number().min(0).max(100_000_000).default(0),
   taxRateId: z.preprocess(
     (v) => (v === '' || v === undefined || v === null ? null : v),

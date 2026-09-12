@@ -14,6 +14,7 @@ import { getDevice } from '@/server/services/device.service'
 import {
   deviceCommercials,
   devicePosition,
+  devicePurchase,
   deviceTimeline,
   identifierLineage,
 } from '@/server/services/device-history.service'
@@ -37,10 +38,11 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
    * M9 FR-30.5, FR-30.6. getDevice already proved the caller may see this
    * device, so these two run together rather than one after the other.
    */
-  const [timeline, commercials, position] = await orNotFound(Promise.all([
+  const [timeline, commercials, position, boughtOn] = await orNotFound(Promise.all([
     deviceTimeline(session.user, id),
     deviceCommercials(id),
     devicePosition(id),
+    devicePurchase(id),
   ]))
   const soldFor = commercials.at(-1) ?? null
 
@@ -185,8 +187,31 @@ export default async function DevicePage({ params }: { params: Promise<{ id: str
               <dt className="text-muted-foreground">Supplier</dt>
               <dd>{supplierName ?? '—'}</dd>
               <dt className="text-muted-foreground">Purchased</dt>
-              {/* The supplier's bill date: a date, with no time to show. */}
-              <dd>{device.purchaseDate ? formatDateShort(device.purchaseDate) : '—'}</dd>
+              {/*
+                The bill date, and the bill itself.
+                
+                This is where somebody checks a cost against the supplier's
+                paperwork, or looks at what else arrived in the same delivery -
+                so the document is one click away rather than down the page in
+                the timeline. Their own bill number when they gave one, because
+                that is what the buyer is holding; ours otherwise.
+              */}
+              <dd>
+                {/* The supplier's bill date: a date, with no time to show. */}
+                {device.purchaseDate ? formatDateShort(device.purchaseDate) : '—'}
+                {boughtOn ? (
+                  <>
+                    {' · '}
+                    <Link
+                      href={`/purchases/${boughtOn.id}`}
+                      className="font-mono text-xs underline underline-offset-4"
+                      data-testid="device-purchase-link"
+                    >
+                      {boughtOn.supplierInvoiceNumber ?? boughtOn.number}
+                    </Link>
+                  </>
+                ) : null}
+              </dd>
               {/*
                 PRD FR-29.1 – FR-29.2. Everything a warranty claim needs, in
                 one place: how long, until when, and *who honours it* — the

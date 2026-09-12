@@ -82,8 +82,13 @@ export const POST = route(
             : l.warrantyMonths,
         warrantyUntil: day(l.warrantyUntil, 'warranty end date') ?? null,
         warrantyProvider: l.warrantyProvider || undefined,
-        // Required on every line now, so there is always a number to convert.
-        sellingPricePaise: rupeesToPaise(l.sellingPrice),
+        // Blank is allowed again (PURCHASE_SELLING_PRICE_REQUIRED): the unit
+        // carries no price of its own and the till uses the product's list
+        // price. `undefined`, never 0 - a zero would read as "free".
+        sellingPricePaise:
+          l.sellingPrice === '' || l.sellingPrice === undefined
+            ? undefined
+            : rupeesToPaise(l.sellingPrice),
       })),
     })
   },

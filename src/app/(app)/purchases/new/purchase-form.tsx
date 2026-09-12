@@ -5,7 +5,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Copy, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { MAIN_TYPES, parseQuantity, parseRupees, rupeesToPaise } from '@/lib/validation'
+import {
+  MAIN_TYPES,
+  parseQuantity,
+  parseRupees,
+  PURCHASE_SELLING_PRICE_REQUIRED,
+  rupeesToPaise,
+} from '@/lib/validation'
 import { formatMoney } from '@/lib/money'
 import { shopDateString } from '@/lib/date'
 import { FormError } from '@/components/form-error'
@@ -334,9 +340,11 @@ export function PurchaseForm({
       } else if (parseRupees(l.unitCost) < 0) {
         errors[`${l.key}:unitCost`] = 'Cannot be negative.'
       }
-      if (!l.sellingPrice.trim()) {
+      // Required only while the flag says so; a blank one is legitimate
+      // otherwise, and the till falls back to the product's list price.
+      if (PURCHASE_SELLING_PRICE_REQUIRED && !l.sellingPrice.trim()) {
         errors[`${l.key}:sellingPrice`] = 'Enter the selling price.'
-      } else if (parseRupees(l.sellingPrice) < 0) {
+      } else if (l.sellingPrice.trim() && parseRupees(l.sellingPrice) < 0) {
         errors[`${l.key}:sellingPrice`] = 'Cannot be negative.'
       }
 
@@ -698,17 +706,22 @@ export function PurchaseForm({
                 </Field>
                 {/*
                   Beside the cost, because the moment stock arrives is when
-                  somebody knows both numbers - and required for the same
-                  reason. A handset booked in without one leaves the counter
-                  typing a price on every sale. Choosing a product carries its
-                  list price across, so this is usually already filled.
+                  somebody knows both numbers. Whether it is compulsory is
+                  PURCHASE_SELLING_PRICE_REQUIRED's call - off today, so a
+                  blank one is fine and the till uses the product's list price.
+                  Choosing a product carries its price across, so it is usually
+                  already filled anyway.
                 */}
                 <Field
                   id={`price-${line.key}`}
                   label="Selling price (₹)"
-                  required
+                  required={PURCHASE_SELLING_PRICE_REQUIRED}
                   error={fieldErrors[`${line.key}:sellingPrice`]}
-                  hint="What this batch will be sold at"
+                  hint={
+                    PURCHASE_SELLING_PRICE_REQUIRED
+                      ? 'What this batch will be sold at'
+                      : "Blank uses the product's list price"
+                  }
                 >
                   <Input
                     id={`price-${line.key}`}

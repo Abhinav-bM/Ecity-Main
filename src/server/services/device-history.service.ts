@@ -519,3 +519,27 @@ export async function identifierLineage(actor: AuthUser, value: string): Promise
       (a.kind === b.kind ? 0 : a.kind === 'SOLD' ? -1 : 1),
   )
 }
+
+/**
+ * The supplier's bill a unit came in on, if it came in on one.
+ *
+ * The device page already showed the bill date and the supplier as plain text,
+ * which is the point at which somebody wants to open the bill - to check the
+ * cost against the supplier's paperwork, or to see what else arrived with it.
+ * The timeline below carries the same link, but only once the page has been
+ * scrolled past everything else, and opening stock has no purchase at all.
+ */
+export async function devicePurchase(deviceId: number) {
+  const rows = await db
+    .select({
+      id: purchase.id,
+      number: purchase.purchaseNumber,
+      supplierInvoiceNumber: purchase.supplierInvoiceNumber,
+    })
+    .from(deviceUnit)
+    .innerJoin(purchaseItem, eq(purchaseItem.id, deviceUnit.purchaseItemId))
+    .innerJoin(purchase, eq(purchase.id, purchaseItem.purchaseId))
+    .where(eq(deviceUnit.id, deviceId))
+    .limit(1)
+  return rows[0] ?? null
+}

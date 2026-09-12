@@ -743,7 +743,13 @@ test.describe('errors land on the field that caused them', () => {
     await signIn(page, USERS.admin)
   })
 
-  test('both prices are required, and each says so in place', async ({ page }) => {
+  /*
+   * The unit cost is required; the selling price is not, for now
+   * (PURCHASE_SELLING_PRICE_REQUIRED in lib/validation). A blank cost used to
+   * reach the server as a confident 0, so a delivery could be booked in at no
+   * cost at all and the stock valuation carried a zero nobody typed.
+   */
+  test('the unit cost is required, and says so in place', async ({ page }) => {
     const id = unique()
     await createSupplier(page, `E2E Req ${id}`)
     await createProduct(page, `E2E ReqCable ${id}`, 'Cables')
@@ -755,19 +761,18 @@ test.describe('errors land on the field that caused them', () => {
     // Both price boxes deliberately left blank.
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
 
-    // Nothing was written, and both boxes are marked rather than one banner
-    // naming whichever happened to be checked first.
+    // Nothing was written, and the box itself is marked rather than a banner
+    // at the top of the form naming a field that may be off screen.
     await expect(page).toHaveURL(/\/purchases\/new$/)
     await expect(page.getByText('Enter the unit cost.')).toBeVisible()
-    await expect(page.getByText('Enter the selling price.')).toBeVisible()
+    // The selling price is free to be blank while the flag is off.
+    await expect(page.getByText('Enter the selling price.')).toHaveCount(0)
 
-    // Fixing one clears that one only, as you type.
+    // Filling it clears the message as you type.
     await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('100')
     await expect(page.getByText('Enter the unit cost.')).toHaveCount(0)
-    await expect(page.getByText('Enter the selling price.')).toBeVisible()
 
-    await page.getByRole('textbox', { name: 'Selling price (₹)', exact: true }).fill('150')
-    await expect(page.getByText('Enter the selling price.')).toHaveCount(0)
+    // And it goes through with no selling price at all.
     await page.getByRole('button', { name: 'Confirm purchase' }).click()
     await page.getByRole('button', { name: 'Yes, save it' }).click()
     await expect(page).toHaveURL(/\/purchases\/\d+$/)
@@ -989,6 +994,45 @@ test.describe('supplier money', () => {
     // Still on the form, with the delivery intact rather than lost to a typo.
     await expect(page.getByText(/more than the bill total/i)).toBeVisible()
     await expect(page).toHaveURL(/\/purchases\/new$/)
+  })
+
+  /*
+   * The bill, from the device page itself.
+   *
+   * It was in the timeline, which means scrolling past everything else to
+   * reach it - and this is exactly where somebody checks a cost against the
+   * supplier's paperwork, or looks at what else came in the same delivery.
+   */
+  test('a purchased device links straight to the bill it came in on', async ({ page }) => {
+    const id = unique()
+    const one = imei(90)
+    const name = `E2E BillLink Phone ${id}`
+    await createSupplier(page, `E2E BillSup ${id}`)
+    await createProduct(page, name, 'Mobiles (IMEI)')
+
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E BillSup ${id}`)
+    await pickProduct(page, name)
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('18000')
+    await page.getByRole('button', { name: 'NEW', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(one)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+    const billUrl = page.url()
+
+    // Open the handset the way a person does — from the devices list.
+    await page.goto('/devices')
+    await page.getByLabel('Search devices').fill(one)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await page.getByRole('link', { name: one }).first().click()
+    await expect(page).toHaveURL(/\/devices\/\d+$/)
+
+    // The bill is right there beside the date, and it opens.
+    const link = page.getByTestId('device-purchase-link')
+    await expect(link).toBeVisible()
+    await link.click()
+    await expect(page).toHaveURL(billUrl)
   })
 
   test('reversal is refused once a unit has been sold, and names it', async ({ page }) => {
