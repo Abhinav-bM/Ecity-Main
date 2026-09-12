@@ -77,15 +77,25 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
    * Units from this line whose specs no longer match what the line stamped,
    * grouped by what they now say - so ten handsets corrected the same way are
    * one sentence, not ten.
+   *
+   * Each group carries the units themselves, because "1 unit is now Blue" on a
+   * line of ten leaves somebody hunting for which one.
    */
   function correctionsFor(item: (typeof detail.items)[number]) {
     const differing = detail.devices.filter(
       (d) => d.purchaseItemId === item.id && specsOf(d) !== specsOf(item),
     )
-    const bySpecs = new Map<string, number>()
-    for (const d of differing) bySpecs.set(specsOf(d), (bySpecs.get(specsOf(d)) ?? 0) + 1)
-    return [...bySpecs.entries()].map(([specs, count]) => ({ specs, count }))
+    const bySpecs = new Map<string, { id: number; identifier: string | null }[]>()
+    for (const d of differing) {
+      const group = bySpecs.get(specsOf(d)) ?? []
+      group.push({ id: d.id, identifier: d.identifier })
+      bySpecs.set(specsOf(d), group)
+    }
+    return [...bySpecs.entries()].map(([specs, units]) => ({ specs, units }))
   }
+
+  /** How many identifiers to spell out before the rest become a count. */
+  const SHOWN_IDENTIFIERS = 3
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -200,7 +210,7 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
                     {correctionsFor(i).map((c) => (
                       <span
                         key={c.specs}
-                        className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-normal"
+                        className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-normal"
                         data-testid="line-corrected"
                       >
                         {/*
@@ -210,9 +220,36 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
                         */}
                         <Badge variant="warning">Corrected</Badge>
                         <span className="text-muted-foreground">
-                          {c.count} {c.count === 1 ? 'unit is' : 'units are'} now{' '}
+                          {c.units.length} {c.units.length === 1 ? 'unit is' : 'units are'} now{' '}
                           {c.specs}
                         </span>
+                        {/*
+                          Which ones, by IMEI, each opening its own handset.
+                          Links rather than a hover tooltip: this is read on a
+                          counter tablet as often as a desktop, and a tooltip
+                          is unreachable with a finger. Past a few, the rest
+                          become a count with the full list on the title -
+                          twenty IMEIs would bury the line they belong to.
+                        */}
+                        {c.units.slice(0, SHOWN_IDENTIFIERS).map((u) => (
+                          <Link
+                            key={u.id}
+                            href={`/devices/${u.id}`}
+                            className="font-mono underline underline-offset-4"
+                          >
+                            {u.identifier ?? `#${u.id}`}
+                          </Link>
+                        ))}
+                        {c.units.length > SHOWN_IDENTIFIERS ? (
+                          <span
+                            className="text-muted-foreground"
+                            title={c.units
+                              .map((u) => u.identifier ?? `#${u.id}`)
+                              .join(', ')}
+                          >
+                            +{c.units.length - SHOWN_IDENTIFIERS} more
+                          </span>
+                        ) : null}
                       </span>
                     ))}
                   </TableCell>

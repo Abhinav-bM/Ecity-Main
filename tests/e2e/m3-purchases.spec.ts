@@ -1087,6 +1087,15 @@ test.describe('supplier money', () => {
     await expect(note).toHaveCount(1)
     await expect(note).toContainText('1 unit is now')
     await expect(note).toContainText('Blue')
+
+    // And it names WHICH one - "1 unit" on a line of two is otherwise a hunt.
+    await expect(note).toContainText(one)
+    await expect(note).not.toContainText(two)
+
+    // The IMEI opens that handset, so the correction is one click from proof.
+    await note.getByRole('link', { name: one }).click()
+    await expect(page).toHaveURL(/\/devices\/\d+$/)
+    await expect(page.getByText('Blue').first()).toBeVisible()
   })
 
   test('reversal is refused once a unit has been sold, and names it', async ({ page }) => {
