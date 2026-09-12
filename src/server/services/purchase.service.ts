@@ -649,6 +649,18 @@ export async function getPurchase(actor: AuthUser, id: number) {
           status: deviceUnit.status,
           mainType: deviceUnit.mainType,
           isNewCut: deviceUnit.isNewCut,
+          /*
+           * What each unit says TODAY. The line stamped these at creation and
+           * stopped, so a handset corrected afterwards - the colour was green
+           * on the bill and the box turned out to be blue - disagrees with the
+           * line it came in on. That is the intended behaviour (a document is
+           * not rewritten), but the purchase page has to say so, or the two
+           * screens simply contradict each other with no explanation.
+           */
+          variant: deviceUnit.variant,
+          ram: deviceUnit.ram,
+          storage: deviceUnit.storage,
+          colour: deviceUnit.colour,
         })
         .from(deviceUnit)
         .where(

@@ -1035,6 +1035,60 @@ test.describe('supplier money', () => {
     await expect(page).toHaveURL(billUrl)
   })
 
+  /*
+   * A handset corrected after it was booked in.
+   *
+   * The line keeps what the bill said and the handset keeps the truth - a
+   * document is not rewritten, the same rule an invoice follows. Left at that,
+   * the two screens simply disagree: the purchase says green, the device says
+   * blue, and nothing on either says which to believe. So the line says it.
+   */
+  test('a purchase line says when its units have since been corrected', async ({ page }) => {
+    const id = unique()
+    const name = `E2E Colour Phone ${id}`
+    const one = imei(91)
+    const two = imei(92)
+    await createSupplier(page, `E2E ColourSup ${id}`)
+    await createProduct(page, name, 'Mobiles (IMEI)')
+
+    // Two handsets, booked in as green.
+    await page.goto('/purchases/new')
+    await pickSupplier(page, `E2E ColourSup ${id}`)
+    await pickProduct(page, name)
+    await page.getByRole('textbox', { name: 'Quantity', exact: true }).fill('2')
+    await page.getByRole('textbox', { name: 'Unit cost (₹)', exact: true }).fill('20000')
+    await page.getByRole('button', { name: 'NEW', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Colour', exact: true }).fill('Green')
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 1' }).fill(one)
+    await page.getByRole('textbox', { name: 'Line 1 IMEI 2' }).fill(two)
+    await page.getByRole('button', { name: 'Confirm purchase' }).click()
+    await page.getByRole('button', { name: 'Yes, save it' }).click()
+    await expect(page).toHaveURL(/\/purchases\/\d+$/)
+    const billUrl = page.url()
+
+    // Nothing to flag yet: the units say what the line says.
+    await expect(page.getByTestId('line-corrected')).toHaveCount(0)
+
+    // One of them turns out to be blue.
+    await page.goto('/devices')
+    await page.getByRole('searchbox', { name: 'Search devices' }).fill(one)
+    await page.keyboard.press('Enter')
+    await page.getByRole('link', { name: new RegExp(one) }).first().click()
+    await page.getByRole('link', { name: 'Edit' }).click()
+    await page.getByRole('textbox', { name: 'Colour', exact: true }).fill('Blue')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page).toHaveURL(/\/devices\/\d+$/)
+
+    // The bill still reads Green - it records what was booked in - but now
+    // says that one unit has moved on from it.
+    await page.goto(billUrl)
+    await expect(page.getByText('Green').first()).toBeVisible()
+    const note = page.getByTestId('line-corrected')
+    await expect(note).toHaveCount(1)
+    await expect(note).toContainText('1 unit is now')
+    await expect(note).toContainText('Blue')
+  })
+
   test('reversal is refused once a unit has been sold, and names it', async ({ page }) => {
     const id = unique()
     await createSupplier(page, `E2E Reverse ${id}`)

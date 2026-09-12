@@ -67,6 +67,26 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
         .map((m) => ({ id: m.id, name: m.name }))
     : []
 
+  type Spec = { variant: string | null; ram: string | null; storage: string | null; colour: string | null }
+
+  /** The readable combination, in the order a shop says it out loud. */
+  const specsOf = (s: Spec) =>
+    [s.storage, s.ram, s.colour, s.variant].filter(Boolean).join(' · ') || 'no specs'
+
+  /**
+   * Units from this line whose specs no longer match what the line stamped,
+   * grouped by what they now say - so ten handsets corrected the same way are
+   * one sentence, not ten.
+   */
+  function correctionsFor(item: (typeof detail.items)[number]) {
+    const differing = detail.devices.filter(
+      (d) => d.purchaseItemId === item.id && specsOf(d) !== specsOf(item),
+    )
+    const bySpecs = new Map<string, number>()
+    for (const d of differing) bySpecs.set(specsOf(d), (bySpecs.get(specsOf(d)) ?? 0) + 1)
+    return [...bySpecs.entries()].map(([specs, count]) => ({ specs, count }))
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -165,9 +185,36 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
                     */}
                     {[i.storage, i.ram, i.colour, i.variant].some(Boolean) ? (
                       <span className="block text-xs font-normal text-muted-foreground">
-                        {[i.storage, i.ram, i.colour, i.variant].filter(Boolean).join(' · ')}
+                        {specsOf(i)}
                       </span>
                     ) : null}
+                    {/*
+                      Where a handset has since been corrected, say so here.
+
+                      The line keeps what was booked in - a document is not
+                      rewritten, the same rule an invoice follows - and the
+                      handset keeps the truth. Without this the two screens
+                      simply disagree: the bill says green, the device says
+                      blue, and nothing explains which to believe.
+                    */}
+                    {correctionsFor(i).map((c) => (
+                      <span
+                        key={c.specs}
+                        className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-normal"
+                        data-testid="line-corrected"
+                      >
+                        {/*
+                          A badge, not coloured text: `text-warning-foreground`
+                          is meant to sit on a warning background and all but
+                          disappears on a plain cell in dark mode.
+                        */}
+                        <Badge variant="warning">Corrected</Badge>
+                        <span className="text-muted-foreground">
+                          {c.count} {c.count === 1 ? 'unit is' : 'units are'} now{' '}
+                          {c.specs}
+                        </span>
+                      </span>
+                    ))}
                   </TableCell>
                   <TableCell>
                     {/*
